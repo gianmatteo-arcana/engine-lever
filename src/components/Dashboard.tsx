@@ -1,8 +1,10 @@
+
 import { useState } from "react";
 import { BusinessProfileCard } from "./BusinessProfileCard";
 import { StatementOfInfoCard } from "./StatementOfInfoCard";
 import { ChatInterface } from "./ChatInterface";
 import { SmallBizCard } from "./SmallBizCard";
+import { UserProfileCard } from "./UserProfileCard";
 import { Button } from "@/components/ui/button";
 import { MessageCircle, X, User, LogOut } from "lucide-react";
 
@@ -22,6 +24,7 @@ interface DashboardProps {
 export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   const [showChat, setShowChat] = useState(false);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const [showUserProfile, setShowUserProfile] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: "1",
@@ -125,7 +128,15 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
               <h1 className="text-xl font-semibold text-foreground">Update Statement of Information</h1>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">{user.name}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowUserProfile(true)}
+                className="flex items-center gap-2"
+              >
+                <User className="h-4 w-4" />
+                <span className="text-sm text-muted-foreground">{user.name}</span>
+              </Button>
               <Button variant="ghost" size="sm" onClick={onSignOut}>
                 <LogOut className="h-4 w-4" />
               </Button>
@@ -158,6 +169,13 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
             </div>
           </div>
         </div>
+
+        {/* User Profile Card */}
+        <UserProfileCard
+          user={user}
+          onClose={() => setShowUserProfile(false)}
+          isVisible={showUserProfile}
+        />
       </div>
     );
   }
@@ -181,8 +199,15 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
               Chat with Ally
             </Button>
             <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">{user.name}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowUserProfile(true)}
+                className="flex items-center gap-2 hover:bg-accent transition-colors"
+              >
+                <User className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">{user.name}</span>
+              </Button>
               <Button variant="ghost" size="sm" onClick={onSignOut}>
                 <LogOut className="h-4 w-4" />
               </Button>
@@ -254,6 +279,13 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
           </div>
         </div>
       </div>
+
+      {/* User Profile Card */}
+      <UserProfileCard
+        user={user}
+        onClose={() => setShowUserProfile(false)}
+        isVisible={showUserProfile}
+      />
     </div>
   );
 };
