@@ -36,14 +36,28 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   const handleDevPinLogin = async (pin: string) => {
     if (pin === "1234" && isDevMode) {
       try {
-        // Use anonymous sign-in for dev mode
-        const { data, error } = await supabase.auth.signInAnonymously();
+        // Sign in with the hardcoded dev user ID
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: 'dev@smallbizally.com',
+          password: 'dev123456'
+        });
         
         if (error) {
           console.error("Dev login error:", error);
+          // Fallback: try to sign up the dev user if they don't exist
+          const { error: signUpError } = await supabase.auth.signUp({
+            email: 'dev@smallbizally.com',
+            password: 'dev123456',
+            options: {
+              emailRedirectTo: `${window.location.origin}/`
+            }
+          });
+          
+          if (signUpError) {
+            console.error("Dev signup error:", signUpError);
+          }
         } else {
           console.log("Dev PIN login successful");
-          // The auth state change will handle the rest
         }
       } catch (error) {
         console.error("Dev login failed:", error);
