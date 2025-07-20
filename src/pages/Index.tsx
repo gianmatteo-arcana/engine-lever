@@ -19,11 +19,14 @@ const Index = () => {
 
   useEffect(() => {
     console.log('Setting up auth...');
+    let mounted = true;
     
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth state changed:', event);
+        if (!mounted) return;
+        
         setSession(session);
         setUser(session?.user ?? null);
         
@@ -48,29 +51,55 @@ const Index = () => {
       }
     );
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('Initial session check:', !!session);
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        const profile: UserProfile = {
-          name: session.user.user_metadata?.full_name || 
-                session.user.user_metadata?.name || 
-                session.user.email?.split('@')[0] || 
-                "User",
-          email: session.user.email || "",
-          createdAt: new Date(session.user.created_at)
-        };
+    // Check for existing session with timeout
+    const checkSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        setUserProfile(profile);
+        if (!mounted) return;
+        
+        console.log('Initial session check:', !!session, error);
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          const profile: UserProfile = {
+            name: session.user.user_metadata?.full_name || 
+                  session.user.user_metadata?.name || 
+                  session.user.email?.split('@')[0] || 
+                  "User",
+            email: session.user.email || "",
+            createdAt: new Date(session.user.created_at)
+          };
+          
+          setUserProfile(profile);
+        } else {
+          setUserProfile(null);
+        }
+      } catch (error) {
+        console.error('Session check error:', error);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-      
-      setLoading(false);
-    });
+    };
 
-    return () => subscription.unsubscribe();
+    checkSession();
+
+    // Failsafe: ensure loading is set to false after 5 seconds
+    const failsafe = setTimeout(() => {
+      if (mounted) {
+        console.log('Failsafe: setting loading to false');
+        setLoading(false);
+      }
+    }, 5000);
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+      clearTimeout(failsafe);
+    };
   }, []);
 
   const handleOnboardingComplete = (userData: UserProfile) => {
