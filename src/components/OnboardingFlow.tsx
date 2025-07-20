@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle, Building2, Search, Loader2, User } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface OnboardingFlowProps {
   onComplete: (user: { name: string; email: string }) => void;
@@ -30,15 +31,46 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
     // This component will be unmounted when user is authenticated
   };
 
-  const handleDemoLogin = () => {
+  const handleDemoLogin = async () => {
     console.log("Demo login triggered");
-    // Simulate successful authentication by calling onComplete
-    // This will cause the parent component to show the dashboard
-    const demoUser = {
-      name: "Demo User",
-      email: "dev@smallbizally.com"
-    };
-    onComplete(demoUser);
+    
+    try {
+      // Fetch the real user profile from database
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', '04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412')
+        .single();
+
+      if (error) {
+        console.error('Error fetching demo user profile:', error);
+        // Fallback to basic demo user
+        const demoUser = {
+          name: "Demo User",
+          email: "dev@smallbizally.com"
+        };
+        onComplete(demoUser);
+        return;
+      }
+
+      // Use the real profile data
+      const demoUser = {
+        name: profile.full_name || "Dev User",
+        email: profile.email || "dev@smallbizally.com",
+        createdAt: profile.created_at ? new Date(profile.created_at) : undefined
+      };
+      
+      console.log("Demo login with real profile:", demoUser);
+      onComplete(demoUser);
+    } catch (error) {
+      console.error('Demo login error:', error);
+      // Fallback to basic demo user
+      const demoUser = {
+        name: "Demo User", 
+        email: "dev@smallbizally.com"
+      };
+      onComplete(demoUser);
+    }
   };
 
   const handleCompanySelect = (company: CompanyOption) => {
