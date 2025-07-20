@@ -36,7 +36,6 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   const handleDevPinLogin = async (pin: string) => {
     if (pin === "1234" && isDevMode) {
       try {
-        // For dev mode, call our edge function to handle the login
         const response = await fetch('https://raenkewzlvrdqufwxjpl.supabase.co/functions/v1/dev-login', {
           method: 'POST',
           headers: {
@@ -47,9 +46,18 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
 
         const result = await response.json();
         
-        if (result.success && result.loginUrl) {
-          // Redirect to the generated login URL
-          window.location.href = result.loginUrl;
+        if (result.success && result.access_token) {
+          // Set the session using the returned tokens
+          const { error } = await supabase.auth.setSession({
+            access_token: result.access_token,
+            refresh_token: result.refresh_token
+          });
+          
+          if (error) {
+            console.error("Error setting session:", error);
+          } else {
+            console.log("Dev PIN login successful");
+          }
         } else {
           console.error("Dev login error:", result.error);
         }

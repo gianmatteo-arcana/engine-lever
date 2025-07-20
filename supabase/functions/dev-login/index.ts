@@ -32,19 +32,37 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Generate a session for the dev user
+    // Check if dev user exists, if not create them
+    const { data: existingUser } = await supabaseAdmin.auth.admin.getUserById('04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412')
+    
+    if (!existingUser.user) {
+      // Create the dev user
+      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        user_id: '04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412',
+        email: 'dev@smallbizally.com',
+        password: 'dev123456',
+        email_confirm: true,
+        user_metadata: {
+          full_name: 'Dev User',
+          name: 'Dev User'
+        }
+      })
+      
+      if (createError) {
+        console.error('Error creating dev user:', createError)
+      }
+    }
+
+    // Generate access token for the dev user
     const { data, error } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
-      email: 'dev@smallbizally.com',
-      options: {
-        redirectTo: `${req.headers.get('origin')}/`
-      }
+      email: 'dev@smallbizally.com'
     })
 
     if (error) {
-      console.error('Error generating link:', error)
+      console.error('Error generating token:', error)
       return new Response(
-        JSON.stringify({ error: 'Failed to generate login link' }),
+        JSON.stringify({ error: 'Failed to generate auth token' }),
         { 
           status: 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -52,10 +70,16 @@ serve(async (req) => {
       )
     }
 
+    // Extract the access token from the magic link
+    const url = new URL(data.properties?.action_link || '')
+    const accessToken = url.searchParams.get('access_token')
+    const refreshToken = url.searchParams.get('refresh_token')
+
     return new Response(
       JSON.stringify({ 
-        success: true, 
-        loginUrl: data.properties?.action_link 
+        success: true,
+        access_token: accessToken,
+        refresh_token: refreshToken
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
