@@ -3,7 +3,9 @@ import { GoogleAuthButton } from "./GoogleAuthButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { CheckCircle, Building2, Search, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface OnboardingFlowProps {
   onComplete: (user: { name: string; email: string }) => void;
@@ -22,10 +24,31 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
   const [manualCompanyName, setManualCompanyName] = useState("");
   const [selectedCompany, setSelectedCompany] = useState<CompanyOption | null>(null);
+  const [devPin, setDevPin] = useState("");
+
+  const isDevMode = import.meta.env.DEV;
 
   const handleGoogleSuccess = (userData: { name: string; email: string }) => {
     // Auth is now handled by Supabase auth state changes
     // This component will be unmounted when user is authenticated
+  };
+
+  const handleDevPinLogin = async (pin: string) => {
+    if (pin === "1234" && isDevMode) {
+      // Use admin API to sign in as specific user for dev mode
+      const { error } = await supabase.auth.admin.generateLink({
+        type: 'magiclink',
+        email: 'gianmatteo.costanza@gmail.com',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      
+      if (!error) {
+        // For dev purposes, we'll simulate the authentication
+        console.log("Dev PIN login - would authenticate as user 04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412");
+      }
+    }
   };
 
   const handleCompanySelect = (company: CompanyOption) => {
@@ -71,6 +94,45 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {isDevMode && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">
+                    Dev Mode - Enter PIN
+                  </label>
+                  <InputOTP 
+                    maxLength={4} 
+                    value={devPin} 
+                    onChange={(value) => {
+                      setDevPin(value);
+                      if (value.length === 4) {
+                        handleDevPinLogin(value);
+                      }
+                    }}
+                  >
+                    <InputOTPGroup>
+                      <InputOTPSlot index={0} />
+                      <InputOTPSlot index={1} />
+                      <InputOTPSlot index={2} />
+                      <InputOTPSlot index={3} />
+                    </InputOTPGroup>
+                  </InputOTP>
+                  <p className="text-xs text-muted-foreground">
+                    Dev PIN: 1234
+                  </p>
+                </div>
+                
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">Or</span>
+                  </div>
+                </div>
+              </>
+            )}
+            
             <GoogleAuthButton onSuccess={handleGoogleSuccess} />
             <p className="text-xs text-muted-foreground text-center">
               💡 For the best experience, use your business email address if you have one
