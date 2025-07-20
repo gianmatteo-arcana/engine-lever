@@ -1,1 +1,4 @@
 project_id = "raenkewzlvrdqufwxjpl"
+
+[functions.dev-login]
+verify_jwt = false
