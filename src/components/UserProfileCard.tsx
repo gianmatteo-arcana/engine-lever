@@ -68,9 +68,11 @@ export const UserProfileCard = ({ user, onClose, isVisible }: UserProfileCardPro
                 <div className="p-2 bg-muted rounded-full">
                   <Mail className="h-4 w-4 text-muted-foreground" />
                 </div>
-                <div>
+               <div>
                   <p className="text-sm font-medium">Email</p>
-                  <p className="text-sm text-muted-foreground">{user.email}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {user.email || "dev@example.com (dev mode)"}
+                  </p>
                 </div>
               </div>
               
