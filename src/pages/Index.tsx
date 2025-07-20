@@ -7,27 +7,69 @@ import { Session, User } from "@supabase/supabase-js";
 interface UserProfile {
   name: string;
   email: string;
+  createdAt?: Date;
 }
 
 const Index = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          // Fetch user profile data including creation date
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('created_at, full_name, email')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
+
+          const profileData: UserProfile = {
+            name: profile?.full_name || session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email || "User",
+            email: profile?.email || session.user.email || "",
+            createdAt: profile?.created_at ? new Date(profile.created_at) : undefined
+          };
+          
+          setUserProfile(profileData);
+        } else {
+          setUserProfile(null);
+        }
+        
         setLoading(false);
       }
     );
 
     // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        // Fetch user profile data including creation date
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('created_at, full_name, email')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+
+        const profileData: UserProfile = {
+          name: profile?.full_name || session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email || "User",
+          email: profile?.email || session.user.email || "",
+          createdAt: profile?.created_at ? new Date(profile.created_at) : undefined
+        };
+        
+        setUserProfile(profileData);
+      } else {
+        setUserProfile(null);
+      }
+      
       setLoading(false);
     });
 
@@ -50,14 +92,9 @@ const Index = () => {
     );
   }
 
-  if (!user) {
+  if (!user || !userProfile) {
     return <OnboardingFlow onComplete={handleOnboardingComplete} />;
   }
-
-  const userProfile: UserProfile = {
-    name: user.user_metadata?.full_name || user.user_metadata?.name || user.email || "User",
-    email: user.email || ""
-  };
 
   return <Dashboard user={userProfile} onSignOut={handleSignOut} />;
 };

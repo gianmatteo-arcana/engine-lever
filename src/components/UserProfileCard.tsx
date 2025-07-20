@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface UserProfileCardProps {
-  user: { name: string; email: string };
+  user: { name: string; email: string; createdAt?: Date };
   onClose: () => void;
   isVisible: boolean;
 }
@@ -18,6 +18,14 @@ export const UserProfileCard = ({ user, onClose, isVisible }: UserProfileCardPro
       .join('')
       .toUpperCase()
       .slice(0, 2);
+  };
+
+  const formatMemberSince = (date?: Date) => {
+    if (!date) return "Recent member";
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long' 
+    });
   };
 
   return (
@@ -92,7 +100,7 @@ export const UserProfileCard = ({ user, onClose, isVisible }: UserProfileCardPro
                 </div>
                 <div>
                   <p className="text-sm font-medium">Member Since</p>
-                  <p className="text-sm text-muted-foreground">January 2024</p>
+                  <p className="text-sm text-muted-foreground">{formatMemberSince(user.createdAt)}</p>
                 </div>
               </div>
             </div>

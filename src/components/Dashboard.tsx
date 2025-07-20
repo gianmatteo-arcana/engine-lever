@@ -17,7 +17,7 @@ interface ChatMessage {
 }
 
 interface DashboardProps {
-  user: { name: string; email: string };
+  user: { name: string; email: string; createdAt?: Date };
   onSignOut: () => void;
 }
 
