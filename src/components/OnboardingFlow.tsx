@@ -3,7 +3,7 @@ import { GoogleAuthButton } from "./GoogleAuthButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Building2, Search, Loader2 } from "lucide-react";
+import { CheckCircle, Building2, Search, Loader2, User } from "lucide-react";
 
 interface OnboardingFlowProps {
   onComplete: (user: { name: string; email: string }) => void;
@@ -22,11 +22,23 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
   const [manualCompanyName, setManualCompanyName] = useState("");
   const [selectedCompany, setSelectedCompany] = useState<CompanyOption | null>(null);
+  const isDevMode = import.meta.env.DEV;
 
   const handleGoogleSuccess = (userData: { name: string; email: string }) => {
     console.log("Google auth success:", userData);
     // Auth is now handled by Supabase auth state changes
     // This component will be unmounted when user is authenticated
+  };
+
+  const handleDemoLogin = () => {
+    console.log("Demo login triggered");
+    // Simulate successful authentication by calling onComplete
+    // This will cause the parent component to show the dashboard
+    const demoUser = {
+      name: "Demo User",
+      email: "dev@smallbizally.com"
+    };
+    onComplete(demoUser);
   };
 
   const handleCompanySelect = (company: CompanyOption) => {
@@ -72,6 +84,28 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {isDevMode && (
+              <>
+                <Button
+                  onClick={handleDemoLogin}
+                  variant="outline"
+                  className="w-full flex items-center gap-2"
+                >
+                  <User className="h-4 w-4" />
+                  Demo Login (Dev Only)
+                </Button>
+                
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">Or</span>
+                  </div>
+                </div>
+              </>
+            )}
+            
             <GoogleAuthButton onSuccess={handleGoogleSuccess} />
             <p className="text-xs text-muted-foreground text-center">
               💡 For the best experience, use your business email address if you have one

@@ -15,6 +15,7 @@ const Index = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [demoMode, setDemoMode] = useState(false);
 
   useEffect(() => {
     console.log('Setting up auth...');
@@ -73,13 +74,27 @@ const Index = () => {
   }, []);
 
   const handleOnboardingComplete = (userData: UserProfile) => {
-    // Profile is automatically set by auth state change
     console.log('Onboarding complete for:', userData);
+    // For demo mode, set the profile directly without Supabase auth
+    if (import.meta.env.DEV && userData.email === "dev@smallbizally.com") {
+      setDemoMode(true);
+      setUserProfile(userData);
+      setLoading(false);
+    }
   };
 
   const handleSignOut = async () => {
     console.log('Signing out...');
-    await supabase.auth.signOut();
+    if (demoMode) {
+      // Demo mode sign out - just reset state
+      setDemoMode(false);
+      setUserProfile(null);
+      setUser(null);
+      setSession(null);
+    } else {
+      // Real Supabase sign out
+      await supabase.auth.signOut();
+    }
   };
 
   if (loading) {
@@ -90,8 +105,14 @@ const Index = () => {
     );
   }
 
-  if (!user || !userProfile) {
+  // Show onboarding if no user and not in demo mode
+  if (!user && !demoMode) {
     return <OnboardingFlow onComplete={handleOnboardingComplete} />;
+  }
+
+  // For demo mode, use the demo profile
+  if (demoMode && userProfile) {
+    return <Dashboard user={userProfile} onSignOut={handleSignOut} />;
   }
 
   return <Dashboard user={userProfile} onSignOut={handleSignOut} />;
