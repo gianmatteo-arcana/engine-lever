@@ -92,11 +92,18 @@ const Index = () => {
     );
   }
 
-  if (!user || !userProfile) {
+  if (!user) {
     return <OnboardingFlow onComplete={handleOnboardingComplete} />;
   }
 
-  return <Dashboard user={userProfile} onSignOut={handleSignOut} />;
+  // Create a fallback profile if none exists (for dev mode/anonymous users)
+  const finalProfile = userProfile || {
+    name: user.user_metadata?.full_name || user.user_metadata?.name || user.email || "Dev User",
+    email: user.email || "dev@example.com",
+    createdAt: undefined
+  };
+
+  return <Dashboard user={finalProfile} onSignOut={handleSignOut} />;
 };
 
 export default Index;
