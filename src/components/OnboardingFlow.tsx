@@ -36,28 +36,22 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   const handleDevPinLogin = async (pin: string) => {
     if (pin === "1234" && isDevMode) {
       try {
-        // Sign in with the hardcoded dev user ID
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: 'dev@smallbizally.com',
-          password: 'dev123456'
+        // For dev mode, call our edge function to handle the login
+        const response = await fetch('https://raenkewzlvrdqufwxjpl.supabase.co/functions/v1/dev-login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ pin })
         });
+
+        const result = await response.json();
         
-        if (error) {
-          console.error("Dev login error:", error);
-          // Fallback: try to sign up the dev user if they don't exist
-          const { error: signUpError } = await supabase.auth.signUp({
-            email: 'dev@smallbizally.com',
-            password: 'dev123456',
-            options: {
-              emailRedirectTo: `${window.location.origin}/`
-            }
-          });
-          
-          if (signUpError) {
-            console.error("Dev signup error:", signUpError);
-          }
+        if (result.success && result.loginUrl) {
+          // Redirect to the generated login URL
+          window.location.href = result.loginUrl;
         } else {
-          console.log("Dev PIN login successful");
+          console.error("Dev login error:", result.error);
         }
       } catch (error) {
         console.error("Dev login failed:", error);
