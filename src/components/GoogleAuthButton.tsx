@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface GoogleAuthButtonProps {
   onSuccess: (user: { name: string; email: string }) => void;
@@ -8,21 +10,39 @@ interface GoogleAuthButtonProps {
 
 export const GoogleAuthButton = ({ onSuccess, className }: GoogleAuthButtonProps) => {
   const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     
-    // Simulate Google OAuth flow for prototype
-    setTimeout(() => {
-      // Mock successful authentication
-      const mockUser = {
-        name: "John Smith",
-        email: "john.smith@example.com"
-      };
-      
-      onSuccess(mockUser);
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        }
+      });
+
+      if (error) {
+        toast({
+          title: "Authentication Error",
+          description: error.message,
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // The redirect will handle the success case
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      toast({
+        title: "Authentication Error",
+        description: "Failed to sign in with Google. Please try again.",
+        variant: "destructive",
+      });
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   return (

@@ -24,30 +24,8 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   const [selectedCompany, setSelectedCompany] = useState<CompanyOption | null>(null);
 
   const handleGoogleSuccess = (userData: { name: string; email: string }) => {
-    setUser(userData);
-    setStep("company-search");
-    
-    // Simulate company lookup
-    setSearchingCompany(true);
-    setTimeout(() => {
-      // Mock company search results based on user name
-      const mockCompanies: CompanyOption[] = [
-        {
-          name: "Smith Consulting LLC",
-          address: "123 Business Ave, San Francisco, CA 94105",
-          entityType: "Limited Liability Company"
-        },
-        {
-          name: "John Smith Enterprises Inc",
-          address: "456 Corporate Blvd, San Jose, CA 95110", 
-          entityType: "Corporation"
-        }
-      ];
-      
-      setCompanyOptions(mockCompanies);
-      setSearchingCompany(false);
-      setStep("company-select");
-    }, 2000);
+    // Auth is now handled by Supabase auth state changes
+    // This component will be unmounted when user is authenticated
   };
 
   const handleCompanySelect = (company: CompanyOption) => {
