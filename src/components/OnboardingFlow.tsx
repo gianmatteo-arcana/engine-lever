@@ -35,18 +35,18 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
 
   const handleDevPinLogin = async (pin: string) => {
     if (pin === "1234" && isDevMode) {
-      // Use admin API to sign in as specific user for dev mode
-      const { error } = await supabase.auth.admin.generateLink({
-        type: 'magiclink',
-        email: 'gianmatteo.costanza@gmail.com',
-        options: {
-          redirectTo: window.location.origin
+      try {
+        // Use anonymous sign-in for dev mode
+        const { data, error } = await supabase.auth.signInAnonymously();
+        
+        if (error) {
+          console.error("Dev login error:", error);
+        } else {
+          console.log("Dev PIN login successful");
+          // The auth state change will handle the rest
         }
-      });
-      
-      if (!error) {
-        // For dev purposes, we'll simulate the authentication
-        console.log("Dev PIN login - would authenticate as user 04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412");
+      } catch (error) {
+        console.error("Dev login failed:", error);
       }
     }
   };
