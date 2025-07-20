@@ -17,110 +17,55 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log('Setting up auth state listener...');
-    let initialCheckComplete = false;
+    console.log('Setting up auth...');
     
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.id);
+        console.log('Auth state changed:', event);
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          try {
-            console.log('Fetching profile for user:', session.user.id);
-            // Fetch user profile data including creation date
-            const { data: profile, error } = await supabase
-              .from('profiles')
-              .select('created_at, full_name, email')
-              .eq('user_id', session.user.id)
-              .maybeSingle();
-
-            if (error) {
-              console.error('Profile fetch error:', error);
-            } else {
-              console.log('Profile data:', profile);
-            }
-
-            const profileData: UserProfile = {
-              name: profile?.full_name || session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email || "User",
-              email: profile?.email || session.user.email || "",
-              createdAt: profile?.created_at ? new Date(profile.created_at) : undefined
-            };
-            
-            console.log('Setting profile data:', profileData);
-            setUserProfile(profileData);
-          } catch (error) {
-            console.error('Error in profile fetch:', error);
-            // Set a fallback profile even if there's an error
-            setUserProfile({
-              name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email || "User",
-              email: session.user.email || "",
-              createdAt: undefined
-            });
-          }
+          // Create profile from user metadata
+          const profile: UserProfile = {
+            name: session.user.user_metadata?.full_name || 
+                  session.user.user_metadata?.name || 
+                  session.user.email?.split('@')[0] || 
+                  "User",
+            email: session.user.email || "",
+            createdAt: new Date(session.user.created_at)
+          };
+          
+          console.log('Setting profile:', profile);
+          setUserProfile(profile);
         } else {
-          console.log('No session, clearing profile');
           setUserProfile(null);
         }
         
-        // Always set loading to false after auth state change, regardless of initial check
-        console.log('Setting loading to false from auth state change');
         setLoading(false);
       }
     );
 
     // Check for existing session
-    console.log('Checking for existing session...');
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      console.log('Got existing session:', session?.user?.id, error);
-      
-      if (error) {
-        console.error('Error getting session:', error);
-      }
-      
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Initial session check:', !!session);
       setSession(session);
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        try {
-          console.log('Fetching profile for existing session user:', session.user.id);
-          // Fetch user profile data including creation date
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('created_at, full_name, email')
-            .eq('user_id', session.user.id)
-            .maybeSingle();
-
-          if (profileError) {
-            console.error('Existing session profile fetch error:', profileError);
-          } else {
-            console.log('Existing session profile data:', profile);
-          }
-
-          const profileData: UserProfile = {
-            name: profile?.full_name || session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email || "User",
-            email: profile?.email || session.user.email || "",
-            createdAt: profile?.created_at ? new Date(profile.created_at) : undefined
-          };
-          
-          console.log('Setting existing session profile data:', profileData);
-          setUserProfile(profileData);
-        } catch (error) {
-          console.error('Error in existing session profile fetch:', error);
-        }
-      } else {
-        console.log('No existing session');
-        setUserProfile(null);
+        const profile: UserProfile = {
+          name: session.user.user_metadata?.full_name || 
+                session.user.user_metadata?.name || 
+                session.user.email?.split('@')[0] || 
+                "User",
+          email: session.user.email || "",
+          createdAt: new Date(session.user.created_at)
+        };
+        
+        setUserProfile(profile);
       }
       
-      initialCheckComplete = true;
-      console.log('Setting loading to false from getSession');
-      setLoading(false);
-    }).catch(error => {
-      console.error('Error getting session:', error);
-      initialCheckComplete = true;
       setLoading(false);
     });
 
@@ -128,10 +73,12 @@ const Index = () => {
   }, []);
 
   const handleOnboardingComplete = (userData: UserProfile) => {
-    // This is handled by the auth state change now
+    // Profile is automatically set by auth state change
+    console.log('Onboarding complete for:', userData);
   };
 
   const handleSignOut = async () => {
+    console.log('Signing out...');
     await supabase.auth.signOut();
   };
 
@@ -143,18 +90,11 @@ const Index = () => {
     );
   }
 
-  if (!user) {
+  if (!user || !userProfile) {
     return <OnboardingFlow onComplete={handleOnboardingComplete} />;
   }
 
-  // Create a fallback profile if none exists (for dev mode/anonymous users)
-  const finalProfile = userProfile || {
-    name: user.user_metadata?.full_name || user.user_metadata?.name || user.email || "Dev User",
-    email: user.email || "dev@example.com",
-    createdAt: undefined
-  };
-
-  return <Dashboard user={finalProfile} onSignOut={handleSignOut} />;
+  return <Dashboard user={userProfile} onSignOut={handleSignOut} />;
 };
 
 export default Index;

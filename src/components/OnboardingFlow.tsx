@@ -3,9 +3,7 @@ import { GoogleAuthButton } from "./GoogleAuthButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { CheckCircle, Building2, Search, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 
 interface OnboardingFlowProps {
   onComplete: (user: { name: string; email: string }) => void;
@@ -24,13 +22,12 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
   const [manualCompanyName, setManualCompanyName] = useState("");
   const [selectedCompany, setSelectedCompany] = useState<CompanyOption | null>(null);
-  const isDevMode = import.meta.env.DEV;
 
   const handleGoogleSuccess = (userData: { name: string; email: string }) => {
+    console.log("Google auth success:", userData);
     // Auth is now handled by Supabase auth state changes
     // This component will be unmounted when user is authenticated
   };
-
 
   const handleCompanySelect = (company: CompanyOption) => {
     setSelectedCompany(company);
