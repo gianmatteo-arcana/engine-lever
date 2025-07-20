@@ -18,6 +18,7 @@ const Index = () => {
 
   useEffect(() => {
     console.log('Setting up auth state listener...');
+    let initialCheckComplete = false;
     
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -58,15 +59,23 @@ const Index = () => {
           setUserProfile(null);
         }
         
-        console.log('Setting loading to false');
-        setLoading(false);
+        // Only set loading to false if this is not the initial check
+        if (initialCheckComplete) {
+          console.log('Setting loading to false from auth state change');
+          setLoading(false);
+        }
       }
     );
 
     // Check for existing session
     console.log('Checking for existing session...');
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      console.log('Got existing session:', session?.user?.id);
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      console.log('Got existing session:', session?.user?.id, error);
+      
+      if (error) {
+        console.error('Error getting session:', error);
+      }
+      
       setSession(session);
       setUser(session?.user ?? null);
       
@@ -74,14 +83,14 @@ const Index = () => {
         try {
           console.log('Fetching profile for existing session user:', session.user.id);
           // Fetch user profile data including creation date
-          const { data: profile, error } = await supabase
+          const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('created_at, full_name, email')
             .eq('user_id', session.user.id)
             .maybeSingle();
 
-          if (error) {
-            console.error('Existing session profile fetch error:', error);
+          if (profileError) {
+            console.error('Existing session profile fetch error:', profileError);
           } else {
             console.log('Existing session profile data:', profile);
           }
@@ -102,10 +111,12 @@ const Index = () => {
         setUserProfile(null);
       }
       
+      initialCheckComplete = true;
       console.log('Setting loading to false from getSession');
       setLoading(false);
     }).catch(error => {
       console.error('Error getting session:', error);
+      initialCheckComplete = true;
       setLoading(false);
     });
 
