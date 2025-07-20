@@ -53,17 +53,21 @@ const Index = () => {
             setUserProfile(profileData);
           } catch (error) {
             console.error('Error in profile fetch:', error);
+            // Set a fallback profile even if there's an error
+            setUserProfile({
+              name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email || "User",
+              email: session.user.email || "",
+              createdAt: undefined
+            });
           }
         } else {
           console.log('No session, clearing profile');
           setUserProfile(null);
         }
         
-        // Only set loading to false if this is not the initial check
-        if (initialCheckComplete) {
-          console.log('Setting loading to false from auth state change');
-          setLoading(false);
-        }
+        // Always set loading to false after auth state change, regardless of initial check
+        console.log('Setting loading to false from auth state change');
+        setLoading(false);
       }
     );
 
