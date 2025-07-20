@@ -24,8 +24,6 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
   const [manualCompanyName, setManualCompanyName] = useState("");
   const [selectedCompany, setSelectedCompany] = useState<CompanyOption | null>(null);
-  const [devPin, setDevPin] = useState("");
-
   const isDevMode = import.meta.env.DEV;
 
   const handleGoogleSuccess = (userData: { name: string; email: string }) => {
@@ -33,39 +31,6 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
     // This component will be unmounted when user is authenticated
   };
 
-  const handleDevPinLogin = async (pin: string) => {
-    if (pin === "1234" && isDevMode) {
-      try {
-        const response = await fetch('https://raenkewzlvrdqufwxjpl.supabase.co/functions/v1/dev-login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ pin })
-        });
-
-        const result = await response.json();
-        
-        if (result.success && result.access_token) {
-          // Set the session using the returned tokens
-          const { error } = await supabase.auth.setSession({
-            access_token: result.access_token,
-            refresh_token: result.refresh_token
-          });
-          
-          if (error) {
-            console.error("Error setting session:", error);
-          } else {
-            console.log("Dev PIN login successful");
-          }
-        } else {
-          console.error("Dev login error:", result.error);
-        }
-      } catch (error) {
-        console.error("Dev login failed:", error);
-      }
-    }
-  };
 
   const handleCompanySelect = (company: CompanyOption) => {
     setSelectedCompany(company);
@@ -110,45 +75,6 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {isDevMode && (
-              <>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Dev Mode - Enter PIN
-                  </label>
-                  <InputOTP 
-                    maxLength={4} 
-                    value={devPin} 
-                    onChange={(value) => {
-                      setDevPin(value);
-                      if (value.length === 4) {
-                        handleDevPinLogin(value);
-                      }
-                    }}
-                  >
-                    <InputOTPGroup>
-                      <InputOTPSlot index={0} />
-                      <InputOTPSlot index={1} />
-                      <InputOTPSlot index={2} />
-                      <InputOTPSlot index={3} />
-                    </InputOTPGroup>
-                  </InputOTP>
-                  <p className="text-xs text-muted-foreground">
-                    Dev PIN: 1234
-                  </p>
-                </div>
-                
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">Or</span>
-                  </div>
-                </div>
-              </>
-            )}
-            
             <GoogleAuthButton onSuccess={handleGoogleSuccess} />
             <p className="text-xs text-muted-foreground text-center">
               💡 For the best experience, use your business email address if you have one
