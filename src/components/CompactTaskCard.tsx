@@ -87,9 +87,9 @@ export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps
     return (
       <div className="animate-scale-in col-span-full" style={{ animationDuration: '0.15s' }}>
         <SmallBizCard
-          title={task.title}
-          description={task.description}
-          variant={getVariantFromUrgency()}
+          title="Business Snapshot"
+          description="Where your paperwork stands today"
+          variant="success"
           onClick={handleCardClick}
           expandable={true}
           className="cursor-pointer relative"
@@ -108,42 +108,17 @@ export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps
           </Button>
 
           <div className="space-y-4 pt-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">
-                  Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : "No due date"}
-                </span>
-              </div>
-              {getUrgencyBadge()}
+            <div className="flex items-center justify-center">
+              <Badge variant="default" className="text-sm bg-success/20 text-success border-success/30">
+                All set — 0 tasks pending
+              </Badge>
             </div>
             
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">
-                {getDaysUntilDue() >= 0 
-                  ? `${getDaysUntilDue()} days remaining`
-                  : `${Math.abs(getDaysUntilDue())} days overdue`
-                }
-              </span>
+            <div className="text-center">
+              <p className="text-muted-foreground">
+                Nice work! We'll tap you when something needs attention.
+              </p>
             </div>
-
-            {urgency === "overdue" && (
-              <div className="flex items-center gap-2 p-3 bg-destructive/10 rounded-lg">
-                <AlertTriangle className="h-4 w-4 text-destructive" />
-                <span className="text-sm text-destructive font-medium">
-                  Action Required
-                </span>
-              </div>
-            )}
-            
-            <Button 
-              onClick={handleActionClick}
-              className="w-full"
-              variant={urgency === "overdue" ? "destructive" : "default"}
-            >
-              {urgency === "overdue" ? "Complete Now" : "Start Task"}
-            </Button>
           </div>
         </SmallBizCard>
       </div>
