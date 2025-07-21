@@ -84,7 +84,7 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
             </div>
             <CardTitle className="text-2xl font-bold text-primary">Welcome to SmallBizAlly</CardTitle>
             <CardDescription className="text-base">
-              Your AI Compliance Assistant is here to help keep your business requirements stress-free and up-to-date.
+              Your always‑there sidekick—sorting the paperwork, explaining what matters, so you can stay focused on the business.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -112,7 +112,7 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
             
             <GoogleAuthButton onSuccess={handleGoogleSuccess} />
             <p className="text-xs text-muted-foreground text-center">
-              💡 For the best experience, use your business email address if you have one
+              💡 Tip: sign in with your work email so Ally can find your business faster.
             </p>
           </CardContent>
         </Card>
