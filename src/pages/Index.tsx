@@ -216,7 +216,7 @@ const Index = () => {
           variant="outline"
           size="sm"
           onClick={() => setShowDevConsole(!showDevConsole)}
-          className="fixed top-4 right-4 z-50 bg-black text-green-400 border-green-400 hover:bg-gray-800"
+          className="fixed top-4 right-4 z-[9999] bg-black text-green-400 border-green-400 hover:bg-gray-800"
         >
           <Terminal className="h-4 w-4 mr-2" />
           {showDevConsole ? 'Hide' : 'Show'} Console
