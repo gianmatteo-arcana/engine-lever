@@ -155,6 +155,7 @@ export const DemoPinAuth = ({ onSuccess }: DemoPinAuthProps) => {
             value={pin}
             onChange={handlePinChange}
             disabled={loading}
+            autoFocus
           >
             <InputOTPGroup>
               <InputOTPSlot index={0} />
