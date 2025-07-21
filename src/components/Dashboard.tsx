@@ -35,7 +35,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: "1",
-      content: "Hello! I'm Ally, your AI compliance assistant. I'm here to help you stay on top of your business requirements. How can I assist you today?",
+      content: `Hello ${user?.name?.split(' ')[0] || "there"}! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?`,
       sender: "ai",
       timestamp: new Date(),
       pills: ["Review my compliance status", "Update Statement of Information", "Ask a question"]
@@ -370,8 +370,8 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                   task={{
                     id: 'greeting-task',
                     user_id: 'system',
-                    title: `Welcome back, ${user?.name?.split(' ')[0] || "User"}!`,
-                    description: "Let's keep your business compliant and stress-free. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements.",
+                    title: showChat ? "" : `Welcome back, ${user?.name?.split(' ')[0] || "User"}!`,
+                    description: showChat ? "" : "Let's keep your business compliant and stress-free. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements.",
                     task_type: 'greeting',
                     status: 'active',
                     priority: 1,
@@ -390,13 +390,13 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                 />
                 {/* Chat Interface for expanded greeting task */}
                 {showChat && (
-                  <div className="mt-6 h-[600px]">
+                  <div className="-mt-6 h-[600px]">
                     <ChatInterface
                       messages={chatMessages}
                       onSendMessage={handleSendMessage}
                       onPillClick={handlePillClick}
                       placeholder="Ask me anything..."
-                      className="h-full"
+                      className="h-full rounded-lg border bg-card shadow-sm"
                     />
                   </div>
                 )}
