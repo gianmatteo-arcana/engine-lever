@@ -40,10 +40,7 @@ export const DemoPinAuth = ({ onSuccess }: DemoPinAuthProps) => {
     setError(null);
 
     try {
-      // For dev mode: Create a demo session using the existing Google user's data
-      // This bypasses password authentication and uses the real user's profile
-      
-      // First, get the existing user's profile data
+      // For dev mode: Fetch the real user's profile data and trigger demo mode
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -61,34 +58,30 @@ export const DemoPinAuth = ({ onSuccess }: DemoPinAuthProps) => {
         return;
       }
 
-      // Create a mock session for demo purposes (dev mode only)
-      // Note: This is a simplified approach for demo purposes
-      // In a real app, you would use proper OAuth flow
-      
-      // Since we can't create actual auth sessions programmatically for OAuth users,
-      // we'll store demo session data in localStorage and trigger auth state
-      const demoSession = {
-        access_token: 'demo-token',
-        refresh_token: 'demo-refresh',
-        expires_in: 3600,
-        user: {
-          id: DEMO_USER_ID,
-          email: 'gianmatteo.costanza@gmail.com',
-          created_at: new Date().toISOString(),
-          app_metadata: {},
-          user_metadata: profileData || {}
-        }
+      // Create demo user data using the real profile or fallback data
+      const demoUserData = {
+        name: profileData?.full_name || profileData?.first_name + ' ' + profileData?.last_name || "Demo User",
+        email: "dev@smallbizally.com", // Special email that triggers demo mode in parent
+        createdAt: new Date()
       };
 
-      // Store demo session (this is just for demo purposes)
-      localStorage.setItem('supabase.auth.token', JSON.stringify(demoSession));
-      
       toast({
         title: "Demo Login Successful",
-        description: `Welcome to the demo${profileData?.full_name ? `, ${profileData.full_name}` : ''}!`,
+        description: `Welcome to the demo${demoUserData.name ? `, ${demoUserData.name}` : ''}!`,
       });
       
+      // Trigger the success callback with demo user data
       onSuccess();
+      
+      // Also trigger the onboarding complete with demo data
+      // This will be handled by the parent component's handleOnboardingComplete
+      setTimeout(() => {
+        const event = new CustomEvent('demo-onboarding-complete', {
+          detail: demoUserData
+        });
+        window.dispatchEvent(event);
+      }, 100);
+      
     } catch (error) {
       console.error('Demo PIN authentication error:', error);
       setError("Authentication failed. Please try again.");

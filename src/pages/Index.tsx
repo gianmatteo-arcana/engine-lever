@@ -139,10 +139,20 @@ const Index = () => {
       }
     }, 5000);
 
+    
+    // Listen for demo onboarding complete event
+    const handleDemoOnboardingComplete = (event: CustomEvent) => {
+      console.log('Demo onboarding event received:', event.detail);
+      handleOnboardingComplete(event.detail);
+    };
+
+    window.addEventListener('demo-onboarding-complete', handleDemoOnboardingComplete as EventListener);
+
     return () => {
       mounted = false;
       subscription.unsubscribe();
       clearTimeout(failsafe);
+      window.removeEventListener('demo-onboarding-complete', handleDemoOnboardingComplete as EventListener);
     };
   }, []);
 
