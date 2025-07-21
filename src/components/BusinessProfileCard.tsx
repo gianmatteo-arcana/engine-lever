@@ -45,16 +45,18 @@ export const BusinessProfileCard = ({ isExpanded, onToggle }: BusinessProfileCar
       const user = await supabase.auth.getUser();
       const userId = user.data.user?.id;
       
-      // In development mode with service role key, we can query without user restrictions
-      if (!userId && !import.meta.env.DEV) return;
+      // In development mode with service role key, use demo user ID if no authenticated user
+      const finalUserId = userId || (import.meta.env.DEV ? '04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412' : null);
+      
+      if (!finalUserId && !import.meta.env.DEV) return;
 
       // Check for existing business profile
       let profileQuery = supabase
         .from('profiles')
         .select('business_name, business_type, business_address, phone_number');
       
-      if (userId) {
-        profileQuery = profileQuery.eq('user_id', userId);
+      if (finalUserId) {
+        profileQuery = profileQuery.eq('user_id', finalUserId);
       }
       
       const { data: profile } = await profileQuery.maybeSingle();
@@ -69,15 +71,15 @@ export const BusinessProfileCard = ({ isExpanded, onToggle }: BusinessProfileCar
           .eq('task_type', 'business_profile')
           .eq('status', 'pending');
         
-        if (userId) {
-          taskQuery = taskQuery.eq('user_id', userId);
+        if (finalUserId) {
+          taskQuery = taskQuery.eq('user_id', finalUserId);
         }
         
         const { data: task } = await taskQuery.maybeSingle();
 
         if (!task) {
           // Create the task if it doesn't exist
-          await createBusinessProfileTask(userId);
+          await createBusinessProfileTask(finalUserId);
         } else {
           setBusinessProfileTask(task);
         }
@@ -95,7 +97,10 @@ export const BusinessProfileCard = ({ isExpanded, onToggle }: BusinessProfileCar
       const targetUserId = userId || user.data.user?.id;
       
       // In development mode with service role key, we can create tasks without user restrictions
-      if (!targetUserId && !import.meta.env.DEV) return;
+      // But for demo mode, we should use the demo user ID to connect to existing data
+      const finalUserId = targetUserId || (import.meta.env.DEV ? '04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412' : null);
+      
+      if (!finalUserId && !import.meta.env.DEV) return;
 
       const taskData: any = {
         title: 'Set Up Business Profile',
@@ -105,8 +110,8 @@ export const BusinessProfileCard = ({ isExpanded, onToggle }: BusinessProfileCar
         priority: 1
       };
 
-      if (targetUserId) {
-        taskData.user_id = targetUserId;
+      if (finalUserId) {
+        taskData.user_id = finalUserId;
       }
 
       const { data: newTask, error } = await supabase

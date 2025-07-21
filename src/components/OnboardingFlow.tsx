@@ -38,9 +38,10 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   const handleDemoMode = () => {
     console.log("Demo mode triggered");
     enterDemoMode();
+    // Use the real demo account data to maintain connection to existing data
     const demoProfile = {
-      name: "Demo User",
-      email: "demo@example.com",
+      name: "Gianmatteo Costanza",
+      email: "gianmatteo.costanza@gmail.com",
       createdAt: new Date()
     };
     onComplete(demoProfile);
