@@ -12,12 +12,17 @@ interface UserProfileCardProps {
 
 export const UserProfileCard = ({ user, onClose, isVisible }: UserProfileCardProps) => {
   const getInitials = (name: string) => {
+    if (!name || name.trim() === '') {
+      return 'U'; // Default fallback for unnamed user
+    }
+    
     return name
       .split(' ')
+      .filter(n => n && n.trim() !== '') // Filter out empty parts
       .map(n => n[0])
       .join('')
       .toUpperCase()
-      .slice(0, 2);
+      .slice(0, 2) || 'U'; // Fallback if no valid initials
   };
 
   const formatMemberSince = (date?: Date) => {
@@ -64,7 +69,7 @@ export const UserProfileCard = ({ user, onClose, isVisible }: UserProfileCardPro
               </Avatar>
               
               <div className="space-y-1">
-                <CardTitle className="text-xl">{user.name}</CardTitle>
+                <CardTitle className="text-xl">{user.name || "User"}</CardTitle>
                 <p className="text-sm text-muted-foreground">Account Profile</p>
               </div>
             </div>
