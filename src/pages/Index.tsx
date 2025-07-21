@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { Dashboard } from "@/components/Dashboard";
+import { DevConsole } from "@/components/DevConsole";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
 import { useDemoMode } from "@/context/DemoContext";
+import { Terminal } from "lucide-react";
 
 interface UserProfile {
   name: string;
@@ -16,6 +19,7 @@ const Index = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showDevConsole, setShowDevConsole] = useState(false);
   const { isDemoMode, exitDemoMode } = useDemoMode();
 
   useEffect(() => {
@@ -199,22 +203,39 @@ const Index = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
       </div>
     );
   }
 
-  // In demo mode, show dashboard with real user data from Supabase
-  if (isDemoMode) {
-    return <Dashboard user={userProfile} onSignOut={handleSignOut} />;
-  }
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Dev Console Toggle Button - only show in development */}
+      {(isDemoMode || process.env.NODE_ENV === 'development') && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowDevConsole(!showDevConsole)}
+          className="fixed top-4 right-4 z-50 bg-black text-green-400 border-green-400 hover:bg-gray-800"
+        >
+          <Terminal className="h-4 w-4 mr-2" />
+          {showDevConsole ? 'Hide' : 'Show'} Console
+        </Button>
+      )}
 
-  // Show onboarding if no real user
-  if (!user) {
-    return <OnboardingFlow onComplete={handleOnboardingComplete} />;
-  }
+      {/* Main Content */}
+      {isDemoMode ? (
+        <Dashboard user={userProfile} onSignOut={handleSignOut} />
+      ) : !user ? (
+        <OnboardingFlow onComplete={handleOnboardingComplete} />
+      ) : (
+        <Dashboard user={userProfile} onSignOut={handleSignOut} />
+      )}
 
-  return <Dashboard user={userProfile} onSignOut={handleSignOut} />;
+      {/* Dev Console */}
+      <DevConsole isOpen={showDevConsole} onClose={() => setShowDevConsole(false)} />
+    </div>
+  );
 };
 
 export default Index;
