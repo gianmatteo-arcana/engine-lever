@@ -126,14 +126,21 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   useEffect(() => {
     if (!loading && futureTasks.length > 0 && welcomeTaskRef.current && scrollContainerRef.current) {
       const timer = setTimeout(() => {
-        const welcomeTaskTop = welcomeTaskRef.current?.offsetTop || 0;
-        const scrollPosition = welcomeTaskTop - (window.innerHeight * 0.6); // Show welcome task in lower part of screen
+        // Find the last month section (should be December in this case)
+        const taskGridElements = document.querySelectorAll('[data-month-section]');
+        const lastMonthElement = taskGridElements[taskGridElements.length - 1] as HTMLElement;
         
-        scrollContainerRef.current?.scrollTo({
-          top: scrollPosition,
-          behavior: 'smooth'
-        });
-      }, 100); // Small delay to ensure DOM is ready
+        if (lastMonthElement) {
+          // Scroll to show the last month tasks fully + some buffer to show bottom of cards above
+          const lastMonthBottom = lastMonthElement.offsetTop + lastMonthElement.offsetHeight;
+          const scrollPosition = lastMonthBottom - (window.innerHeight * 0.7); // Show last month in upper 70% of screen
+          
+          scrollContainerRef.current?.scrollTo({
+            top: Math.max(0, scrollPosition),
+            behavior: 'smooth'
+          });
+        }
+      }, 200); // Slightly longer delay to ensure all elements are rendered
 
       return () => clearTimeout(timer);
     }

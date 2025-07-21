@@ -76,6 +76,7 @@ export const TaskGrid = ({ tasks, onTaskClick, className }: TaskGridProps) => {
           return (
             <div 
               key={monthYear}
+              data-month-section={monthYear}
               className="animate-fade-in"
               style={{ 
                 animationDelay: `${index * 0.1}s`,
