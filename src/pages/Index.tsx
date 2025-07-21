@@ -24,7 +24,7 @@ const Index = () => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event);
+        console.log('Auth state changed:', event, !!session);
         if (!mounted) return;
         
         setSession(session);
@@ -47,7 +47,10 @@ const Index = () => {
           setUserProfile(null);
         }
         
-        setLoading(false);
+        // Only set loading to false if we've processed the session state
+        if (event !== 'INITIAL_SESSION' || session !== null) {
+          setLoading(false);
+        }
       }
     );
 
