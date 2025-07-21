@@ -54,18 +54,20 @@ const Index = () => {
       }
     );
 
-    // Check for existing session with timeout
-    const checkSession = async () => {
+    // Check for existing session with retry logic
+    const checkSession = async (retryCount = 0) => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (!mounted) return;
         
-        console.log('Initial session check:', !!session, error);
-        setSession(session);
-        setUser(session?.user ?? null);
+        console.log('Session check attempt:', retryCount + 1, !!session, error);
         
         if (session?.user) {
+          console.log('Found valid session for user:', session.user.email);
+          setSession(session);
+          setUser(session.user);
+          
           const profile: UserProfile = {
             name: session.user.user_metadata?.full_name || 
                   session.user.user_metadata?.name || 
@@ -76,13 +78,20 @@ const Index = () => {
           };
           
           setUserProfile(profile);
+          setLoading(false);
+        } else if (retryCount < 3) {
+          // Retry up to 3 times with increasing delays for OAuth redirects
+          setTimeout(() => checkSession(retryCount + 1), (retryCount + 1) * 1000);
         } else {
+          console.log('No session found after retries');
+          setSession(null);
+          setUser(null);
           setUserProfile(null);
+          setLoading(false);
         }
       } catch (error) {
         console.error('Session check error:', error);
-      } finally {
-        if (mounted) {
+        if (mounted && retryCount >= 3) {
           setLoading(false);
         }
       }
