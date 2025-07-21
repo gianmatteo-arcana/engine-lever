@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface UserProfileCardProps {
-  user: { name: string; email: string; createdAt?: Date };
+  user: { name: string; email: string; createdAt?: Date } | null;
   onClose: () => void;
   isVisible: boolean;
 }
@@ -62,14 +62,14 @@ export const UserProfileCard = ({ user, onClose, isVisible }: UserProfileCardPro
             
             <div className="flex items-center space-x-4">
               <Avatar className="h-16 w-16">
-                <AvatarImage src="" alt={user.name} />
+                <AvatarImage src="" alt={user?.name || "User"} />
                 <AvatarFallback className="text-lg font-semibold bg-primary text-primary-foreground">
-                  {getInitials(user.name)}
+                  {getInitials(user?.name || "User")}
                 </AvatarFallback>
               </Avatar>
               
               <div className="space-y-1">
-                <CardTitle className="text-xl">{user.name || "User"}</CardTitle>
+                <CardTitle className="text-xl">{user?.name || "User"}</CardTitle>
                 <p className="text-sm text-muted-foreground">Account Profile</p>
               </div>
             </div>
@@ -84,7 +84,7 @@ export const UserProfileCard = ({ user, onClose, isVisible }: UserProfileCardPro
                <div>
                   <p className="text-sm font-medium">Email</p>
                   <p className="text-sm text-muted-foreground">
-                    {user.email || "dev@example.com (dev mode)"}
+                    {user?.email || "dev@example.com (dev mode)"}
                   </p>
                 </div>
               </div>
@@ -105,7 +105,7 @@ export const UserProfileCard = ({ user, onClose, isVisible }: UserProfileCardPro
                 </div>
                 <div>
                   <p className="text-sm font-medium">Member Since</p>
-                  <p className="text-sm text-muted-foreground">{formatMemberSince(user.createdAt)}</p>
+                  <p className="text-sm text-muted-foreground">{formatMemberSince(user?.createdAt)}</p>
                 </div>
               </div>
             </div>
