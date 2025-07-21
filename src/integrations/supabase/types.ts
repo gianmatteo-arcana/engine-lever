@@ -68,6 +68,7 @@ export type Database = {
           created_at: string
           data: Json | null
           description: string | null
+          due_date: string | null
           id: string
           priority: number | null
           status: string
@@ -81,6 +82,7 @@ export type Database = {
           created_at?: string
           data?: Json | null
           description?: string | null
+          due_date?: string | null
           id?: string
           priority?: number | null
           status?: string
@@ -94,6 +96,7 @@ export type Database = {
           created_at?: string
           data?: Json | null
           description?: string | null
+          due_date?: string | null
           id?: string
           priority?: number | null
           status?: string
