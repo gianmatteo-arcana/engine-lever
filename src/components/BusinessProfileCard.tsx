@@ -43,13 +43,16 @@ export const BusinessProfileCard = ({ isExpanded, onToggle }: BusinessProfileCar
   const fetchBusinessData = async () => {
     try {
       const user = await supabase.auth.getUser();
-      if (!user.data.user) return;
+      // In dev mode with service role key, use demo user ID if no authenticated user
+      const userId = user.data.user?.id || (import.meta.env.DEV ? '04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412' : null);
+      
+      if (!userId) return;
 
       // Check for existing business profile
       const { data: profile } = await supabase
         .from('profiles')
         .select('business_name, business_type, business_address, phone_number')
-        .eq('user_id', user.data.user.id)
+        .eq('user_id', userId)
         .single();
 
       if (profile?.business_name) {
@@ -59,14 +62,14 @@ export const BusinessProfileCard = ({ isExpanded, onToggle }: BusinessProfileCar
         const { data: task } = await supabase
           .from('tasks')
           .select('*')
-          .eq('user_id', user.data.user.id)
+          .eq('user_id', userId)
           .eq('task_type', 'business_profile')
           .eq('status', 'pending')
           .single();
 
         if (!task) {
           // Create the task if it doesn't exist
-          await createBusinessProfileTask();
+          await createBusinessProfileTask(userId);
         } else {
           setBusinessProfileTask(task);
         }
@@ -78,15 +81,18 @@ export const BusinessProfileCard = ({ isExpanded, onToggle }: BusinessProfileCar
     }
   };
 
-  const createBusinessProfileTask = async () => {
+  const createBusinessProfileTask = async (userId?: string) => {
     try {
       const user = await supabase.auth.getUser();
-      if (!user.data.user) return;
+      // Use provided userId or get from auth, fallback to demo user in dev mode
+      const targetUserId = userId || user.data.user?.id || (import.meta.env.DEV ? '04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412' : null);
+      
+      if (!targetUserId) return;
 
       const { data: newTask, error } = await supabase
         .from('tasks')
         .insert({
-          user_id: user.data.user.id,
+          user_id: targetUserId,
           title: 'Set Up Business Profile',
           description: 'Complete your business information to get personalized compliance guidance',
           task_type: 'business_profile',
