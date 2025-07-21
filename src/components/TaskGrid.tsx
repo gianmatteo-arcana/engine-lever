@@ -88,7 +88,7 @@ export const TaskGrid = ({ tasks, onTaskClick, className }: TaskGridProps) => {
                 year={year}
                 taskCount={monthTasks.length}
               />
-              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3 px-4">
+              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3 px-4 pb-96">
                 {monthTasks.map((task, taskIndex) => (
                   <div
                     key={task.id}
