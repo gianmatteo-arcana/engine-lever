@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BusinessProfileCard } from "./BusinessProfileCard";
 import { StatementOfInfoCard } from "./StatementOfInfoCard";
 import { ChatInterface } from "./ChatInterface";
@@ -30,6 +30,8 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [showUserProfile, setShowUserProfile] = useState(false);
   const { tasks, loading, error, getMostUrgentTask, getFutureTasks, getTaskUrgency } = useTasks();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const welcomeTaskRef = useRef<HTMLDivElement>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: "1",
@@ -119,6 +121,23 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
 
   const mostUrgentTask = getMostUrgentTask();
   const futureTasks = getFutureTasks();
+
+  // Auto-scroll to show bottom 15px of task cards with welcome task visible
+  useEffect(() => {
+    if (!loading && futureTasks.length > 0 && welcomeTaskRef.current && scrollContainerRef.current) {
+      const timer = setTimeout(() => {
+        const welcomeTaskTop = welcomeTaskRef.current?.offsetTop || 0;
+        const scrollPosition = welcomeTaskTop - (window.innerHeight * 0.6); // Show welcome task in lower part of screen
+        
+        scrollContainerRef.current?.scrollTo({
+          top: scrollPosition,
+          behavior: 'smooth'
+        });
+      }, 100); // Small delay to ensure DOM is ready
+
+      return () => clearTimeout(timer);
+    }
+  }, [loading, futureTasks.length]);
 
   // Handle full-size task view
   if (selectedTask && expandedCard === "task") {
@@ -303,7 +322,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
       </div>
 
       {/* Scrollable Container */}
-      <div className="h-[calc(100vh-80px)] overflow-y-auto">
+      <div ref={scrollContainerRef} className="h-[calc(100vh-80px)] overflow-y-auto">
         {/* Future Tasks Section */}
         {futureTasks.length > 0 && (
           <div className="bg-muted/20">
@@ -338,7 +357,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
         <div className="container mx-auto px-4 py-8">
           <div className="grid gap-6">
             {/* Greeting Task Card - Always Present */}
-            <div className="flex justify-center">
+            <div ref={welcomeTaskRef} className="flex justify-center">
               <div className="w-full max-w-2xl">
                 <TaskCard
                   task={{
