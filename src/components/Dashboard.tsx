@@ -122,25 +122,29 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   const mostUrgentTask = getMostUrgentTask();
   const futureTasks = getFutureTasks();
 
-  // Auto-scroll to show bottom 15px of task cards with welcome task visible
+  // Scroll to home position - showing bottom portion of compact cards
+  const scrollToHomePosition = () => {
+    if (welcomeTaskRef.current && scrollContainerRef.current) {
+      const welcomeCard = welcomeTaskRef.current;
+      const welcomeCardTop = welcomeCard.offsetTop;
+      
+      // Calculate position to show bottom ~20px of compact cards
+      // We want the welcome card to be visible but show some of the compact cards above
+      const targetScrollPosition = welcomeCardTop - 100; // Show 100px of compact cards bottom
+      
+      scrollContainerRef.current.scrollTo({
+        top: Math.max(0, targetScrollPosition),
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  // Auto-scroll to home position on load
   useEffect(() => {
-    if (!loading && futureTasks.length > 0 && welcomeTaskRef.current && scrollContainerRef.current) {
+    if (!loading && welcomeTaskRef.current && scrollContainerRef.current) {
       const timer = setTimeout(() => {
-        // Find the last month section (should be December in this case)
-        const taskGridElements = document.querySelectorAll('[data-month-section]');
-        const lastMonthElement = taskGridElements[taskGridElements.length - 1] as HTMLElement;
-        
-        if (lastMonthElement) {
-          // Scroll to show the last month tasks fully + some buffer to show bottom of cards above
-          const lastMonthBottom = lastMonthElement.offsetTop + lastMonthElement.offsetHeight;
-          const scrollPosition = lastMonthBottom - (window.innerHeight * 0.7); // Show last month in upper 70% of screen
-          
-          scrollContainerRef.current?.scrollTo({
-            top: Math.max(0, scrollPosition),
-            behavior: 'smooth'
-          });
-        }
-      }, 200); // Slightly longer delay to ensure all elements are rendered
+        scrollToHomePosition();
+      }, 300); // Allow time for all elements to render
 
       return () => clearTimeout(timer);
     }
