@@ -335,18 +335,52 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
 
         {/* Main Dashboard Content */}
         <div className="bg-background">
-          <div className="container mx-auto px-4 py-8">
-            <div className="grid gap-6">
-              {/* Welcome Section */}
-              <div className="text-center space-y-2 mb-8">
-                <h2 className="text-3xl font-bold text-foreground">Welcome back, {user?.name?.split(' ')[0] || "User"}!</h2>
-                <p className="text-muted-foreground">Let's keep your business compliant and stress-free.</p>
+        <div className="container mx-auto px-4 py-8">
+          <div className="grid gap-6">
+            {/* Greeting Task Card - Always Present */}
+            <div className="flex justify-center">
+              <div className="w-full max-w-2xl">
+                <TaskCard
+                  task={{
+                    id: 'greeting-task',
+                    user_id: 'system',
+                    title: `Welcome back, ${user?.name?.split(' ')[0] || "User"}!`,
+                    description: "Let's keep your business compliant and stress-free. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements.",
+                    task_type: 'greeting',
+                    status: 'active',
+                    priority: 1,
+                    due_date: null,
+                    data: { icon: '👋', color: 'primary' },
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    completed_at: null
+                  }}
+                  size={showChat ? "full" : "medium"}
+                  urgency="normal"
+                  onClick={() => {}}
+                  onAction={() => setShowChat(true)}
+                  actionLabel="Chat with Ally"
+                  isGreeting={true}
+                />
+                {/* Chat Interface for expanded greeting task */}
+                {showChat && (
+                  <div className="mt-6 h-[600px]">
+                    <ChatInterface
+                      messages={chatMessages}
+                      onSendMessage={handleSendMessage}
+                      onPillClick={handlePillClick}
+                      placeholder="Ask me anything..."
+                      className="h-full"
+                    />
+                  </div>
+                )}
               </div>
+            </div>
 
               {/* Dashboard Grid */}
-              <div className={`grid gap-6 ${showChat ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+              <div className={`grid gap-6 ${showChat ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
                 {/* Left Column - Task Cards */}
-                <div className={`space-y-6 ${showChat ? 'lg:col-span-2' : ''}`}>
+                <div className="space-y-6">
                   {loading && (
                     <div className="text-center py-8">
                       <p className="text-muted-foreground">Loading tasks...</p>
@@ -403,18 +437,6 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                   </SmallBizCard>
                 </div>
 
-                {/* Chat Interface */}
-                {showChat && (
-                  <div className="h-[600px]">
-                    <ChatInterface
-                      messages={chatMessages}
-                      onSendMessage={handleSendMessage}
-                      onPillClick={handlePillClick}
-                      placeholder="Ask me anything..."
-                      className="h-full"
-                    />
-                  </div>
-                )}
               </div>
             </div>
           </div>
