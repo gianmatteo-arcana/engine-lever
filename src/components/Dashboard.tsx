@@ -6,7 +6,6 @@ import { SmallBizCard } from "./SmallBizCard";
 import { UserProfileCard } from "./UserProfileCard";
 import { TaskGrid } from "./TaskGrid";
 import { TaskCard } from "./TaskCard";
-import { StackedDashboard } from "./StackedDashboard";
 import { useTasks } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
 import { MessageCircle, X, User, LogOut, ChevronUp } from "lucide-react";
@@ -31,6 +30,8 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   const [showUserProfile, setShowUserProfile] = useState(false);
   const { tasks, loading, error, getMostUrgentTask, getFutureTasks, getTaskUrgency } = useTasks();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const welcomeTaskRef = useRef<HTMLDivElement>(null);
+  const [greetingCardPosition, setGreetingCardPosition] = useState<number>(0);
   
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
@@ -42,9 +43,26 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     }
   ]);
 
+  // Store card position before expanding to maintain scroll position
   const handleChatToggle = () => {
+    if (!showChat && welcomeTaskRef.current && scrollContainerRef.current) {
+      const cardRect = welcomeTaskRef.current.getBoundingClientRect();
+      const containerRect = scrollContainerRef.current.getBoundingClientRect();
+      setGreetingCardPosition(cardRect.top - containerRect.top + scrollContainerRef.current.scrollTop);
+    }
     setShowChat(!showChat);
   };
+
+  // Maintain scroll position after state change
+  useEffect(() => {
+    if (showChat && welcomeTaskRef.current && scrollContainerRef.current && greetingCardPosition > 0) {
+      const targetScrollPosition = greetingCardPosition;
+      scrollContainerRef.current.scrollTo({
+        top: targetScrollPosition,
+        behavior: 'smooth'
+      });
+    }
+  }, [showChat, greetingCardPosition]);
 
   const handleSendMessage = (message: string) => {
     const newMessage: ChatMessage = {
@@ -132,6 +150,34 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
 
   const mostUrgentTask = getMostUrgentTask();
   const futureTasks = getFutureTasks();
+
+  // Scroll to home position - showing bottom portion of compact cards
+  const scrollToHomePosition = () => {
+    if (welcomeTaskRef.current && scrollContainerRef.current) {
+      const welcomeCard = welcomeTaskRef.current;
+      const welcomeCardTop = welcomeCard.offsetTop;
+      
+      // Calculate position to show bottom ~20px of compact cards
+      // We want the welcome card to be visible but show some of the compact cards above
+      const targetScrollPosition = welcomeCardTop - 75; // Show 75px of compact cards bottom
+      
+      scrollContainerRef.current.scrollTo({
+        top: Math.max(0, targetScrollPosition),
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  // Auto-scroll to home position on load
+  useEffect(() => {
+    if (!loading && welcomeTaskRef.current && scrollContainerRef.current) {
+      const timer = setTimeout(() => {
+        scrollToHomePosition();
+      }, 300); // Allow time for all elements to render
+
+      return () => clearTimeout(timer);
+    }
+  }, [loading, futureTasks.length]);
 
   // Handle full-size task view
   if (selectedTask && expandedCard === "task") {
@@ -334,45 +380,131 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
 
         {/* Main Dashboard Content */}
         <div className="bg-background">
-          <div className="container mx-auto px-4 py-4">
-            {/* Scroll hint positioned above Welcome card */}
-            {futureTasks.length > 0 && (
-              <div className="py-2 flex justify-center">
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <ChevronUp className="h-3 w-3" />
-                  <span>{futureTasks.length} upcoming tasks - scroll to see all</span>
-                  <ChevronUp className="h-3 w-3" />
-                </div>
+        <div className="container mx-auto px-4 py-4">
+          {/* Scroll hint positioned above Welcome card */}
+          {futureTasks.length > 0 && (
+            <div className="py-2 flex justify-center">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <ChevronUp className="h-3 w-3" />
+                <span>{futureTasks.length} upcoming tasks - scroll to see all</span>
+                <ChevronUp className="h-3 w-3" />
               </div>
-            )}
-
-            {/* Stacked Dashboard */}
-            <div className="flex justify-center py-6">
-              {showChat ? (
-                <div className="w-full max-w-2xl">
-                  <ChatInterface
-                    messages={chatMessages}
-                    onSendMessage={handleSendMessage}
-                    onPillClick={handlePillClick}
-                    placeholder="Ask me anything..."
-                    className="h-[600px]"
-                    onClose={handleChatToggle}
-                    showCloseButton={true}
-                  />
-                </div>
-              ) : (
-                <StackedDashboard
-                  user={user}
-                  onChatToggle={handleChatToggle}
-                  onTaskClick={handleTaskClick}
-                  onStartStatementUpdate={handleStartStatementUpdate}
-                />
-              )}
+            </div>
+          )}
+          <div className="grid gap-6">
+            {/* Greeting Task Card - Seamless Integration */}
+            <div ref={welcomeTaskRef} className="flex justify-center">
+              <div className="w-full max-w-2xl">
+                {showChat ? (
+                  // Full-size: Direct ChatInterface integration without TaskCard wrapper
+                  <div className="transition-all duration-300 ease-in-out transform-gpu">
+                    <ChatInterface
+                      messages={chatMessages}
+                      onSendMessage={handleSendMessage}
+                      onPillClick={handlePillClick}
+                      placeholder="Ask me anything..."
+                      className="h-[600px]"
+                      onClose={handleChatToggle}
+                      showCloseButton={true}
+                    />
+                  </div>
+                ) : (
+                  // Medium size: TaskCard with smooth transition
+                  <div className="transition-all duration-300 ease-in-out transform-gpu origin-top">
+                    <TaskCard
+                      task={{
+                        id: 'greeting-task',
+                        user_id: 'system',
+                        title: `Welcome back, ${user?.name?.split(' ')[0] || "User"}!`,
+                        description: "Let's keep your business compliant and stress-free. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements.",
+                        task_type: 'greeting',
+                        status: 'active',
+                        priority: 1,
+                        due_date: null,
+                        data: { icon: '👋', color: 'primary' },
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                        completed_at: null
+                      }}
+                      size="medium"
+                      urgency="normal"
+                      onClick={() => {}}
+                      onAction={handleChatToggle}
+                      actionLabel="Chat with Ally"
+                      isGreeting={true}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Extra space for scrolling wiggle room */}
-            <div className="h-96"></div>
+              {/* Dashboard Grid */}
+              <div className={`grid gap-6 ${showChat ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
+                {/* Left Column - Task Cards */}
+                <div className="space-y-6">
+                  {loading && (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">Loading tasks...</p>
+                    </div>
+                  )}
+                  
+                  {error && (
+                    <div className="text-center py-8">
+                      <p className="text-destructive">Error loading tasks: {error}</p>
+                    </div>
+                  )}
+
+                  {/* Most Urgent Task - Medium Size */}
+                  {mostUrgentTask && (
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold text-foreground">Priority Task</h3>
+                      <TaskCard
+                        task={mostUrgentTask}
+                        size="medium"
+                        urgency={getTaskUrgency(mostUrgentTask)}
+                        onClick={() => handleTaskClick(mostUrgentTask.id)}
+                        onAction={() => handleTaskAction(mostUrgentTask.id)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Business Snapshot */}
+                  <SmallBizCard
+                    title="Business Snapshot"
+                    description="Where your paperwork stands today"
+                    variant="warning"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-foreground">Current Status</span>
+                        <span className="text-sm font-medium text-warning">
+                          {tasks.filter(t => t.status === 'pending').length === 0 
+                            ? "All set — 0 tasks pending"
+                            : `${tasks.filter(t => t.status === 'pending').length} items need attention`}
+                        </span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div 
+                          className="bg-warning h-2 rounded-full" 
+                          style={{ 
+                            width: `${Math.max(20, 100 - (tasks.filter(t => t.status === 'pending').length * 15))}%` 
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {tasks.filter(t => t.status === 'pending').length === 0 
+                          ? "Nice work! We'll tap you when something needs attention." 
+                          : "Complete your pending tasks to improve compliance."}
+                      </p>
+                    </div>
+                  </SmallBizCard>
+                </div>
+
+              </div>
+            </div>
           </div>
+          {/* Extra space for scrolling wiggle room */}
+          <div className="h-96"></div>
         </div>
       </div>
 
