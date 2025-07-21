@@ -17,7 +17,7 @@ interface ChatMessage {
 }
 
 interface DashboardProps {
-  user: { name: string; email: string; createdAt?: Date };
+  user: { name: string; email: string; createdAt?: Date } | null;
   onSignOut: () => void;
 }
 
@@ -126,7 +126,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                 className="flex items-center gap-2"
               >
                 <User className="h-4 w-4" />
-                <span className="text-sm text-muted-foreground">{user.name}</span>
+                <span className="text-sm text-muted-foreground">{user?.name || "User"}</span>
               </Button>
               <Button variant="ghost" size="sm" onClick={onSignOut}>
                 <LogOut className="h-4 w-4" />
@@ -197,7 +197,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                 className="flex items-center gap-2 hover:bg-accent transition-colors"
               >
                 <User className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">{user.name}</span>
+                <span className="text-sm text-muted-foreground">{user?.name || "User"}</span>
               </Button>
               <Button variant="ghost" size="sm" onClick={onSignOut}>
                 <LogOut className="h-4 w-4" />
@@ -212,7 +212,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
         <div className="grid gap-6">
           {/* Welcome Section */}
           <div className="text-center space-y-2 mb-8">
-            <h2 className="text-3xl font-bold text-foreground">Welcome back, {user.name.split(' ')[0]}!</h2>
+            <h2 className="text-3xl font-bold text-foreground">Welcome back, {user?.name?.split(' ')[0] || "User"}!</h2>
             <p className="text-muted-foreground">Let's keep your business compliant and stress-free.</p>
           </div>
 
