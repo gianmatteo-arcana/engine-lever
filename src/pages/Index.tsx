@@ -19,9 +19,31 @@ const Index = () => {
   const { isDemoMode, exitDemoMode } = useDemoMode();
 
   useEffect(() => {
-    // Skip all authentication logic in demo mode
+    // In demo mode, fetch real user data without authentication
     if (isDemoMode) {
-      setLoading(false);
+      const fetchDemoUserData = async () => {
+        try {
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', 'gianmatteo.costanza@gmail.com')
+            .single();
+          
+          if (profile && !error) {
+            const userData: UserProfile = {
+              name: profile.full_name || profile.first_name || "Gianmatteo",
+              email: profile.email,
+              createdAt: new Date(profile.created_at)
+            };
+            setUserProfile(userData);
+          }
+        } catch (error) {
+          console.error('Error fetching demo user data:', error);
+        }
+        setLoading(false);
+      };
+      
+      fetchDemoUserData();
       return;
     }
     
@@ -182,14 +204,9 @@ const Index = () => {
     );
   }
 
-  // In demo mode, show dashboard with mock user data
+  // In demo mode, show dashboard with real user data from Supabase
   if (isDemoMode) {
-    const mockUser: UserProfile = {
-      name: "Demo User",
-      email: "demo@example.com",
-      createdAt: new Date()
-    };
-    return <Dashboard user={mockUser} onSignOut={handleSignOut} />;
+    return <Dashboard user={userProfile} onSignOut={handleSignOut} />;
   }
 
   // Show onboarding if no real user
