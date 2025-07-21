@@ -468,17 +468,19 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                     </div>
                   )}
 
-                  {/* Compliance Status */}
+                  {/* Business Snapshot */}
                   <SmallBizCard
-                    title="Compliance Health"
-                    description="Overall business compliance status"
+                    title="Business Snapshot"
+                    description="Where your paperwork stands today"
                     variant="warning"
                   >
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-foreground">Current Status</span>
                         <span className="text-sm font-medium text-warning">
-                          {tasks.filter(t => t.status === 'pending').length} items need attention
+                          {tasks.filter(t => t.status === 'pending').length === 0 
+                            ? "All set — 0 tasks pending"
+                            : `${tasks.filter(t => t.status === 'pending').length} items need attention`}
                         </span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
@@ -491,7 +493,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {tasks.filter(t => t.status === 'pending').length === 0 
-                          ? "You're fully compliant! Great work." 
+                          ? "Nice work! We'll tap you when something needs attention." 
                           : "Complete your pending tasks to improve compliance."}
                       </p>
                     </div>
