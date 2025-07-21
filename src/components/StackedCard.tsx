@@ -21,38 +21,51 @@ export const StackedCard = ({
   expandedHeight,
   onClick
 }: StackedCardProps) => {
+  const stackOffset = isActive ? 0 : (zIndex < 40 ? (40 - zIndex) * 3 : 0);
+  
   return (
     <div
       className={cn(
-        "absolute w-full transition-all duration-300 ease-in-out cursor-pointer",
-        "bg-card border rounded-lg shadow-lg",
-        isActive ? "shadow-xl" : "shadow-md hover:shadow-lg",
-        "overflow-hidden"
+        "absolute transition-all duration-300 ease-out cursor-pointer",
+        "bg-card border border-border/50 rounded-2xl overflow-hidden",
+        isActive ? "shadow-2xl shadow-black/10" : "shadow-lg shadow-black/5 hover:shadow-xl hover:shadow-black/8"
       )}
       style={{
         top: `${position}px`,
+        left: `${stackOffset}px`,
+        right: `${stackOffset}px`,
         zIndex,
         height: isActive ? `${expandedHeight}px` : `${headerHeight}px`,
-        transform: isActive ? "scale(1)" : "scale(0.98)"
+        transform: isActive 
+          ? "translateY(0) scale(1)" 
+          : `translateY(${stackOffset * 0.5}px) scale(${0.96 + (zIndex - 35) * 0.01})`,
+        boxShadow: isActive
+          ? "0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.05)"
+          : `0 ${4 + stackOffset}px ${8 + stackOffset * 2}px -4px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.03)`
       }}
       onClick={onClick}
     >
-      {/* Header overlay for stacked state */}
+      {/* Subtle gradient overlay for depth on non-active cards */}
       {!isActive && (
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-card/90 z-10 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-black/5 pointer-events-none z-10" />
       )}
       
       {/* Card content */}
       <div className={cn(
-        "h-full transition-opacity duration-300",
-        isActive ? "opacity-100" : "opacity-80"
+        "h-full transition-all duration-300",
+        isActive ? "opacity-100" : "opacity-85 hover:opacity-90"
       )}>
         {children}
       </div>
       
-      {/* Peek indicator for non-active cards */}
+      {/* Stack depth indicator */}
       {!isActive && (
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary/20 rounded-b-lg" />
+        <div 
+          className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-gradient-to-r from-primary/30 via-primary/50 to-primary/30"
+          style={{
+            boxShadow: `0 0 ${stackOffset + 4}px rgba(var(--primary), 0.3)`
+          }}
+        />
       )}
     </div>
   );

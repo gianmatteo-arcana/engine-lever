@@ -60,7 +60,7 @@ export const StackedDashboard = ({
 
   const getCardPosition = (cardIndex: number) => {
     const headerHeight = 60;
-    const peekAmount = 10;
+    const peekAmount = 15;
     let totalOffset = 0;
 
     // Calculate offset based on previous cards
