@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { GoogleAuthButton } from "./GoogleAuthButton";
+import { DemoPinAuth } from "./DemoPinAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,14 +19,12 @@ interface CompanyOption {
 }
 
 export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
-  const [step, setStep] = useState<"auth" | "company-search" | "company-select" | "manual-entry" | "confirmation">("auth");
+  const [step, setStep] = useState<"auth" | "demo-pin" | "company-search" | "company-select" | "manual-entry" | "confirmation">("auth");
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
   const [searchingCompany, setSearchingCompany] = useState(false);
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
   const [manualCompanyName, setManualCompanyName] = useState("");
   const [selectedCompany, setSelectedCompany] = useState<CompanyOption | null>(null);
-  const [demoLoginLoading, setDemoLoginLoading] = useState(false);
-  const [demoLoginError, setDemoLoginError] = useState<string | null>(null);
   const isDevMode = import.meta.env.DEV;
   const { toast } = useToast();
 
@@ -35,56 +34,15 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
     // This component will be unmounted when user is authenticated
   };
 
-  const handleDemoLogin = async () => {
-    console.log("Demo login triggered");
-    setDemoLoginLoading(true);
-    setDemoLoginError(null);
-    
-    try {
-      // Fetch the real user profile from database using user_id (bypasses RLS issues)
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', '04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412')
-        .maybeSingle();
+  const handleDemoPin = () => {
+    console.log("Demo PIN mode triggered");
+    setStep("demo-pin");
+  };
 
-      if (error || !profile) {
-        console.error('Error fetching demo user profile:', error);
-        const errorMessage = "Demo user account not found in database. Please ensure the user gianmatteo.costanza@gmail.com exists.";
-        setDemoLoginError(errorMessage);
-        toast({
-          title: "Demo Login Failed",
-          description: errorMessage,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Use the real profile data
-      const demoUser = {
-        name: profile.full_name || profile.first_name || "Demo User",
-        email: profile.email || "gianmatteo.costanza@gmail.com",
-        createdAt: profile.created_at ? new Date(profile.created_at) : undefined
-      };
-      
-      console.log("Demo login with real profile:", demoUser);
-      toast({
-        title: "Demo Login Successful",
-        description: `Signed in as ${demoUser.name}`,
-      });
-      onComplete(demoUser);
-    } catch (error) {
-      console.error('Demo login error:', error);
-      const errorMessage = "Failed to connect to database for demo login.";
-      setDemoLoginError(errorMessage);
-      toast({
-        title: "Demo Login Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setDemoLoginLoading(false);
-    }
+  const handleDemoPinSuccess = () => {
+    console.log("Demo PIN authentication successful");
+    // The authentication state will be handled by the parent component
+    // This component will be unmounted when user is authenticated
   };
 
   const handleCompanySelect = (company: CompanyOption) => {
@@ -133,25 +91,13 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
             {isDevMode && (
               <>
                 <Button
-                  onClick={handleDemoLogin}
+                  onClick={handleDemoPin}
                   variant="outline"
                   className="w-full flex items-center gap-2"
-                  disabled={demoLoginLoading}
                 >
-                  {demoLoginLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <User className="h-4 w-4" />
-                  )}
-                  {demoLoginLoading ? "Loading..." : "Demo Login (Dev Only)"}
+                  <User className="h-4 w-4" />
+                  Demo Access (Dev Only)
                 </Button>
-                
-                {demoLoginError && (
-                  <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
-                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                    <span>{demoLoginError}</span>
-                  </div>
-                )}
                 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
@@ -170,6 +116,14 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
             </p>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  if (step === "demo-pin") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <DemoPinAuth onSuccess={handleDemoPinSuccess} />
       </div>
     );
   }
