@@ -267,40 +267,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   }
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      {/* Future Tasks Grid with Peek Effect */}
-      <div className="absolute top-0 left-0 right-0 z-10">
-        <div className="relative">
-          {/* Task Grid Container with Peek Effect */}
-          <div className="relative">
-            {/* Gradient Overlay for Peek Effect */}
-            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-background via-background/80 to-transparent z-10 pointer-events-none" />
-            
-            {/* Scroll Container for Task Grid */}
-            <div className="max-h-[calc(100vh-120px)] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
-              <div className="pb-16"> {/* Extra padding for peek effect */}
-                <TaskGrid 
-                  tasks={futureTasks} 
-                  onTaskClick={handleTaskClick}
-                  className="pt-4"
-                />
-              </div>
-            </div>
-            
-            {/* Peek Hint - Bottom 15px of cards visible */}
-            <div className="absolute bottom-0 left-0 right-0 h-4 bg-background/50 backdrop-blur-sm border-t border-border/20">
-              <div className="flex justify-center items-center h-full">
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <ChevronUp className="h-3 w-3" />
-                  <span>Scroll up to see {futureTasks.length} upcoming tasks</span>
-                  <ChevronUp className="h-3 w-3" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-20">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -335,91 +302,120 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
         </div>
       </div>
 
-      {/* Main Content - Positioned below the task grid */}
-      <div className="relative z-30 bg-background">
-        {/* Push content below the task grid peek area */}
-        <div className="h-20"></div>
-        
-        <div className="container mx-auto px-4 py-8">
-          <div className="grid gap-6">
-            {/* Welcome Section */}
-            <div className="text-center space-y-2 mb-8">
-              <h2 className="text-3xl font-bold text-foreground">Welcome back, {user?.name?.split(' ')[0] || "User"}!</h2>
-              <p className="text-muted-foreground">Let's keep your business compliant and stress-free.</p>
+      {/* Scrollable Container */}
+      <div className="h-[calc(100vh-80px)] overflow-y-auto">
+        {/* Future Tasks Section */}
+        {futureTasks.length > 0 && (
+          <div className="bg-muted/20">
+            <div className="container mx-auto px-4">
+              {/* Peek Hint at Top */}
+              <div className="py-2 flex justify-center">
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <ChevronUp className="h-3 w-3" />
+                  <span>{futureTasks.length} upcoming tasks - scroll to see all</span>
+                  <ChevronUp className="h-3 w-3" />
+                </div>
+              </div>
+              
+              {/* Show bottom portion (15px) of task cards */}
+              <div className="relative overflow-hidden">
+                <div className="transform translate-y-12">
+                  <TaskGrid 
+                    tasks={futureTasks} 
+                    onTaskClick={handleTaskClick}
+                    className="pb-8"
+                  />
+                </div>
+                {/* Gradient mask to show peek effect */}
+                <div className="absolute inset-0 bg-gradient-to-b from-background via-transparent to-transparent pointer-events-none" />
+              </div>
             </div>
+          </div>
+        )}
 
-            {/* Dashboard Grid */}
-            <div className={`grid gap-6 ${showChat ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-              {/* Left Column - Task Cards */}
-              <div className={`space-y-6 ${showChat ? 'lg:col-span-2' : ''}`}>
-                {loading && (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground">Loading tasks...</p>
-                  </div>
-                )}
-                
-                {error && (
-                  <div className="text-center py-8">
-                    <p className="text-destructive">Error loading tasks: {error}</p>
-                  </div>
-                )}
+        {/* Main Dashboard Content */}
+        <div className="bg-background">
+          <div className="container mx-auto px-4 py-8">
+            <div className="grid gap-6">
+              {/* Welcome Section */}
+              <div className="text-center space-y-2 mb-8">
+                <h2 className="text-3xl font-bold text-foreground">Welcome back, {user?.name?.split(' ')[0] || "User"}!</h2>
+                <p className="text-muted-foreground">Let's keep your business compliant and stress-free.</p>
+              </div>
 
-                {/* Most Urgent Task - Medium Size */}
-                {mostUrgentTask && (
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-foreground">Priority Task</h3>
-                    <TaskCard
-                      task={mostUrgentTask}
-                      size="medium"
-                      urgency={getTaskUrgency(mostUrgentTask)}
-                      onClick={() => handleTaskClick(mostUrgentTask.id)}
-                      onAction={() => handleTaskAction(mostUrgentTask.id)}
+              {/* Dashboard Grid */}
+              <div className={`grid gap-6 ${showChat ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+                {/* Left Column - Task Cards */}
+                <div className={`space-y-6 ${showChat ? 'lg:col-span-2' : ''}`}>
+                  {loading && (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">Loading tasks...</p>
+                    </div>
+                  )}
+                  
+                  {error && (
+                    <div className="text-center py-8">
+                      <p className="text-destructive">Error loading tasks: {error}</p>
+                    </div>
+                  )}
+
+                  {/* Most Urgent Task - Medium Size */}
+                  {mostUrgentTask && (
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold text-foreground">Priority Task</h3>
+                      <TaskCard
+                        task={mostUrgentTask}
+                        size="medium"
+                        urgency={getTaskUrgency(mostUrgentTask)}
+                        onClick={() => handleTaskClick(mostUrgentTask.id)}
+                        onAction={() => handleTaskAction(mostUrgentTask.id)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Compliance Status */}
+                  <SmallBizCard
+                    title="Compliance Health"
+                    description="Overall business compliance status"
+                    variant="warning"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-foreground">Current Status</span>
+                        <span className="text-sm font-medium text-warning">
+                          {tasks.filter(t => t.status === 'pending').length} items need attention
+                        </span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div 
+                          className="bg-warning h-2 rounded-full" 
+                          style={{ 
+                            width: `${Math.max(20, 100 - (tasks.filter(t => t.status === 'pending').length * 15))}%` 
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {tasks.filter(t => t.status === 'pending').length === 0 
+                          ? "You're fully compliant! Great work." 
+                          : "Complete your pending tasks to improve compliance."}
+                      </p>
+                    </div>
+                  </SmallBizCard>
+                </div>
+
+                {/* Chat Interface */}
+                {showChat && (
+                  <div className="h-[600px]">
+                    <ChatInterface
+                      messages={chatMessages}
+                      onSendMessage={handleSendMessage}
+                      onPillClick={handlePillClick}
+                      placeholder="Ask me anything..."
+                      className="h-full"
                     />
                   </div>
                 )}
-
-                {/* Compliance Status */}
-                <SmallBizCard
-                  title="Compliance Health"
-                  description="Overall business compliance status"
-                  variant="warning"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-foreground">Current Status</span>
-                      <span className="text-sm font-medium text-warning">
-                        {tasks.filter(t => t.status === 'pending').length} items need attention
-                      </span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div 
-                        className="bg-warning h-2 rounded-full" 
-                        style={{ 
-                          width: `${Math.max(20, 100 - (tasks.filter(t => t.status === 'pending').length * 15))}%` 
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {tasks.filter(t => t.status === 'pending').length === 0 
-                        ? "You're fully compliant! Great work." 
-                        : "Complete your pending tasks to improve compliance."}
-                    </p>
-                  </div>
-                </SmallBizCard>
               </div>
-
-              {/* Chat Interface */}
-              {showChat && (
-                <div className="h-[600px]">
-                  <ChatInterface
-                    messages={chatMessages}
-                    onSendMessage={handleSendMessage}
-                    onPillClick={handlePillClick}
-                    placeholder="Ask me anything..."
-                    className="h-full"
-                  />
-                </div>
-              )}
             </div>
           </div>
         </div>
