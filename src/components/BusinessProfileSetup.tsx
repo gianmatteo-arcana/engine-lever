@@ -96,36 +96,53 @@ export const BusinessProfileSetup = ({ isOpen, onClose, onComplete, taskId }: Bu
   const searchBusinessEntities = async (query: string) => {
     if (query.trim().length < 2) return;
     
+    console.log('🔍 Frontend: Starting business search for:', query);
     setIsSearching(true);
     try {
+      console.log('📡 Frontend: Calling business-lookup function...');
       const { data, error } = await supabase.functions.invoke('business-lookup', {
         body: { query: query.trim() }
       });
 
-      if (error) throw error;
+      console.log('📊 Frontend: Business lookup response:', { data, error });
 
-      setSearchResults(data.results || []);
+      if (error) {
+        console.error('❌ Frontend: Business lookup error:', error);
+        throw error;
+      }
+
+      const results = data.results || [];
+      console.log(`📋 Frontend: Found ${results.length} business entities:`, results);
+      setSearchResults(results);
       
-      if (data.results?.length === 0) {
+      if (results.length === 0) {
+        console.log('⚠️ Frontend: No results found, proceeding to manual entry');
         // No results found, proceed to manual entry
         setFormData(prev => ({ ...prev, businessName: query }));
         setCurrentStep('profile-details');
-      } else if (data.results?.length === 1) {
+        toast({
+          title: "No businesses found",
+          description: "We couldn't find any businesses matching your search. Please enter your business information manually.",
+          variant: "default",
+        });
+      } else if (results.length === 1) {
+        console.log('✅ Frontend: Single result found, auto-selecting:', results[0]);
         // Single result, auto-select and proceed
-        const entity = data.results[0];
+        const entity = results[0];
         selectEntity(entity);
       } else {
+        console.log(`📝 Frontend: Multiple results (${results.length}) found, showing selection screen`);
         // Multiple results, show selection
         setCurrentStep('entity-selection');
       }
     } catch (error) {
-      console.error('Error searching business entities:', error);
+      console.error('💥 Frontend: Error searching business entities:', error);
       toast({
         title: "Search Error",
-        description: "Failed to search business entities. You can enter manually.",
+        description: "Failed to search for businesses. Please try again.",
         variant: "destructive",
       });
-      // Fall back to manual entry
+      // On error, allow manual entry
       setFormData(prev => ({ ...prev, businessName: query }));
       setCurrentStep('profile-details');
     } finally {
