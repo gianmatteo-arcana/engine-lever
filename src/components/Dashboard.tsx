@@ -338,15 +338,6 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
         {futureTasks.length > 0 && (
           <div className="bg-muted/20">
             <div className="container mx-auto px-4 py-4">
-              {/* Peek Hint at Top */}
-              <div className="py-2 flex justify-center">
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <ChevronUp className="h-3 w-3" />
-                  <span>{futureTasks.length} upcoming tasks - scroll to see all</span>
-                  <ChevronUp className="h-3 w-3" />
-                </div>
-              </div>
-              
               {/* Task Grid - Fully Visible */}
               <div className="pb-4">
                 <TaskGrid 
@@ -361,6 +352,16 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
         {/* Main Dashboard Content */}
         <div className="bg-background">
         <div className="container mx-auto px-4 py-8">
+          {/* Scroll hint positioned above Welcome card */}
+          {futureTasks.length > 0 && (
+            <div className="py-2 flex justify-center">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <ChevronUp className="h-3 w-3" />
+                <span>{futureTasks.length} upcoming tasks - scroll to see all</span>
+                <ChevronUp className="h-3 w-3" />
+              </div>
+            </div>
+          )}
           <div className="grid gap-6">
             {/* Greeting Task Card - Always Present */}
             <div ref={welcomeTaskRef} className="flex justify-center">
