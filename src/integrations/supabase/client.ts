@@ -6,9 +6,8 @@ const SUPABASE_URL = "https://raenkewzlvrdqufwxjpl.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhZW5rZXd6bHZyZHF1Znd4anBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwNDczODMsImV4cCI6MjA2ODYyMzM4M30.CvnbE8w1yEX4zYHjHmxRIpTlh4O7ZClbcNSEfYFGlag";
 const SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhZW5rZXd6bHZyZHF1Znd4anBsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzA0NzM4MywiZXhwIjoyMDY4NjIzMzgzfQ.wdlkottwquseadstoqul";
 
-// For development mode, use service role to bypass RLS; for production, use anon key
-const isDev = import.meta.env.DEV;
-const SUPABASE_KEY = isDev ? SUPABASE_SERVICE_ROLE_KEY : SUPABASE_ANON_KEY;
+// Use anon key for now since service role key is incomplete
+const SUPABASE_KEY = SUPABASE_ANON_KEY;
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
