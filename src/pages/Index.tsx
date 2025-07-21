@@ -18,13 +18,22 @@ const Index = () => {
   const [demoMode, setDemoMode] = useState(false);
 
   useEffect(() => {
-    console.log('Setting up auth...');
+    console.log('=== SETTING UP AUTH ===');
+    console.log('Window location:', window.location.href);
+    console.log('Has hash:', !!window.location.hash);
+    console.log('Hash content:', window.location.hash);
+    
     let mounted = true;
     
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event, !!session, session?.user?.email);
+        console.log('=== AUTH STATE CHANGED ===');
+        console.log('Event:', event);
+        console.log('Has session:', !!session);
+        console.log('User email:', session?.user?.email);
+        console.log('Access token present:', !!session?.access_token);
+        
         if (!mounted) return;
         
         setSession(session);
@@ -49,10 +58,12 @@ const Index = () => {
         
         // Set loading to false for any definitive auth event
         if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+          console.log('Setting loading false due to event:', event);
           setLoading(false);
         } else if (event === 'INITIAL_SESSION') {
           // For initial session, only set loading false if we have a session or after a delay
           if (session) {
+            console.log('Setting loading false - initial session with user');
             setLoading(false);
           }
         }
