@@ -8,6 +8,7 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Fixed nested Router issue
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
