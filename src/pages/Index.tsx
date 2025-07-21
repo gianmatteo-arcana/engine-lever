@@ -19,6 +19,12 @@ const Index = () => {
   const { isDemoMode, exitDemoMode } = useDemoMode();
 
   useEffect(() => {
+    // Skip all authentication logic in demo mode
+    if (isDemoMode) {
+      setLoading(false);
+      return;
+    }
+    
     console.log('=== SETTING UP AUTH ===');
     console.log('Window location:', window.location.href);
     console.log('Has hash:', !!window.location.hash);
@@ -145,7 +151,7 @@ const Index = () => {
       subscription.unsubscribe();
       clearTimeout(failsafe);
     };
-  }, []);
+  }, [isDemoMode]);
 
   const handleOnboardingComplete = async (userData: UserProfile) => {
     console.log('Onboarding complete for:', userData);
@@ -176,8 +182,18 @@ const Index = () => {
     );
   }
 
-  // Show onboarding if no user and not in demo mode
-  if (!user && !isDemoMode) {
+  // In demo mode, show dashboard with mock user data
+  if (isDemoMode) {
+    const mockUser: UserProfile = {
+      name: "Demo User",
+      email: "demo@example.com",
+      createdAt: new Date()
+    };
+    return <Dashboard user={mockUser} onSignOut={handleSignOut} />;
+  }
+
+  // Show onboarding if no real user
+  if (!user) {
     return <OnboardingFlow onComplete={handleOnboardingComplete} />;
   }
 
