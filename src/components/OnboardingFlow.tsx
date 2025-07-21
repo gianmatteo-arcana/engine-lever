@@ -41,12 +41,12 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
     setDemoLoginError(null);
     
     try {
-      // Fetch the real user profile from database using email
+      // Fetch the real user profile from database using user_id (bypasses RLS issues)
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('email', 'gianmatteo.costanza@gmail.com')
-        .single();
+        .eq('user_id', '04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412')
+        .maybeSingle();
 
       if (error || !profile) {
         console.error('Error fetching demo user profile:', error);
