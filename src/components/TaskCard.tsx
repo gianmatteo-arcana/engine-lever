@@ -1,8 +1,9 @@
+
 import { cn } from "@/lib/utils";
 import { SmallBizCard } from "./SmallBizCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, AlertTriangle, MessageCircle, X } from "lucide-react";
+import { Calendar, Clock, AlertTriangle, MessageCircle } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
 type TaskRow = Database['public']['Tables']['tasks']['Row'];
@@ -107,31 +108,18 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           )}
           
           {onAction && (
-            isGreeting ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAction();
-                }}
-                className="flex items-center gap-2 w-fit"
-              >
-                <MessageCircle className="h-4 w-4" />
-                {actionLabel || "Chat with Ally"}
-              </Button>
-            ) : (
-              <Button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAction();
-                }}
-                className="w-full"
-                variant={urgency === "overdue" ? "destructive" : "default"}
-              >
-                {actionLabel || (urgency === "overdue" ? "Complete Now" : "Start Task")}
-              </Button>
-            )
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAction();
+              }}
+              className="flex items-center gap-2 w-fit"
+            >
+              <MessageCircle className="h-4 w-4" />
+              {actionLabel || "Chat with Ally"}
+            </Button>
           )}
         </div>
       </SmallBizCard>
@@ -154,22 +142,10 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
             </div>
           </div>
         )}
-        {isGreeting && onAction && (
-          <div className="absolute top-4 right-4 z-10">
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={onAction}
-              className="h-8 w-8 hover:bg-muted"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
 
         {!isGreeting && (
           <>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 p-6">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -200,7 +176,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
             </div>
 
             {urgency === "overdue" && (
-              <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+              <div className="flex items-center gap-3 p-4 mx-6 mb-4 bg-destructive/10 border border-destructive/20 rounded-lg">
                 <AlertTriangle className="h-5 w-5 text-destructive" />
                 <div>
                   <p className="font-medium text-destructive">This task is overdue</p>
@@ -211,7 +187,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
               </div>
             )}
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 p-6 pt-0">
               {onAction && (
                 <Button 
                   onClick={onAction}

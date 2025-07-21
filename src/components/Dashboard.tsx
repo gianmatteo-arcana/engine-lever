@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { BusinessProfileCard } from "./BusinessProfileCard";
 import { StatementOfInfoCard } from "./StatementOfInfoCard";
@@ -32,6 +31,8 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   const { tasks, loading, error, getMostUrgentTask, getFutureTasks, getTaskUrgency } = useTasks();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const welcomeTaskRef = useRef<HTMLDivElement>(null);
+  const [greetingCardPosition, setGreetingCardPosition] = useState<number>(0);
+  
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: "1",
@@ -42,6 +43,26 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     }
   ]);
 
+  // Store card position before expanding to maintain scroll position
+  const handleChatToggle = () => {
+    if (!showChat && welcomeTaskRef.current && scrollContainerRef.current) {
+      const cardRect = welcomeTaskRef.current.getBoundingClientRect();
+      const containerRect = scrollContainerRef.current.getBoundingClientRect();
+      setGreetingCardPosition(cardRect.top - containerRect.top + scrollContainerRef.current.scrollTop);
+    }
+    setShowChat(!showChat);
+  };
+
+  // Maintain scroll position after state change
+  useEffect(() => {
+    if (showChat && welcomeTaskRef.current && scrollContainerRef.current && greetingCardPosition > 0) {
+      const targetScrollPosition = greetingCardPosition;
+      scrollContainerRef.current.scrollTo({
+        top: targetScrollPosition,
+        behavior: 'smooth'
+      });
+    }
+  }, [showChat, greetingCardPosition]);
 
   const handleSendMessage = (message: string) => {
     const newMessage: ChatMessage = {
@@ -80,6 +101,10 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     if (lowerMessage.includes("statement") || lowerMessage.includes("update")) {
       return "I'd be happy to help you update your Statement of Information! This is an annual requirement for California businesses. I can guide you through reviewing your current information and making any necessary updates. Shall we get started?";
     }
+
+    if (lowerMessage.includes("review letter")) {
+      return "I'd be happy to help you review any compliance letters or documents! Please upload the letter or document you'd like me to review, and I'll analyze it for important deadlines, requirements, and next steps.";
+    }
     
     return "I'm here to help with your compliance needs. I can assist with filing requirements, deadlines, and keeping your business information up to date. What would you like to know more about?";
   };
@@ -89,6 +114,10 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     
     if (lowerMessage.includes("statement") || lowerMessage.includes("update")) {
       return ["Yes, let's start", "What information do I need?", "Not right now"];
+    }
+
+    if (lowerMessage.includes("review letter")) {
+      return ["Upload document", "Tell me about deadlines", "What should I look for?"];
     }
     
     return ["Tell me about my deadlines", "Help with filing", "What's required?"];
@@ -333,7 +362,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
       </div>
 
       {/* Scrollable Container */}
-      <div ref={scrollContainerRef} className="h-[calc(100vh-80px)] overflow-y-auto">
+      <div ref={scrollContainerRef} className="h-[calc(100vh-80px)] overflow-y-auto scroll-smooth">
         {/* Future Tasks Section */}
         {futureTasks.length > 0 && (
           <div className="bg-muted/20">
@@ -363,40 +392,46 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
             </div>
           )}
           <div className="grid gap-6">
-            {/* Greeting Task Card - Always Present */}
+            {/* Greeting Task Card - Seamless Integration */}
             <div ref={welcomeTaskRef} className="flex justify-center">
               <div className="w-full max-w-2xl">
-                <TaskCard
-                  task={{
-                    id: 'greeting-task',
-                    user_id: 'system',
-                    title: showChat ? "" : `Welcome back, ${user?.name?.split(' ')[0] || "User"}!`,
-                    description: showChat ? "" : "Let's keep your business compliant and stress-free. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements.",
-                    task_type: 'greeting',
-                    status: 'active',
-                    priority: 1,
-                    due_date: null,
-                    data: { icon: '👋', color: 'primary' },
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                    completed_at: null
-                  }}
-                  size={showChat ? "full" : "medium"}
-                  urgency="normal"
-                  onClick={() => {}}
-                  onAction={showChat ? () => setShowChat(false) : () => setShowChat(true)}
-                  actionLabel="Chat with Ally"
-                  isGreeting={true}
-                />
-                {/* Chat Interface for expanded greeting task */}
-                {showChat && (
-                  <div className="h-[600px]">
+                {showChat ? (
+                  // Full-size: Direct ChatInterface integration without TaskCard wrapper
+                  <div className="transition-all duration-300 ease-in-out transform-gpu">
                     <ChatInterface
                       messages={chatMessages}
                       onSendMessage={handleSendMessage}
                       onPillClick={handlePillClick}
                       placeholder="Ask me anything..."
-                      className="h-full"
+                      className="h-[600px]"
+                      onClose={handleChatToggle}
+                      showCloseButton={true}
+                    />
+                  </div>
+                ) : (
+                  // Medium size: TaskCard with smooth transition
+                  <div className="transition-all duration-300 ease-in-out transform-gpu origin-top">
+                    <TaskCard
+                      task={{
+                        id: 'greeting-task',
+                        user_id: 'system',
+                        title: `Welcome back, ${user?.name?.split(' ')[0] || "User"}!`,
+                        description: "Let's keep your business compliant and stress-free. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements.",
+                        task_type: 'greeting',
+                        status: 'active',
+                        priority: 1,
+                        due_date: null,
+                        data: { icon: '👋', color: 'primary' },
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                        completed_at: null
+                      }}
+                      size="medium"
+                      urgency="normal"
+                      onClick={() => {}}
+                      onAction={handleChatToggle}
+                      actionLabel="Chat with Ally"
+                      isGreeting={true}
                     />
                   </div>
                 )}

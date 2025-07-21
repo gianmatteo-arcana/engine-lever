@@ -1,7 +1,8 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Bot, User, ScanLine } from "lucide-react";
+import { Send, Bot, User, ScanLine, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatMessage {
@@ -19,6 +20,8 @@ interface ChatInterfaceProps {
   isTyping?: boolean;
   placeholder?: string;
   className?: string;
+  onClose?: () => void;
+  showCloseButton?: boolean;
 }
 
 export const ChatInterface = ({
@@ -27,7 +30,9 @@ export const ChatInterface = ({
   onPillClick,
   isTyping = false,
   placeholder = "Type your message...",
-  className
+  className,
+  onClose,
+  showCloseButton = false
 }: ChatInterfaceProps) => {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -64,14 +69,26 @@ export const ChatInterface = ({
   return (
     <div className={cn("flex flex-col h-full bg-card rounded-lg border shadow-sm", className)}>
       {/* Chat Header */}
-      <div className="p-4 border-b bg-primary-light/30 rounded-t-lg">
+      <div className="p-4 border-b bg-primary-light/30 rounded-t-lg flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Bot className="h-5 w-5 text-primary" />
-          <span className="font-medium text-foreground">Ally - Your AI Assistant</span>
+          <div>
+            <span className="font-medium text-foreground">Ally - Your AI Assistant</span>
+            <p className="text-sm text-muted-foreground">
+              I'm here to help with your compliance needs
+            </p>
+          </div>
         </div>
-        <p className="text-sm text-muted-foreground mt-1">
-          I'm here to help with your compliance needs
-        </p>
+        {showCloseButton && onClose && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="h-8 w-8 p-0 hover:bg-muted"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       {/* Messages */}
