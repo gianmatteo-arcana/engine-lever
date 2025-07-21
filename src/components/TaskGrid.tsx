@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+
+import { useMemo } from "react";
 import { CompactTaskCard } from "./CompactTaskCard";
 import { MonthDelineator } from "./MonthDelineator";
 import type { Database } from "@/integrations/supabase/types";
@@ -20,8 +21,6 @@ interface TaskGridProps {
 }
 
 export const TaskGrid = ({ tasks, onTaskClick, className }: TaskGridProps) => {
-  const [isVisible, setIsVisible] = useState(false);
-
   const getTaskUrgency = (task: Task): "overdue" | "urgent" | "normal" => {
     if (!task.due_date) return "normal";
     
@@ -43,7 +42,7 @@ export const TaskGrid = ({ tasks, onTaskClick, className }: TaskGridProps) => {
       if (!task.due_date) return; // Skip tasks without due dates
       
       const date = new Date(task.due_date);
-      const monthYear = `${date.getFullYear()}-${date.getMonth()}`;
+      const monthYear = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
       
       if (!groups[monthYear]) {
         groups[monthYear] = [];
@@ -51,62 +50,64 @@ export const TaskGrid = ({ tasks, onTaskClick, className }: TaskGridProps) => {
       groups[monthYear].push(task);
     });
 
-    // Sort months chronologically (future months first for scrolling effect)
+    // Sort months chronologically (earliest first)
     const sortedGroups = Object.entries(groups).sort(([a], [b]) => {
       const [yearA, monthA] = a.split('-').map(Number);
       const [yearB, monthB] = b.split('-').map(Number);
       
-      if (yearA !== yearB) return yearB - yearA; // Future years first
-      return monthB - monthA; // Future months first
+      if (yearA !== yearB) return yearA - yearB;
+      return monthA - monthB;
     });
 
     return sortedGroups;
   }, [tasks]);
 
+  if (groupedTasks.length === 0) return null;
+
   return (
-    <div className={className}>
-      {/* Toggle button to reveal/hide compact grid */}
-      <div className="text-center mb-4">
-        <button
-          onClick={() => setIsVisible(!isVisible)}
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {isVisible ? "Hide upcoming tasks" : `Show ${tasks.length} upcoming tasks`}
-        </button>
-      </div>
+    <div className={`w-full ${className}`}>
+      <div className="space-y-8">
+        {groupedTasks.map(([monthYear, monthTasks], index) => {
+          const [year, month] = monthYear.split('-').map(Number);
+          const monthName = new Date(year, month).toLocaleDateString('en-US', { 
+            month: 'long' 
+          });
 
-      {/* Compact grid - slides down when visible */}
-      <div className={`transition-all duration-500 overflow-hidden ${
-        isVisible ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"
-      }`}>
-        <div className="space-y-6 pb-6">
-          {groupedTasks.map(([monthYear, monthTasks]) => {
-            const [year, month] = monthYear.split('-').map(Number);
-            const monthName = new Date(year, month).toLocaleDateString('en-US', { 
-              month: 'long' 
-            });
-
-            return (
-              <div key={monthYear}>
-                <MonthDelineator 
-                  month={monthName}
-                  year={year}
-                  taskCount={monthTasks.length}
-                />
-                <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-3 px-4">
-                  {monthTasks.map(task => (
+          return (
+            <div 
+              key={monthYear}
+              className="animate-fade-in"
+              style={{ 
+                animationDelay: `${index * 0.1}s`,
+                animationFillMode: 'both'
+              }}
+            >
+              <MonthDelineator 
+                month={monthName}
+                year={year}
+                taskCount={monthTasks.length}
+              />
+              <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-3 px-4">
+                {monthTasks.map((task, taskIndex) => (
+                  <div
+                    key={task.id}
+                    className="animate-scale-in"
+                    style={{ 
+                      animationDelay: `${(index * 0.1) + (taskIndex * 0.05)}s`,
+                      animationFillMode: 'both'
+                    }}
+                  >
                     <CompactTaskCard
-                      key={task.id}
                       task={task}
                       urgency={getTaskUrgency(task)}
                       onClick={() => onTaskClick(task.id)}
                     />
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
