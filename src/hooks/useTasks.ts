@@ -29,7 +29,10 @@ export const useTasks = () => {
 
       if (fetchError) {
         console.error('Supabase error:', fetchError);
-        // If no tasks found (likely due to no authenticated user), create sample tasks
+      }
+
+      // If no tasks found (likely due to no authenticated user), create sample tasks
+      if (!data || data.length === 0) {
         const sampleTasks: Task[] = [
           {
             id: 'sample-1',
@@ -55,6 +58,20 @@ export const useTasks = () => {
             priority: 1,
             due_date: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             data: { icon: 'SI', color: 'warning' },
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            completed_at: null
+          },
+          {
+            id: 'sample-3',
+            user_id: 'sample',
+            title: 'Tax Registration',
+            description: 'Register for state taxes',
+            task_type: 'tax_registration',
+            status: 'pending',
+            priority: 2,
+            due_date: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            data: { icon: 'TR', color: 'task' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             completed_at: null
