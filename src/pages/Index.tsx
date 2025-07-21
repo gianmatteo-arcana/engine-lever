@@ -104,6 +104,22 @@ const Index = () => {
 
     checkSession();
 
+    // Handle OAuth redirect hash fragments
+    if (window.location.hash) {
+      console.log('OAuth hash detected:', window.location.hash);
+      // Let Supabase handle the OAuth callback
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session && mounted) {
+          console.log('Session found after OAuth redirect');
+          setSession(session);
+          setUser(session.user);
+          setLoading(false);
+          // Clear the hash to clean up URL
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+      });
+    }
+
     // Failsafe: ensure loading is set to false after 5 seconds
     const failsafe = setTimeout(() => {
       if (mounted) {
