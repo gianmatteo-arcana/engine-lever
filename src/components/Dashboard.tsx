@@ -333,7 +333,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
         {/* Future Tasks Section */}
         {futureTasks.length > 0 && (
           <div className="bg-muted/20">
-            <div className="container mx-auto px-4">
+            <div className="container mx-auto px-4 py-4">
               {/* Peek Hint at Top */}
               <div className="py-2 flex justify-center">
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -343,17 +343,12 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                 </div>
               </div>
               
-              {/* Show bottom portion (15px) of task cards */}
-              <div className="relative overflow-hidden">
-                <div className="transform translate-y-12">
-                  <TaskGrid 
-                    tasks={futureTasks} 
-                    onTaskClick={handleTaskClick}
-                    className="pb-8"
-                  />
-                </div>
-                {/* Gradient mask to show peek effect */}
-                <div className="absolute inset-0 bg-gradient-to-b from-background via-transparent to-transparent pointer-events-none" />
+              {/* Task Grid - Fully Visible */}
+              <div className="pb-4">
+                <TaskGrid 
+                  tasks={futureTasks} 
+                  onTaskClick={handleTaskClick}
+                />
               </div>
             </div>
           </div>
