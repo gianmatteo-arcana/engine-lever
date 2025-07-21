@@ -4,11 +4,12 @@ import type { Database } from "@/integrations/supabase/types";
 
 type TaskRow = Database['public']['Tables']['tasks']['Row'];
 
-interface Task extends TaskRow {
+interface Task extends Omit<TaskRow, 'data'> {
+  due_date?: string | null;
   data?: {
     icon?: string;
     color?: string;
-  };
+  } | null;
 }
 
 export const useTasks = () => {
@@ -28,7 +29,7 @@ export const useTasks = () => {
 
       if (fetchError) throw fetchError;
 
-      setTasks(data || []);
+      setTasks((data || []) as Task[]);
     } catch (err) {
       console.error('Error fetching tasks:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch tasks');
@@ -46,20 +47,22 @@ export const useTasks = () => {
     const pendingTasks = tasks.filter(task => task.status === 'pending');
     
     // Sort by urgency (overdue first, then by due date)
-    const sortedTasks = pendingTasks.sort((a, b) => {
-      const dueDateA = new Date(a.due_date);
-      const dueDateB = new Date(b.due_date);
-      
-      const isOverdueA = dueDateA < today;
-      const isOverdueB = dueDateB < today;
-      
-      // Overdue tasks first
-      if (isOverdueA && !isOverdueB) return -1;
-      if (!isOverdueA && isOverdueB) return 1;
-      
-      // Then by due date (earliest first)
-      return dueDateA.getTime() - dueDateB.getTime();
-    });
+    const sortedTasks = pendingTasks
+      .filter(task => task.due_date) // Only tasks with due dates
+      .sort((a, b) => {
+        const dueDateA = new Date(a.due_date!);
+        const dueDateB = new Date(b.due_date!);
+        
+        const isOverdueA = dueDateA < today;
+        const isOverdueB = dueDateB < today;
+        
+        // Overdue tasks first
+        if (isOverdueA && !isOverdueB) return -1;
+        if (!isOverdueA && isOverdueB) return 1;
+        
+        // Then by due date (earliest first)
+        return dueDateA.getTime() - dueDateB.getTime();
+      });
 
     return sortedTasks[0] || null;
   };
@@ -73,6 +76,8 @@ export const useTasks = () => {
   };
 
   const getTaskUrgency = (task: Task): "overdue" | "urgent" | "normal" => {
+    if (!task.due_date) return "normal";
+    
     const today = new Date();
     const dueDate = new Date(task.due_date);
     const diffTime = dueDate.getTime() - today.getTime();
