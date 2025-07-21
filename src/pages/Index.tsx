@@ -149,6 +149,7 @@ const Index = () => {
 
   const handleOnboardingComplete = async (userData: UserProfile) => {
     console.log('Onboarding complete for:', userData);
+    console.log('Demo mode active:', isDemoMode);
     setUserProfile(userData);
     setLoading(false);
   };
