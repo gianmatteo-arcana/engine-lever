@@ -85,7 +85,7 @@ export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps
 
   if (isExpanded) {
     return (
-      <div className="animate-scale-in col-span-full max-w-md mx-auto" style={{ animationDuration: '0.15s' }}>
+      <div className="animate-scale-in col-span-full max-w-2xl mx-auto" style={{ animationDuration: '0.15s' }}>
         <SmallBizCard
           title={task.title}
           description={task.description}
