@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, Building2, MapPin, Phone, Mail, FileText, CheckCircle } from "lucide-react";
+import { X, Building2, MapPin, Phone, Mail, FileText, CheckCircle, Search, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -16,10 +16,21 @@ interface BusinessProfileSetupProps {
   taskId: string;
 }
 
+interface BusinessEntity {
+  entity_name: string;
+  entity_number: string;
+  entity_type: string;
+  entity_status: string;
+  principal_address?: string;
+  agent_name?: string;
+  file_date?: string;
+}
+
 interface BusinessProfileData {
   businessName: string;
   businessType: string;
   entityType: string;
+  entityNumber: string;
   address: string;
   city: string;
   state: string;
@@ -31,6 +42,8 @@ interface BusinessProfileData {
   ein: string;
   foundedDate: string;
 }
+
+type SetupStep = 'business-search' | 'entity-selection' | 'profile-details';
 
 const entityTypes = [
   "Sole Proprietorship",
@@ -56,10 +69,16 @@ const businessTypes = [
 ];
 
 export const BusinessProfileSetup = ({ isOpen, onClose, onComplete, taskId }: BusinessProfileSetupProps) => {
+  const [currentStep, setCurrentStep] = useState<SetupStep>('business-search');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<BusinessEntity[]>([]);
+  const [selectedEntity, setSelectedEntity] = useState<BusinessEntity | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [formData, setFormData] = useState<BusinessProfileData>({
     businessName: "",
     businessType: "",
     entityType: "",
+    entityNumber: "",
     address: "",
     city: "",
     state: "",
@@ -74,8 +93,89 @@ export const BusinessProfileSetup = ({ isOpen, onClose, onComplete, taskId }: Bu
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
+  const searchBusinessEntities = async (query: string) => {
+    if (query.trim().length < 2) return;
+    
+    setIsSearching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('business-lookup', {
+        body: { query: query.trim() }
+      });
+
+      if (error) throw error;
+
+      setSearchResults(data.results || []);
+      
+      if (data.results?.length === 0) {
+        // No results found, proceed to manual entry
+        setFormData(prev => ({ ...prev, businessName: query }));
+        setCurrentStep('profile-details');
+      } else if (data.results?.length === 1) {
+        // Single result, auto-select and proceed
+        const entity = data.results[0];
+        selectEntity(entity);
+      } else {
+        // Multiple results, show selection
+        setCurrentStep('entity-selection');
+      }
+    } catch (error) {
+      console.error('Error searching business entities:', error);
+      toast({
+        title: "Search Error",
+        description: "Failed to search business entities. You can enter manually.",
+        variant: "destructive",
+      });
+      // Fall back to manual entry
+      setFormData(prev => ({ ...prev, businessName: query }));
+      setCurrentStep('profile-details');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const selectEntity = (entity: BusinessEntity) => {
+    setSelectedEntity(entity);
+    
+    // Pre-populate form data from entity
+    const addressParts = entity.principal_address?.split(', ') || [];
+    const city = addressParts[addressParts.length - 3] || '';
+    const stateZip = addressParts[addressParts.length - 2]?.split(' ') || [];
+    const state = stateZip[0] || 'CA';
+    const zipCode = stateZip[1] || '';
+    const address = addressParts.slice(0, -2).join(', ') || '';
+
+    setFormData(prev => ({
+      ...prev,
+      businessName: entity.entity_name,
+      entityType: mapEntityType(entity.entity_type),
+      entityNumber: entity.entity_number,
+      address,
+      city,
+      state,
+      zipCode
+    }));
+    
+    setCurrentStep('profile-details');
+  };
+
+  const mapEntityType = (caEntityType: string): string => {
+    switch (caEntityType.toUpperCase()) {
+      case 'CORPORATION':
+        return 'Corporation (C-Corp)';
+      case 'LIMITED LIABILITY COMPANY':
+        return 'Limited Liability Company (LLC)';
+      default:
+        return 'Other';
+    }
+  };
+
   const handleInputChange = (field: keyof BusinessProfileData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleManualEntry = () => {
+    setFormData(prev => ({ ...prev, businessName: searchQuery }));
+    setCurrentStep('profile-details');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -158,8 +258,105 @@ export const BusinessProfileSetup = ({ isOpen, onClose, onComplete, taskId }: Bu
             </Button>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Content based on current step */}
+          {currentStep === 'business-search' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Search className="h-5 w-5" />
+                  Find Your Business
+                </CardTitle>
+                <p className="text-muted-foreground">
+                  Let's start by finding your business in California's registry
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="businessSearch">Business Name</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="businessSearch"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Enter your business name..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          searchBusinessEntities(searchQuery);
+                        }
+                      }}
+                    />
+                    <Button 
+                      type="button"
+                      onClick={() => searchBusinessEntities(searchQuery)}
+                      disabled={isSearching || searchQuery.trim().length < 2}
+                    >
+                      {isSearching ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Search className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    We'll search California's business registry for your company
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {currentStep === 'entity-selection' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Select Your Business</CardTitle>
+                <p className="text-muted-foreground">
+                  We found multiple businesses matching "{searchQuery}". Please select yours:
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {searchResults.map((entity, index) => (
+                  <div
+                    key={index}
+                    className="p-4 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
+                    onClick={() => selectEntity(entity)}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-medium">{entity.entity_name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {entity.entity_type} • #{entity.entity_number}
+                        </p>
+                        {entity.principal_address && (
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {entity.principal_address}
+                          </p>
+                        )}
+                      </div>
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        entity.entity_status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {entity.entity_status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                
+                <div className="pt-4 border-t">
+                  <Button 
+                    variant="outline" 
+                    onClick={handleManualEntry}
+                    className="w-full"
+                  >
+                    None of these match - Enter manually
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {currentStep === 'profile-details' && (
+            <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid gap-6 md:grid-cols-2">
               {/* Basic Information */}
               <Card>
@@ -369,7 +566,8 @@ export const BusinessProfileSetup = ({ isOpen, onClose, onComplete, taskId }: Bu
                 )}
               </Button>
             </div>
-          </form>
+            </form>
+          )}
         </div>
       </div>
     </div>
