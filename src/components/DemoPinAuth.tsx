@@ -58,10 +58,10 @@ export const DemoPinAuth = ({ onSuccess }: DemoPinAuthProps) => {
         return;
       }
 
-      // Create demo user data using the real profile or fallback data
+      // Create demo user data using the real profile data
       const demoUserData = {
-        name: profileData?.full_name || profileData?.first_name + ' ' + profileData?.last_name || "Demo User",
-        email: "dev@smallbizally.com", // Special email that triggers demo mode in parent
+        name: profileData?.full_name || profileData?.first_name + ' ' + profileData?.last_name || "Gianmatteo Costanza",
+        email: "gianmatteo.costanza@gmail.com", // Use the REAL email for demo mode
         createdAt: new Date()
       };
 

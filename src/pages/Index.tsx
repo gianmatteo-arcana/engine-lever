@@ -159,7 +159,8 @@ const Index = () => {
   const handleOnboardingComplete = (userData: UserProfile) => {
     console.log('Onboarding complete for:', userData);
     // For demo mode, set the profile directly without Supabase auth
-    if (import.meta.env.DEV && userData.email === "dev@smallbizally.com") {
+    // Check for the real demo user email in dev mode
+    if (import.meta.env.DEV && userData.email === "gianmatteo.costanza@gmail.com") {
       setDemoMode(true);
       setUserProfile(userData);
       setLoading(false);
