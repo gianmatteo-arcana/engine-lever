@@ -35,15 +35,6 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     }
   ]);
 
-  // Mock business profile
-  const businessProfile = {
-    name: "Smith Consulting LLC",
-    entityType: "Limited Liability Company",
-    address: "123 Business Ave, San Francisco, CA 94105",
-    lastFiled: "January 2024",
-    officers: ["John Smith - Managing Member", "Jane Smith - Member"],
-    status: "active" as const
-  };
 
   const handleSendMessage = (message: string) => {
     const newMessage: ChatMessage = {
@@ -231,8 +222,8 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
             <div className={`space-y-6 ${showChat ? 'lg:col-span-2' : ''}`}>
               {/* Business Profile */}
               <BusinessProfileCard
-                profile={businessProfile}
-                onClick={() => setExpandedCard("profile")}
+                isExpanded={expandedCard === "profile"}
+                onToggle={() => setExpandedCard(expandedCard === "profile" ? null : "profile")}
               />
 
               {/* Statement of Information */}

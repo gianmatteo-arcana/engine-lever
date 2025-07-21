@@ -156,13 +156,29 @@ const Index = () => {
     };
   }, []);
 
-  const handleOnboardingComplete = (userData: UserProfile) => {
+  const handleOnboardingComplete = async (userData: UserProfile) => {
     console.log('Onboarding complete for:', userData);
+    
     // For demo mode, set the profile directly without Supabase auth
     // Check for the real demo user email in dev mode
     if (import.meta.env.DEV && userData.email === "gianmatteo.costanza@gmail.com") {
       setDemoMode(true);
       setUserProfile(userData);
+      
+      // Create initial business profile task for demo user
+      try {
+        await supabase.from('tasks').insert({
+          user_id: '04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412', // Demo user ID
+          title: 'Set Up Business Profile',
+          description: 'Complete your business information to get personalized compliance guidance',
+          task_type: 'business_profile',
+          status: 'pending',
+          priority: 1
+        });
+      } catch (error) {
+        console.error('Error creating initial task:', error);
+      }
+      
       setLoading(false);
     }
   };
