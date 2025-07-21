@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { SmallBizCard } from "./SmallBizCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, AlertTriangle } from "lucide-react";
+import { Calendar, Clock, AlertTriangle, MessageCircle } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
 type TaskRow = Database['public']['Tables']['tasks']['Row'];
@@ -108,16 +108,18 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           
           {onAction && (
             isGreeting ? (
-              <input
-                type="text"
-                placeholder={actionLabel || "Chat with Ally"}
-                className="w-full px-4 py-2 border border-input bg-background rounded-md text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
-                onFocus={(e) => {
-                  e.preventDefault();
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
                   onAction();
                 }}
-                readOnly
-              />
+                className="flex items-center gap-2 w-fit"
+              >
+                <MessageCircle className="h-4 w-4" />
+                {actionLabel || "Chat with Ally"}
+              </Button>
             ) : (
               <Button 
                 onClick={(e) => {
