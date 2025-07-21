@@ -67,76 +67,48 @@ serve(async (req) => {
 });
 
 async function scrapeCaliforniaSOS(query: string): Promise<CaliforniaBusinessEntity[]> {
-  const searchUrl = 'https://bizfileonline.sos.ca.gov/search/business';
-  
   try {
     console.log('Starting California SOS scraping for:', query);
     
     // Add delay to be respectful to the server
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // First, get the search page to understand the form structure
-    const pageResponse = await fetch(searchUrl, {
+    // Try a more direct approach using the business filing search API endpoint
+    // California SOS may have updated their form submission method
+    const searchParams = new URLSearchParams({
+      'SearchValue': query,
+      'SearchType': 'ENTITY_NAME',
+      'Status': 'ACTIVE'
+    });
+
+    const searchUrl = `https://bizfileonline.sos.ca.gov/search/business?${searchParams.toString()}`;
+    
+    console.log('Making search request to:', searchUrl);
+    
+    const searchResponse = await fetch(searchUrl, {
       method: 'GET',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-      },
-      signal: AbortSignal.timeout(30000)
-    });
-
-    if (!pageResponse.ok) {
-      console.error('Failed to load search page:', pageResponse.status);
-      return [];
-    }
-
-    const pageHtml = await pageResponse.text();
-    console.log('Successfully loaded search page');
-
-    // Extract any form tokens or required fields from the HTML
-    const formData = new FormData();
-    formData.append('SearchValue', query);
-    formData.append('SearchType', 'ENTITY_NAME');
-    formData.append('Status', 'ACTIVE');
-    
-    // Look for hidden form fields that might be required
-    const hiddenInputs = pageHtml.match(/<input[^>]*type=["']hidden["'][^>]*>/gi) || [];
-    hiddenInputs.forEach(input => {
-      const nameMatch = input.match(/name=["']([^"']+)["']/);
-      const valueMatch = input.match(/value=["']([^"']+)["']/);
-      if (nameMatch && valueMatch) {
-        formData.append(nameMatch[1], valueMatch[1]);
-      }
-    });
-
-    console.log('Submitting search form...');
-    
-    // Submit the search form
-    const searchResponse = await fetch(searchUrl, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Referer': searchUrl,
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1'
       },
       signal: AbortSignal.timeout(30000)
     });
 
     if (!searchResponse.ok) {
-      console.error('Search request failed:', searchResponse.status);
+      console.error('Search request failed:', searchResponse.status, searchResponse.statusText);
       return [];
     }
 
     const resultsHtml = await searchResponse.text();
-    console.log('Search completed, parsing results...');
+    console.log('Search completed successfully, parsing results...');
 
     // Parse the results from the HTML
     const results = parseSearchResults(resultsHtml);
@@ -147,9 +119,9 @@ async function scrapeCaliforniaSOS(query: string): Promise<CaliforniaBusinessEnt
   } catch (error) {
     console.error('Error scraping California SOS:', error);
     
-    // Return mock data as fallback to prevent complete failure
-    console.log('Falling back to mock data due to scraping error');
-    return generateFallbackResults(query);
+    // Don't return mock data - return empty array to show no results found
+    console.log('No results found due to scraping error - returning empty array');
+    return [];
   }
 }
 
@@ -238,32 +210,3 @@ function extractDate(html: string): string {
   return match ? match[1] : '';
 }
 
-// Fallback function to provide mock data when scraping fails
-function generateFallbackResults(query: string): CaliforniaBusinessEntity[] {
-  console.log('Generating fallback results for:', query);
-  
-  const mockEntities: CaliforniaBusinessEntity[] = [
-    {
-      entity_name: `${query} Inc.`,
-      entity_number: `C${Math.floor(Math.random() * 9000000) + 1000000}`,
-      entity_type: 'CORPORATION',
-      entity_status: 'ACTIVE',
-      principal_address: '123 Main St, San Francisco, CA 94105',
-      agent_name: 'Corporate Services Inc.',
-      file_date: '2020-03-15'
-    },
-    {
-      entity_name: `${query} LLC`,
-      entity_number: `${Math.floor(Math.random() * 900000000) + 100000000}`,
-      entity_type: 'LIMITED LIABILITY COMPANY',
-      entity_status: 'ACTIVE', 
-      principal_address: '456 Business Ave, Los Angeles, CA 90210',
-      agent_name: 'Legal Services Corp.',
-      file_date: '2019-08-22'
-    }
-  ];
-
-  // Return 0-2 results to simulate realistic behavior
-  const numResults = Math.floor(Math.random() * 3);
-  return mockEntities.slice(0, numResults);
-}
