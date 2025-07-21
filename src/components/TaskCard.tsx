@@ -107,16 +107,29 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           )}
           
           {onAction && (
-            <Button 
-              onClick={(e) => {
-                e.stopPropagation();
-                onAction();
-              }}
-              className="w-full"
-              variant={isGreeting ? "default" : (urgency === "overdue" ? "destructive" : "default")}
-            >
-              {actionLabel || (urgency === "overdue" ? "Complete Now" : "Start Task")}
-            </Button>
+            isGreeting ? (
+              <input
+                type="text"
+                placeholder={actionLabel || "Chat with Ally"}
+                className="w-full px-4 py-2 border border-input bg-background rounded-md text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
+                onFocus={(e) => {
+                  e.preventDefault();
+                  onAction();
+                }}
+                readOnly
+              />
+            ) : (
+              <Button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAction();
+                }}
+                className="w-full"
+                variant={urgency === "overdue" ? "destructive" : "default"}
+              >
+                {actionLabel || (urgency === "overdue" ? "Complete Now" : "Start Task")}
+              </Button>
+            )
           )}
         </div>
       </SmallBizCard>
