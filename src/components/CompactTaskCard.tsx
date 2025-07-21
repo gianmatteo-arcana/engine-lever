@@ -4,7 +4,7 @@ import type { Database } from "@/integrations/supabase/types";
 type TaskRow = Database['public']['Tables']['tasks']['Row'];
 
 interface Task extends Omit<TaskRow, 'data'> {
-  due_date?: string | null;
+  due_date: string | null;
   data?: {
     icon?: string;
     color?: string;
