@@ -337,9 +337,9 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
         {/* Future Tasks Section */}
         {futureTasks.length > 0 && (
           <div className="bg-muted/20">
-            <div className="container mx-auto px-4 py-4">
+            <div className="container mx-auto px-4 py-2">
               {/* Task Grid - Fully Visible */}
-              <div className="pb-4">
+              <div className="pb-2">
                 <TaskGrid 
                   tasks={futureTasks} 
                   onTaskClick={handleTaskClick}
@@ -351,7 +351,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
 
         {/* Main Dashboard Content */}
         <div className="bg-background">
-        <div className="container mx-auto px-4 py-8">
+        <div className="container mx-auto px-4 py-4">
           {/* Scroll hint positioned above Welcome card */}
           {futureTasks.length > 0 && (
             <div className="py-2 flex justify-center">
