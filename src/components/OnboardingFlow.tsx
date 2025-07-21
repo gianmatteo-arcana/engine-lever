@@ -3,8 +3,9 @@ import { GoogleAuthButton } from "./GoogleAuthButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Building2, Search, Loader2, User } from "lucide-react";
+import { CheckCircle, Building2, Search, Loader2, User, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface OnboardingFlowProps {
   onComplete: (user: { name: string; email: string }) => void;
@@ -23,7 +24,10 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
   const [manualCompanyName, setManualCompanyName] = useState("");
   const [selectedCompany, setSelectedCompany] = useState<CompanyOption | null>(null);
+  const [demoLoginLoading, setDemoLoginLoading] = useState(false);
+  const [demoLoginError, setDemoLoginError] = useState<string | null>(null);
   const isDevMode = import.meta.env.DEV;
+  const { toast } = useToast();
 
   const handleGoogleSuccess = (userData: { name: string; email: string }) => {
     console.log("Google auth success:", userData);
@@ -33,43 +37,53 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
 
   const handleDemoLogin = async () => {
     console.log("Demo login triggered");
+    setDemoLoginLoading(true);
+    setDemoLoginError(null);
     
     try {
-      // Fetch the real user profile from database
+      // Fetch the real user profile from database using email
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('user_id', '04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412')
+        .eq('email', 'gianmatteo.costanza@gmail.com')
         .single();
 
-      if (error) {
+      if (error || !profile) {
         console.error('Error fetching demo user profile:', error);
-        // Fallback to basic demo user
-        const demoUser = {
-          name: "Demo User",
-          email: "dev@smallbizally.com"
-        };
-        onComplete(demoUser);
+        const errorMessage = "Demo user account not found in database. Please ensure the user gianmatteo.costanza@gmail.com exists.";
+        setDemoLoginError(errorMessage);
+        toast({
+          title: "Demo Login Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
         return;
       }
 
       // Use the real profile data
       const demoUser = {
-        name: profile.full_name || "Dev User",
-        email: profile.email || "dev@smallbizally.com",
+        name: profile.full_name || profile.first_name || "Demo User",
+        email: profile.email || "gianmatteo.costanza@gmail.com",
         createdAt: profile.created_at ? new Date(profile.created_at) : undefined
       };
       
       console.log("Demo login with real profile:", demoUser);
+      toast({
+        title: "Demo Login Successful",
+        description: `Signed in as ${demoUser.name}`,
+      });
       onComplete(demoUser);
     } catch (error) {
       console.error('Demo login error:', error);
-      // Fallback to basic demo user
-      const demoUser = {
-        name: "Demo User", 
-        email: "dev@smallbizally.com"
-      };
-      onComplete(demoUser);
+      const errorMessage = "Failed to connect to database for demo login.";
+      setDemoLoginError(errorMessage);
+      toast({
+        title: "Demo Login Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setDemoLoginLoading(false);
     }
   };
 
@@ -122,10 +136,22 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
                   onClick={handleDemoLogin}
                   variant="outline"
                   className="w-full flex items-center gap-2"
+                  disabled={demoLoginLoading}
                 >
-                  <User className="h-4 w-4" />
-                  Demo Login (Dev Only)
+                  {demoLoginLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <User className="h-4 w-4" />
+                  )}
+                  {demoLoginLoading ? "Loading..." : "Demo Login (Dev Only)"}
                 </Button>
+                
+                {demoLoginError && (
+                  <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    <span>{demoLoginError}</span>
+                  </div>
+                )}
                 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
