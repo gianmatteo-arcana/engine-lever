@@ -50,13 +50,13 @@ export const TaskGrid = ({ tasks, onTaskClick, className }: TaskGridProps) => {
       groups[monthYear].push(task);
     });
 
-    // Sort months chronologically (earliest first)
+    // Sort months chronologically (latest first - December at top, August at bottom)
     const sortedGroups = Object.entries(groups).sort(([a], [b]) => {
       const [yearA, monthA] = a.split('-').map(Number);
       const [yearB, monthB] = b.split('-').map(Number);
       
-      if (yearA !== yearB) return yearA - yearB;
-      return monthA - monthB;
+      if (yearA !== yearB) return yearB - yearA; // Reverse year order
+      return monthB - monthA; // Reverse month order
     });
 
     return sortedGroups;
