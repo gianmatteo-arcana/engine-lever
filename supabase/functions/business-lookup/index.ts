@@ -68,42 +68,28 @@ serve(async (req) => {
 
 async function scrapeCaliforniaSOS(query: string): Promise<CaliforniaBusinessEntity[]> {
   try {
-    console.log('🔍 Starting California SOS API search for:', query);
+    console.log('🔍 Starting California SOS web scraping for:', query);
     
     // Add delay to be respectful to the server
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // The California SOS website is a React SPA that makes API calls
-    // Let's try the actual API endpoints that the React app uses
+    // Since API endpoints are blocked by anti-bot protection, we'll scrape the search results page directly
+    const searchUrl = `https://bizfileonline.sos.ca.gov/search/business`;
+    
+    console.log('📡 Scraping SOS search page:', searchUrl);
+    
+    // Try scraping the search results page directly
     const searchApproaches = [
-      // Approach 1: Direct API endpoint (most likely)
+      // Approach 1: Direct search page with query
       {
-        name: 'SOS API Basic Search',
-        url: 'https://bizfileonline.sos.ca.gov/api/Records/businesssearch',
-        method: 'POST',
-        body: {
-          QueryString: query,
-          SearchType: 'EntityName',
-          Status: 'Active',
-          SortField: 'EntityName',
-          SortOrder: 'ASC'
-        }
+        name: 'SOS Search Page',
+        url: `https://bizfileonline.sos.ca.gov/search/business?SearchValue=${encodeURIComponent(query)}&SearchType=EntityName`,
+        method: 'GET'
       },
-      // Approach 2: Alternative API structure
+      // Approach 2: Alternative search URL pattern
       {
-        name: 'SOS API Alternative',
-        url: 'https://bizfileonline.sos.ca.gov/api/Records/search',
-        method: 'POST', 
-        body: {
-          searchValue: query,
-          searchType: 'ENTITY_NAME',
-          status: 'ACTIVE'
-        }
-      },
-      // Approach 3: GET request with query params
-      {
-        name: 'SOS API GET',
-        url: `https://bizfileonline.sos.ca.gov/api/Records/businesssearch?QueryString=${encodeURIComponent(query)}&SearchType=EntityName&Status=Active`,
+        name: 'SOS Alternative Search',
+        url: `https://bizfileonline.sos.ca.gov/search/business?q=${encodeURIComponent(query)}`,
         method: 'GET'
       }
     ];
