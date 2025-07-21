@@ -3,6 +3,7 @@ import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { Dashboard } from "@/components/Dashboard";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
+import { useDemoMode } from "@/context/DemoContext";
 
 interface UserProfile {
   name: string;
@@ -15,7 +16,7 @@ const Index = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [demoMode, setDemoMode] = useState(false);
+  const { isDemoMode, exitDemoMode } = useDemoMode();
 
   useEffect(() => {
     console.log('=== SETTING UP AUTH ===');
@@ -139,55 +140,24 @@ const Index = () => {
       }
     }, 5000);
 
-    
-    // Listen for demo onboarding complete event
-    const handleDemoOnboardingComplete = (event: CustomEvent) => {
-      console.log('Demo onboarding event received:', event.detail);
-      handleOnboardingComplete(event.detail);
-    };
-
-    window.addEventListener('demo-onboarding-complete', handleDemoOnboardingComplete as EventListener);
-
     return () => {
       mounted = false;
       subscription.unsubscribe();
       clearTimeout(failsafe);
-      window.removeEventListener('demo-onboarding-complete', handleDemoOnboardingComplete as EventListener);
     };
   }, []);
 
   const handleOnboardingComplete = async (userData: UserProfile) => {
     console.log('Onboarding complete for:', userData);
-    
-    // For demo mode, set the profile directly without Supabase auth
-    // Check for the real demo user email in dev mode
-    if (import.meta.env.DEV && userData.email === "gianmatteo.costanza@gmail.com") {
-      setDemoMode(true);
-      setUserProfile(userData);
-      
-      // Create initial business profile task for demo user
-      try {
-        await supabase.from('tasks').insert({
-          user_id: '04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412', // Demo user ID
-          title: 'Set Up Business Profile',
-          description: 'Complete your business information to get personalized compliance guidance',
-          task_type: 'business_profile',
-          status: 'pending',
-          priority: 1
-        });
-      } catch (error) {
-        console.error('Error creating initial task:', error);
-      }
-      
-      setLoading(false);
-    }
+    setUserProfile(userData);
+    setLoading(false);
   };
 
   const handleSignOut = async () => {
     console.log('Signing out...');
-    if (demoMode) {
+    if (isDemoMode) {
       // Demo mode sign out - just reset state
-      setDemoMode(false);
+      exitDemoMode();
       setUserProfile(null);
       setUser(null);
       setSession(null);
@@ -206,13 +176,8 @@ const Index = () => {
   }
 
   // Show onboarding if no user and not in demo mode
-  if (!user && !demoMode) {
+  if (!user && !isDemoMode) {
     return <OnboardingFlow onComplete={handleOnboardingComplete} />;
-  }
-
-  // For demo mode, use the demo profile
-  if (demoMode && userProfile) {
-    return <Dashboard user={userProfile} onSignOut={handleSignOut} />;
   }
 
   return <Dashboard user={userProfile} onSignOut={handleSignOut} />;

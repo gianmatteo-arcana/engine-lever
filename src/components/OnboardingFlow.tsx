@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { GoogleAuthButton } from "./GoogleAuthButton";
-import { DemoPinAuth } from "./DemoPinAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle, Building2, Search, Loader2, User, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useDemoMode } from "@/context/DemoContext";
 
 interface OnboardingFlowProps {
   onComplete: (user: { name: string; email: string }) => void;
@@ -19,7 +19,7 @@ interface CompanyOption {
 }
 
 export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
-  const [step, setStep] = useState<"auth" | "demo-pin" | "company-search" | "company-select" | "manual-entry" | "confirmation">("auth");
+  const [step, setStep] = useState<"auth" | "company-search" | "company-select" | "manual-entry" | "confirmation">("auth");
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
   const [searchingCompany, setSearchingCompany] = useState(false);
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
@@ -27,6 +27,7 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   const [selectedCompany, setSelectedCompany] = useState<CompanyOption | null>(null);
   const isDevMode = import.meta.env.DEV;
   const { toast } = useToast();
+  const { enterDemoMode } = useDemoMode();
 
   const handleGoogleSuccess = (userData: { name: string; email: string }) => {
     console.log("Google auth success:", userData);
@@ -34,15 +35,15 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
     // This component will be unmounted when user is authenticated
   };
 
-  const handleDemoPin = () => {
-    console.log("Demo PIN mode triggered");
-    setStep("demo-pin");
-  };
-
-  const handleDemoPinSuccess = () => {
-    console.log("Demo PIN authentication successful");
-    // The authentication state will be handled by the parent component
-    // This component will be unmounted when user is authenticated
+  const handleDemoMode = () => {
+    console.log("Demo mode triggered");
+    enterDemoMode();
+    const demoProfile = {
+      name: "Demo User",
+      email: "demo@example.com",
+      createdAt: new Date()
+    };
+    onComplete(demoProfile);
   };
 
   const handleCompanySelect = (company: CompanyOption) => {
@@ -91,12 +92,12 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
             {isDevMode && (
               <>
                 <Button
-                  onClick={handleDemoPin}
+                  onClick={handleDemoMode}
                   variant="outline"
                   className="w-full flex items-center gap-2"
                 >
                   <User className="h-4 w-4" />
-                  Demo Access (Dev Only)
+                  Demo Mode (Dev Only)
                 </Button>
                 
                 <div className="relative">
@@ -120,13 +121,6 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
     );
   }
 
-  if (step === "demo-pin") {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <DemoPinAuth onSuccess={handleDemoPinSuccess} />
-      </div>
-    );
-  }
 
   if (step === "company-search") {
     return (
