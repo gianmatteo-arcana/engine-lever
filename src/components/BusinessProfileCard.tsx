@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { BusinessProfileSetup } from "./BusinessProfileSetup";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useDemoMode } from "@/context/DemoContext";
 
 interface BusinessProfileCardProps {
   isExpanded: boolean;
@@ -35,6 +36,7 @@ export const BusinessProfileCard = ({ isExpanded, onToggle }: BusinessProfileCar
   const [showSetup, setShowSetup] = useState(false);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { isDemoMode } = useDemoMode();
 
   useEffect(() => {
     fetchBusinessData();
@@ -42,44 +44,58 @@ export const BusinessProfileCard = ({ isExpanded, onToggle }: BusinessProfileCar
 
   const fetchBusinessData = async () => {
     try {
+      if (isDemoMode) {
+        // In demo mode, look up data for the demo user
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('business_name, business_type, business_address, phone_number')
+          .eq('email', 'gianmatteo.costanza@gmail.com')
+          .maybeSingle();
+
+        if (profile?.business_name) {
+          setBusinessProfile(profile);
+        } else {
+          // In demo mode, just show a mock pending task without creating it in DB
+          setBusinessProfileTask({
+            id: 'demo-task',
+            title: 'Set Up Business Profile',
+            description: 'Complete your business information to get personalized compliance guidance',
+            task_type: 'business_profile',
+            status: 'pending',
+            priority: 1,
+            created_at: new Date().toISOString()
+          });
+        }
+        return;
+      }
+
       const user = await supabase.auth.getUser();
       const userId = user.data.user?.id;
       
-      // In development mode with service role key, use demo user ID if no authenticated user
-      const finalUserId = userId || (import.meta.env.DEV ? '04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412' : null);
-      
-      if (!finalUserId && !import.meta.env.DEV) return;
+      if (!userId) return;
 
       // Check for existing business profile
-      let profileQuery = supabase
+      const { data: profile } = await supabase
         .from('profiles')
-        .select('business_name, business_type, business_address, phone_number');
-      
-      if (finalUserId) {
-        profileQuery = profileQuery.eq('user_id', finalUserId);
-      }
-      
-      const { data: profile } = await profileQuery.maybeSingle();
+        .select('business_name, business_type, business_address, phone_number')
+        .eq('user_id', userId)
+        .maybeSingle();
 
       if (profile?.business_name) {
         setBusinessProfile(profile);
       } else {
         // Check for existing pending task
-        let taskQuery = supabase
+        const { data: task } = await supabase
           .from('tasks')
           .select('*')
           .eq('task_type', 'business_profile')
-          .eq('status', 'pending');
-        
-        if (finalUserId) {
-          taskQuery = taskQuery.eq('user_id', finalUserId);
-        }
-        
-        const { data: task } = await taskQuery.maybeSingle();
+          .eq('status', 'pending')
+          .eq('user_id', userId)
+          .maybeSingle();
 
         if (!task) {
           // Create the task if it doesn't exist
-          await createBusinessProfileTask(finalUserId);
+          await createBusinessProfileTask(userId);
         } else {
           setBusinessProfileTask(task);
         }
@@ -92,27 +108,23 @@ export const BusinessProfileCard = ({ isExpanded, onToggle }: BusinessProfileCar
   };
 
   const createBusinessProfileTask = async (userId?: string) => {
+    // Don't create tasks in demo mode
+    if (isDemoMode) return;
+    
     try {
       const user = await supabase.auth.getUser();
       const targetUserId = userId || user.data.user?.id;
       
-      // In development mode with service role key, we can create tasks without user restrictions
-      // But for demo mode, we should use the demo user ID to connect to existing data
-      const finalUserId = targetUserId || (import.meta.env.DEV ? '04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412' : null);
-      
-      if (!finalUserId && !import.meta.env.DEV) return;
+      if (!targetUserId) return;
 
-      const taskData: any = {
+      const taskData = {
         title: 'Set Up Business Profile',
         description: 'Complete your business information to get personalized compliance guidance',
         task_type: 'business_profile',
         status: 'pending',
-        priority: 1
+        priority: 1,
+        user_id: targetUserId
       };
-
-      if (finalUserId) {
-        taskData.user_id = finalUserId;
-      }
 
       const { data: newTask, error } = await supabase
         .from('tasks')
