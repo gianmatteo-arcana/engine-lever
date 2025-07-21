@@ -1,24 +1,21 @@
 import { useState, useMemo } from "react";
 import { CompactTaskCard } from "./CompactTaskCard";
 import { MonthDelineator } from "./MonthDelineator";
+import type { Database } from "@/integrations/supabase/types";
 
-interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  task_type: string;
-  due_date: string;
-  priority: number;
-  status: string;
+type TaskRow = Database['public']['Tables']['tasks']['Row'];
+
+interface Task extends Omit<TaskRow, 'data'> {
+  due_date?: string | null;
   data?: {
     icon?: string;
     color?: string;
-  };
+  } | null;
 }
 
 interface TaskGridProps {
   tasks: Task[];
-  onTaskClick: (task: Task) => void;
+  onTaskClick: (taskId: string) => void;
   className?: string;
 }
 
@@ -26,6 +23,8 @@ export const TaskGrid = ({ tasks, onTaskClick, className }: TaskGridProps) => {
   const [isVisible, setIsVisible] = useState(false);
 
   const getTaskUrgency = (task: Task): "overdue" | "urgent" | "normal" => {
+    if (!task.due_date) return "normal";
+    
     const today = new Date();
     const dueDate = new Date(task.due_date);
     const diffTime = dueDate.getTime() - today.getTime();
@@ -41,6 +40,8 @@ export const TaskGrid = ({ tasks, onTaskClick, className }: TaskGridProps) => {
     const groups: { [key: string]: Task[] } = {};
     
     tasks.forEach(task => {
+      if (!task.due_date) return; // Skip tasks without due dates
+      
       const date = new Date(task.due_date);
       const monthYear = `${date.getFullYear()}-${date.getMonth()}`;
       
@@ -98,7 +99,7 @@ export const TaskGrid = ({ tasks, onTaskClick, className }: TaskGridProps) => {
                       key={task.id}
                       task={task}
                       urgency={getTaskUrgency(task)}
-                      onClick={() => onTaskClick(task)}
+                      onClick={() => onTaskClick(task.id)}
                     />
                   ))}
                 </div>

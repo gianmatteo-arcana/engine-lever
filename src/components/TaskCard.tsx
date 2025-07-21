@@ -3,19 +3,16 @@ import { SmallBizCard } from "./SmallBizCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, AlertTriangle } from "lucide-react";
+import type { Database } from "@/integrations/supabase/types";
 
-interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  task_type: string;
-  due_date: string;
-  priority: number;
-  status: string;
+type TaskRow = Database['public']['Tables']['tasks']['Row'];
+
+interface Task extends Omit<TaskRow, 'data'> {
+  due_date?: string | null;
   data?: {
     icon?: string;
     color?: string;
-  };
+  } | null;
 }
 
 interface TaskCardProps {
@@ -28,6 +25,8 @@ interface TaskCardProps {
 
 export const TaskCard = ({ task, size, urgency, onClick, onAction }: TaskCardProps) => {
   const getDaysUntilDue = () => {
+    if (!task.due_date) return 0;
+    
     const today = new Date();
     const dueDate = new Date(task.due_date);
     const diffTime = dueDate.getTime() - today.getTime();
@@ -36,6 +35,8 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction }: TaskCardPro
   };
 
   const getUrgencyBadge = () => {
+    if (!task.due_date) return <Badge variant="secondary" className="text-xs">No Due Date</Badge>;
+    
     const daysUntil = getDaysUntilDue();
     
     if (daysUntil < 0) {
@@ -74,7 +75,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction }: TaskCardPro
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                Due: {new Date(task.due_date).toLocaleDateString()}
+                Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : "No due date"}
               </span>
             </div>
             {getUrgencyBadge()}
@@ -136,12 +137,12 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction }: TaskCardPro
               <span className="text-sm font-medium">Due Date</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              {new Date(task.due_date).toLocaleDateString('en-US', {
+              {task.due_date ? new Date(task.due_date).toLocaleDateString('en-US', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric'
-              })}
+              }) : "No due date set"}
             </p>
           </div>
 

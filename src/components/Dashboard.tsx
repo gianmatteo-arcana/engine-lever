@@ -5,8 +5,11 @@ import { StatementOfInfoCard } from "./StatementOfInfoCard";
 import { ChatInterface } from "./ChatInterface";
 import { SmallBizCard } from "./SmallBizCard";
 import { UserProfileCard } from "./UserProfileCard";
+import { TaskGrid } from "./TaskGrid";
+import { TaskCard } from "./TaskCard";
+import { useTasks } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
-import { MessageCircle, X, User, LogOut } from "lucide-react";
+import { MessageCircle, X, User, LogOut, ChevronUp } from "lucide-react";
 
 interface ChatMessage {
   id: string;
@@ -24,7 +27,10 @@ interface DashboardProps {
 export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   const [showChat, setShowChat] = useState(false);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [showUserProfile, setShowUserProfile] = useState(false);
+  const [showCompactGrid, setShowCompactGrid] = useState(false);
+  const { tasks, loading, error, getMostUrgentTask, getFutureTasks, getTaskUrgency } = useTasks();
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: "1",
@@ -102,6 +108,96 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     setChatMessages([welcomeMessage]);
   };
 
+  const handleTaskClick = (taskId: string) => {
+    setSelectedTask(taskId);
+    setExpandedCard("task");
+  };
+
+  const handleTaskAction = (taskId: string) => {
+    console.log("Starting task:", taskId);
+    // Handle task action (e.g., open specific task flow)
+  };
+
+  const mostUrgentTask = getMostUrgentTask();
+  const futureTasks = getFutureTasks();
+
+  // Handle full-size task view
+  if (selectedTask && expandedCard === "task") {
+    const task = tasks.find(t => t.id === selectedTask);
+    if (task) {
+      return (
+        <div className="min-h-screen bg-background">
+          {/* Header */}
+          <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+            <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedTask(null);
+                    setExpandedCard(null);
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+                <h1 className="text-xl font-semibold text-foreground">{task.title}</h1>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowUserProfile(true)}
+                  className="flex items-center gap-2"
+                >
+                  <User className="h-4 w-4" />
+                  <span className="text-sm text-muted-foreground">{user?.name || "User"}</span>
+                </Button>
+                <Button variant="ghost" size="sm" onClick={onSignOut}>
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="container mx-auto px-4 py-6">
+            <div className="grid lg:grid-cols-2 gap-6 h-[calc(100vh-200px)]">
+              {/* Task Details */}
+              <div className="space-y-4">
+                <TaskCard
+                  task={task}
+                  size="full"
+                  urgency={getTaskUrgency(task)}
+                  onClick={() => {}}
+                  onAction={() => handleTaskAction(task.id)}
+                />
+              </div>
+
+              {/* Chat Interface */}
+              <div className="h-full">
+                <ChatInterface
+                  messages={chatMessages}
+                  onSendMessage={handleSendMessage}
+                  onPillClick={handlePillClick}
+                  placeholder="Ask me anything about this task..."
+                  className="h-full"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* User Profile Card */}
+          <UserProfileCard
+            user={user}
+            onClose={() => setShowUserProfile(false)}
+            isVisible={showUserProfile}
+          />
+        </div>
+      );
+    }
+  }
+
   if (expandedCard === "statement") {
     return (
       <div className="min-h-screen bg-background">
@@ -172,7 +268,28 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background relative">
+      {/* Compact Grid - Hidden by default, slides down from top */}
+      <div className={`absolute top-0 left-0 right-0 bg-background border-b transition-transform duration-500 z-20 ${
+        showCompactGrid ? 'transform translate-y-0' : 'transform -translate-y-full'
+      }`}>
+        <TaskGrid 
+          tasks={futureTasks} 
+          onTaskClick={handleTaskClick}
+        />
+        <div className="flex justify-center p-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowCompactGrid(false)}
+            className="flex items-center gap-2"
+          >
+            <ChevronUp className="h-4 w-4" />
+            Hide Future Tasks
+          </Button>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -214,25 +331,50 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
           <div className="text-center space-y-2 mb-8">
             <h2 className="text-3xl font-bold text-foreground">Welcome back, {user?.name?.split(' ')[0] || "User"}!</h2>
             <p className="text-muted-foreground">Let's keep your business compliant and stress-free.</p>
+            
+            {/* Show Compact Grid Button */}
+            {futureTasks.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCompactGrid(!showCompactGrid)}
+                className="mt-4 flex items-center gap-2"
+              >
+                <ChevronUp className={`h-4 w-4 transition-transform ${showCompactGrid ? 'rotate-180' : ''}`} />
+                {showCompactGrid ? 'Hide' : 'Show'} {futureTasks.length} Future Tasks
+              </Button>
+            )}
           </div>
 
           {/* Dashboard Grid */}
           <div className={`grid gap-6 ${showChat ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-            {/* Left Column - Business Cards */}
+            {/* Left Column - Task Cards */}
             <div className={`space-y-6 ${showChat ? 'lg:col-span-2' : ''}`}>
-              {/* Business Profile */}
-              <BusinessProfileCard
-                isExpanded={expandedCard === "profile"}
-                onToggle={() => setExpandedCard(expandedCard === "profile" ? null : "profile")}
-              />
+              {loading && (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Loading tasks...</p>
+                </div>
+              )}
+              
+              {error && (
+                <div className="text-center py-8">
+                  <p className="text-destructive">Error loading tasks: {error}</p>
+                </div>
+              )}
 
-              {/* Statement of Information */}
-              <StatementOfInfoCard
-                status="pending"
-                dueDate="October 31, 2024"
-                lastFiled="January 2024"
-                onStart={handleStartStatementUpdate}
-              />
+              {/* Most Urgent Task - Medium Size */}
+              {mostUrgentTask && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-foreground">Priority Task</h3>
+                  <TaskCard
+                    task={mostUrgentTask}
+                    size="medium"
+                    urgency={getTaskUrgency(mostUrgentTask)}
+                    onClick={() => handleTaskClick(mostUrgentTask.id)}
+                    onAction={() => handleTaskAction(mostUrgentTask.id)}
+                  />
+                </div>
+              )}
 
               {/* Compliance Status */}
               <SmallBizCard
@@ -243,13 +385,22 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-foreground">Current Status</span>
-                    <span className="text-sm font-medium text-warning">1 item needs attention</span>
+                    <span className="text-sm font-medium text-warning">
+                      {tasks.filter(t => t.status === 'pending').length} items need attention
+                    </span>
                   </div>
                   <div className="w-full bg-muted rounded-full h-2">
-                    <div className="bg-warning h-2 rounded-full" style={{ width: '75%' }}></div>
+                    <div 
+                      className="bg-warning h-2 rounded-full" 
+                      style={{ 
+                        width: `${Math.max(20, 100 - (tasks.filter(t => t.status === 'pending').length * 15))}%` 
+                      }}
+                    />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    You're mostly up to date! Complete your Statement of Information to be 100% compliant.
+                    {tasks.filter(t => t.status === 'pending').length === 0 
+                      ? "You're fully compliant! Great work." 
+                      : "Complete your pending tasks to improve compliance."}
                   </p>
                 </div>
               </SmallBizCard>

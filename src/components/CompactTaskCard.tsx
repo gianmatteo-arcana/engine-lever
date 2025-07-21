@@ -1,16 +1,14 @@
 import { cn } from "@/lib/utils";
+import type { Database } from "@/integrations/supabase/types";
 
-interface Task {
-  id: string;
-  title: string;
-  task_type: string;
-  due_date: string;
-  priority: number;
-  status: string;
+type TaskRow = Database['public']['Tables']['tasks']['Row'];
+
+interface Task extends Omit<TaskRow, 'data'> {
+  due_date?: string | null;
   data?: {
     icon?: string;
     color?: string;
-  };
+  } | null;
 }
 
 interface CompactTaskCardProps {
@@ -42,7 +40,7 @@ export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps
         "text-xs font-bold shadow-sm hover:shadow-md",
         getUrgencyStyles()
       )}
-      title={`${task.title} - Due: ${new Date(task.due_date).toLocaleDateString()}`}
+      title={`${task.title}${task.due_date ? ` - Due: ${new Date(task.due_date).toLocaleDateString()}` : ''}`}
     >
       {icon}
     </div>
