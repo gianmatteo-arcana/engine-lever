@@ -130,7 +130,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
       
       // Calculate position to show bottom ~20px of compact cards
       // We want the welcome card to be visible but show some of the compact cards above
-      const targetScrollPosition = welcomeCardTop - 100; // Show 100px of compact cards bottom
+      const targetScrollPosition = welcomeCardTop - 75; // Show 75px of compact cards bottom
       
       scrollContainerRef.current.scrollTo({
         top: Math.max(0, targetScrollPosition),
