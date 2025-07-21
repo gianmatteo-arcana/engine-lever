@@ -29,6 +29,15 @@ export const DevConsole = ({ isOpen, onClose }: DevConsoleProps) => {
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
+  // Expose addLog function globally so other components can use it
+  useEffect(() => {
+    if (isOpen) {
+      (window as any).devConsoleLog = addLog;
+    } else {
+      delete (window as any).devConsoleLog;
+    }
+  }, [isOpen]);
+
   const addLog = (entry: Omit<LogEntry, 'id' | 'timestamp'>) => {
     const newEntry: LogEntry = {
       ...entry,

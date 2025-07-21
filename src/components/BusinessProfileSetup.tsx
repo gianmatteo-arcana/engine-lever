@@ -96,27 +96,45 @@ export const BusinessProfileSetup = ({ isOpen, onClose, onComplete, taskId }: Bu
   const searchBusinessEntities = async (query: string) => {
     if (query.trim().length < 2) return;
     
+    const devLog = (window as any).devConsoleLog;
+    
     console.log('🔍 Frontend: Starting business search for:', query);
+    devLog?.({ type: 'info', message: `🔍 Starting business search for: ${query}` });
+    
     setIsSearching(true);
     try {
       console.log('📡 Frontend: Calling business-lookup function...');
+      devLog?.({ type: 'request', method: 'POST', url: 'supabase/functions/business-lookup', data: { query: query.trim() } });
+      
       const { data, error } = await supabase.functions.invoke('business-lookup', {
         body: { query: query.trim() }
       });
 
       console.log('📊 Frontend: Business lookup response:', { data, error });
+      devLog?.({ 
+        type: 'response', 
+        method: 'POST', 
+        url: 'supabase/functions/business-lookup', 
+        status: error ? 500 : 200,
+        data: { data, error } 
+      });
 
       if (error) {
         console.error('❌ Frontend: Business lookup error:', error);
+        devLog?.({ type: 'error', message: `❌ Business lookup error: ${JSON.stringify(error)}` });
         throw error;
       }
 
       const results = data.results || [];
       console.log(`📋 Frontend: Found ${results.length} business entities:`, results);
+      devLog?.({ type: 'info', message: `📋 Found ${results.length} business entities`, data: results });
+      
       setSearchResults(results);
       
       if (results.length === 0) {
         console.log('⚠️ Frontend: No results found, proceeding to manual entry');
+        devLog?.({ type: 'info', message: '⚠️ No results found, proceeding to manual entry' });
+        
         // No results found, proceed to manual entry
         setFormData(prev => ({ ...prev, businessName: query }));
         setCurrentStep('profile-details');
@@ -127,16 +145,22 @@ export const BusinessProfileSetup = ({ isOpen, onClose, onComplete, taskId }: Bu
         });
       } else if (results.length === 1) {
         console.log('✅ Frontend: Single result found, auto-selecting:', results[0]);
+        devLog?.({ type: 'info', message: '✅ Single result found, auto-selecting', data: results[0] });
+        
         // Single result, auto-select and proceed
         const entity = results[0];
         selectEntity(entity);
       } else {
         console.log(`📝 Frontend: Multiple results (${results.length}) found, showing selection screen`);
+        devLog?.({ type: 'info', message: `📝 Multiple results (${results.length}) found, showing selection screen` });
+        
         // Multiple results, show selection
         setCurrentStep('entity-selection');
       }
     } catch (error) {
       console.error('💥 Frontend: Error searching business entities:', error);
+      devLog?.({ type: 'error', message: `💥 Error searching business entities: ${error}` });
+      
       toast({
         title: "Search Error",
         description: "Failed to search for businesses. Please try again.",
