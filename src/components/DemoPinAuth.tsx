@@ -59,8 +59,14 @@ export const DemoPinAuth = ({ onSuccess }: DemoPinAuthProps) => {
       }
 
       // Create demo user data using the real profile data
+      const firstName = profileData?.first_name || "";
+      const lastName = profileData?.last_name || "";
+      const fullName = profileData?.full_name || 
+        (firstName && lastName ? `${firstName} ${lastName}` : "") ||
+        "Gianmatteo Costanza";
+
       const demoUserData = {
-        name: profileData?.full_name || profileData?.first_name + ' ' + profileData?.last_name || "Gianmatteo Costanza",
+        name: fullName,
         email: "gianmatteo.costanza@gmail.com", // Use the REAL email for demo mode
         createdAt: new Date()
       };
