@@ -12,8 +12,7 @@ interface DemoPinAuthProps {
 }
 
 const DEMO_PIN = "1234";
-const DEMO_EMAIL = "gianmatteo.costanza@gmail.com";
-const DEMO_PASSWORD = "demo123456"; // This should match what's in your Supabase auth
+const DEMO_USER_ID = "04ee6ef7-6b59-4cdb-9bb6-3eca2e3a1412"; // The actual Google user ID
 
 export const DemoPinAuth = ({ onSuccess }: DemoPinAuthProps) => {
   const [pin, setPin] = useState("");
@@ -41,30 +40,55 @@ export const DemoPinAuth = ({ onSuccess }: DemoPinAuthProps) => {
     setError(null);
 
     try {
-      // Authenticate with Supabase using the demo user's credentials
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: DEMO_EMAIL,
-        password: DEMO_PASSWORD,
-      });
+      // For dev mode: Create a demo session using the existing Google user's data
+      // This bypasses password authentication and uses the real user's profile
+      
+      // First, get the existing user's profile data
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', DEMO_USER_ID)
+        .maybeSingle();
 
-      if (authError) {
-        console.error('Demo authentication error:', authError);
-        setError("Demo authentication failed. Please check if the demo user exists in Supabase.");
+      if (profileError) {
+        console.error('Error fetching demo user profile:', profileError);
+        setError("Demo user profile not found. Please ensure the Google user exists.");
         toast({
-          title: "Demo Authentication Failed",
-          description: "Please ensure the demo user account is properly configured in Supabase.",
+          title: "Demo Profile Not Found",
+          description: "The demo user profile doesn't exist in the database.",
           variant: "destructive",
         });
         return;
       }
 
-      if (data.user) {
-        toast({
-          title: "Demo Login Successful",
-          description: "Welcome to the demo!",
-        });
-        onSuccess();
-      }
+      // Create a mock session for demo purposes (dev mode only)
+      // Note: This is a simplified approach for demo purposes
+      // In a real app, you would use proper OAuth flow
+      
+      // Since we can't create actual auth sessions programmatically for OAuth users,
+      // we'll store demo session data in localStorage and trigger auth state
+      const demoSession = {
+        access_token: 'demo-token',
+        refresh_token: 'demo-refresh',
+        expires_in: 3600,
+        user: {
+          id: DEMO_USER_ID,
+          email: 'gianmatteo.costanza@gmail.com',
+          created_at: new Date().toISOString(),
+          app_metadata: {},
+          user_metadata: profileData || {}
+        }
+      };
+
+      // Store demo session (this is just for demo purposes)
+      localStorage.setItem('supabase.auth.token', JSON.stringify(demoSession));
+      
+      toast({
+        title: "Demo Login Successful",
+        description: `Welcome to the demo${profileData?.full_name ? `, ${profileData.full_name}` : ''}!`,
+      });
+      
+      onSuccess();
     } catch (error) {
       console.error('Demo PIN authentication error:', error);
       setError("Authentication failed. Please try again.");
