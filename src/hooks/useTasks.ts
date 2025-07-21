@@ -35,7 +35,7 @@ export const useTasks = () => {
       // If no tasks found (likely due to no authenticated user), create sample tasks
       if (!data || data.length === 0) {
         const sampleTasks: Task[] = [
-          // January 2025
+          // August 2025 - Most urgent (5 days from now)
           {
             id: 'sample-1',
             user_id: 'sample',
@@ -58,7 +58,7 @@ export const useTasks = () => {
             task_type: 'statement_of_info',
             status: 'pending',
             priority: 1,
-            due_date: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 7, 15).toISOString().split('T')[0], // August 15, 2025
             data: { icon: 'SI', color: 'warning' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -72,13 +72,13 @@ export const useTasks = () => {
             task_type: 'tax_registration',
             status: 'pending',
             priority: 2,
-            due_date: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 7, 25).toISOString().split('T')[0], // August 25, 2025
             data: { icon: 'TR', color: 'task' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             completed_at: null
           },
-          // February 2025
+          // September 2025
           {
             id: 'sample-4',
             user_id: 'sample',
@@ -87,7 +87,7 @@ export const useTasks = () => {
             task_type: 'tax_filing',
             status: 'pending',
             priority: 1,
-            due_date: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 8, 15).toISOString().split('T')[0], // September 15, 2025
             data: { icon: 'QT', color: 'warning' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -101,7 +101,7 @@ export const useTasks = () => {
             task_type: 'license_renewal',
             status: 'pending',
             priority: 2,
-            due_date: new Date(Date.now() + 50 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 8, 20).toISOString().split('T')[0], // September 20, 2025
             data: { icon: 'LR', color: 'task' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -115,13 +115,13 @@ export const useTasks = () => {
             task_type: 'insurance',
             status: 'pending',
             priority: 2,
-            due_date: new Date(Date.now() + 55 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 8, 30).toISOString().split('T')[0], // September 30, 2025
             data: { icon: 'WC', color: 'task' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             completed_at: null
           },
-          // March 2025
+          // October 2025
           {
             id: 'sample-7',
             user_id: 'sample',
@@ -130,7 +130,7 @@ export const useTasks = () => {
             task_type: 'annual_report',
             status: 'pending',
             priority: 1,
-            due_date: new Date(Date.now() + 75 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 9, 15).toISOString().split('T')[0], // October 15, 2025
             data: { icon: 'AR', color: 'warning' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -144,7 +144,7 @@ export const useTasks = () => {
             task_type: 'ein_verification',
             status: 'pending',
             priority: 2,
-            due_date: new Date(Date.now() + 80 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 9, 20).toISOString().split('T')[0], // October 20, 2025
             data: { icon: 'EV', color: 'task' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -158,7 +158,7 @@ export const useTasks = () => {
             task_type: 'sales_tax',
             status: 'pending',
             priority: 2,
-            due_date: new Date(Date.now() + 85 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 9, 25).toISOString().split('T')[0], // October 25, 2025
             data: { icon: 'ST', color: 'task' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -172,13 +172,13 @@ export const useTasks = () => {
             task_type: 'payroll_tax',
             status: 'pending',
             priority: 2,
-            due_date: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 9, 31).toISOString().split('T')[0], // October 31, 2025
             data: { icon: 'PT', color: 'task' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             completed_at: null
           },
-          // April 2025
+          // November 2025
           {
             id: 'sample-11',
             user_id: 'sample',
@@ -187,7 +187,7 @@ export const useTasks = () => {
             task_type: 'boi_report',
             status: 'pending',
             priority: 1,
-            due_date: new Date(Date.now() + 110 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 10, 15).toISOString().split('T')[0], // November 15, 2025
             data: { icon: 'BI', color: 'warning' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -201,7 +201,7 @@ export const useTasks = () => {
             task_type: 'franchise_tax',
             status: 'pending',
             priority: 1,
-            due_date: new Date(Date.now() + 115 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 10, 20).toISOString().split('T')[0], // November 20, 2025
             data: { icon: 'FT', color: 'warning' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -215,13 +215,13 @@ export const useTasks = () => {
             task_type: 'registered_agent',
             status: 'pending',
             priority: 2,
-            due_date: new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 10, 30).toISOString().split('T')[0], // November 30, 2025
             data: { icon: 'RA', color: 'task' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             completed_at: null
           },
-          // May 2025
+          // December 2025
           {
             id: 'sample-14',
             user_id: 'sample',
@@ -230,7 +230,7 @@ export const useTasks = () => {
             task_type: 'banking',
             status: 'pending',
             priority: 2,
-            due_date: new Date(Date.now() + 140 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 11, 15).toISOString().split('T')[0], // December 15, 2025
             data: { icon: 'BA', color: 'task' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -244,7 +244,7 @@ export const useTasks = () => {
             task_type: 'operating_agreement',
             status: 'pending',
             priority: 2,
-            due_date: new Date(Date.now() + 145 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            due_date: new Date(2025, 11, 31).toISOString().split('T')[0], // December 31, 2025
             data: { icon: 'OA', color: 'task' },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
