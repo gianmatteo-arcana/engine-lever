@@ -38,7 +38,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
       content: `Hello ${user?.name?.split(' ')[0] || "there"}! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?`,
       sender: "ai",
       timestamp: new Date(),
-      pills: ["Review my compliance status", "Update Statement of Information", "Ask a question"]
+      pills: ["Review my compliance status", "Update Statement of Information", "Review letter", "Ask a question"]
     }
   ]);
 
@@ -384,19 +384,19 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                   size={showChat ? "full" : "medium"}
                   urgency="normal"
                   onClick={() => {}}
-                  onAction={() => setShowChat(true)}
+                  onAction={showChat ? () => setShowChat(false) : () => setShowChat(true)}
                   actionLabel="Chat with Ally"
                   isGreeting={true}
                 />
                 {/* Chat Interface for expanded greeting task */}
                 {showChat && (
-                  <div className="-mt-6 h-[600px]">
+                  <div className="h-[600px]">
                     <ChatInterface
                       messages={chatMessages}
                       onSendMessage={handleSendMessage}
                       onPillClick={handlePillClick}
                       placeholder="Ask me anything..."
-                      className="h-full rounded-lg border bg-card shadow-sm"
+                      className="h-full"
                     />
                   </div>
                 )}

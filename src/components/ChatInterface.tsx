@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Bot, User } from "lucide-react";
+import { Send, Bot, User, ScanLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatMessage {
@@ -46,6 +46,13 @@ export const ChatInterface = ({
       onSendMessage(input.trim());
       setInput("");
     }
+  };
+
+  const getPillIcon = (pill: string) => {
+    if (pill === "Review letter") {
+      return <ScanLine className="h-3 w-3 mr-1" />;
+    }
+    return null;
   };
 
   const handlePillClick = (pill: string) => {
@@ -104,17 +111,18 @@ export const ChatInterface = ({
             {/* Response Pills */}
             {message.sender === "ai" && message.pills && message.pills.length > 0 && (
               <div className="flex flex-wrap gap-2 ml-11">
-                {message.pills.map((pill, index) => (
-                  <Button
-                    key={index}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePillClick(pill)}
-                    className="h-8 px-3 text-sm border-primary/20 bg-primary-light/20 hover:bg-primary-light/40 hover:border-primary/40"
-                  >
-                    {pill}
-                  </Button>
-                ))}
+                 {message.pills.map((pill, index) => (
+                   <Button
+                     key={index}
+                     variant="outline"
+                     size="sm"
+                     onClick={() => handlePillClick(pill)}
+                     className="h-8 px-3 text-sm border-primary/20 bg-primary-light/20 hover:bg-primary-light/40 hover:border-primary/40 flex items-center"
+                   >
+                     {getPillIcon(pill)}
+                     {pill}
+                   </Button>
+                 ))}
               </div>
             )}
           </div>

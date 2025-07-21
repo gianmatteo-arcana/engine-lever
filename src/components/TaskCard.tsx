@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { SmallBizCard } from "./SmallBizCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, AlertTriangle, MessageCircle } from "lucide-react";
+import { Calendar, Clock, AlertTriangle, MessageCircle, X } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
 type TaskRow = Database['public']['Tables']['tasks']['Row'];
@@ -140,16 +140,32 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
 
   if (size === "full") {
     return (
-      <div className="bg-card border rounded-lg p-6 space-y-6 shadow-lg">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-foreground">{task.title}</h2>
-            {task.description && (
-              <p className="text-muted-foreground mt-2">{task.description}</p>
-            )}
+      <div className="bg-card border rounded-lg shadow-lg overflow-hidden">
+        {(task.title || task.description) && (
+          <div className="p-6 pb-0">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">{task.title}</h2>
+                {task.description && (
+                  <p className="text-muted-foreground mt-2">{task.description}</p>
+                )}
+              </div>
+              {!isGreeting && getUrgencyBadge()}
+            </div>
           </div>
-          {!isGreeting && getUrgencyBadge()}
-        </div>
+        )}
+        {isGreeting && onAction && (
+          <div className="absolute top-4 right-4 z-10">
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={onAction}
+              className="h-8 w-8 hover:bg-muted"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
 
         {!isGreeting && (
           <>
