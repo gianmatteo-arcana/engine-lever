@@ -40,47 +40,22 @@ export const DemoPinAuth = ({ onSuccess }: DemoPinAuthProps) => {
     setError(null);
 
     try {
-      // For dev mode: Fetch the real user's profile data and trigger demo mode
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', DEMO_USER_ID)
-        .maybeSingle();
-
-      if (profileError) {
-        console.error('Error fetching demo user profile:', profileError);
-        setError("Demo user profile not found. Please ensure the Google user exists.");
-        toast({
-          title: "Demo Profile Not Found",
-          description: "The demo user profile doesn't exist in the database.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Create demo user data using the real profile data
-      const firstName = profileData?.first_name || "";
-      const lastName = profileData?.last_name || "";
-      const fullName = profileData?.full_name || 
-        (firstName && lastName ? `${firstName} ${lastName}` : "") ||
-        "Gianmatteo Costanza";
-
+      // Create demo user data (no database lookup needed with service role)
       const demoUserData = {
-        name: fullName,
-        email: "gianmatteo.costanza@gmail.com", // Use the REAL email for demo mode
+        name: "Gianmatteo Costanza",
+        email: "gianmatteo.costanza@gmail.com",
         createdAt: new Date()
       };
 
       toast({
         title: "Demo Login Successful",
-        description: `Welcome to the demo${demoUserData.name ? `, ${demoUserData.name}` : ''}!`,
+        description: `Welcome to the demo, ${demoUserData.name}!`,
       });
       
       // Trigger the success callback with demo user data
       onSuccess();
       
       // Also trigger the onboarding complete with demo data
-      // This will be handled by the parent component's handleOnboardingComplete
       setTimeout(() => {
         const event = new CustomEvent('demo-onboarding-complete', {
           detail: demoUserData
