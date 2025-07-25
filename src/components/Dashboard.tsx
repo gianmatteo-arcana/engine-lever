@@ -6,9 +6,11 @@ import { SmallBizCard } from "./SmallBizCard";
 import { UserProfileCard } from "./UserProfileCard";
 import { TaskGrid } from "./TaskGrid";
 import { TaskCard } from "./TaskCard";
+import { StackedDashboard } from "./StackedDashboard";
 import { useTasks } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
-import { MessageCircle, X, User, LogOut, ChevronUp } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MessageCircle, X, User, LogOut, ChevronUp, List, Layers } from "lucide-react";
 
 interface ChatMessage {
   id: string;
@@ -28,6 +30,12 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [showUserProfile, setShowUserProfile] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<"timeline" | "stacked">(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('dashboard-layout-mode') as "timeline" | "stacked") || "timeline";
+    }
+    return "timeline";
+  });
   const { tasks, loading, error, getMostUrgentTask, getFutureTasks, getTaskUrgency } = useTasks();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const welcomeTaskRef = useRef<HTMLDivElement>(null);
@@ -150,6 +158,12 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
 
   const mostUrgentTask = getMostUrgentTask();
   const futureTasks = getFutureTasks();
+
+  // Handle layout mode change
+  const handleLayoutModeChange = (mode: "timeline" | "stacked") => {
+    setLayoutMode(mode);
+    localStorage.setItem('dashboard-layout-mode', mode);
+  };
 
   // Scroll to home position - showing bottom portion of compact cards
   const scrollToHomePosition = () => {
@@ -325,6 +339,88 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     );
   }
 
+  // Render stacked layout if in stacked mode
+  if (layoutMode === "stacked") {
+    return (
+      <div className="min-h-screen bg-background">
+        {/* Header */}
+        <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-20">
+          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-primary">SmallBizAlly</h1>
+              <span className="text-sm text-muted-foreground">Your AI Compliance Assistant</span>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Dev Mode Layout Selector */}
+              {import.meta.env.DEV && (
+                <Select value={layoutMode} onValueChange={handleLayoutModeChange}>
+                  <SelectTrigger className="w-[140px] h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border border-border shadow-lg">
+                    <SelectItem value="timeline" className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <List className="h-3 w-3" />
+                        Timeline Mode
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="stacked" className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <Layers className="h-3 w-3" />
+                        Stacked Mode
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowChat(!showChat)}
+              >
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Chat with Ally
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowUserProfile(true)}
+                  className="flex items-center gap-2 hover:bg-accent transition-colors"
+                >
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">{user?.name || "User"}</span>
+                </Button>
+                <Button variant="ghost" size="sm" onClick={onSignOut}>
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Stacked Dashboard Content */}
+        <StackedDashboard
+          user={user}
+          mostUrgentTask={mostUrgentTask}
+          chatMessages={chatMessages}
+          onSendMessage={handleSendMessage}
+          onPillClick={handlePillClick}
+          onStartStatementUpdate={handleStartStatementUpdate}
+          onTaskAction={handleTaskAction}
+          handleChatToggle={handleChatToggle}
+        />
+
+        {/* User Profile Card */}
+        <UserProfileCard
+          user={user}
+          onClose={() => setShowUserProfile(false)}
+          isVisible={showUserProfile}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -335,6 +431,28 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
             <span className="text-sm text-muted-foreground">Your AI Compliance Assistant</span>
           </div>
           <div className="flex items-center gap-3">
+            {/* Dev Mode Layout Selector */}
+            {import.meta.env.DEV && (
+              <Select value={layoutMode} onValueChange={handleLayoutModeChange}>
+                <SelectTrigger className="w-[140px] h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border border-border shadow-lg">
+                  <SelectItem value="timeline" className="text-xs">
+                    <div className="flex items-center gap-2">
+                      <List className="h-3 w-3" />
+                      Timeline Mode
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="stacked" className="text-xs">
+                    <div className="flex items-center gap-2">
+                      <Layers className="h-3 w-3" />
+                      Stacked Mode
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             <Button
               variant="outline"
               size="sm"
