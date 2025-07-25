@@ -25,17 +25,37 @@ interface CompactTaskCardProps {
 
 export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isCollapsing, setIsCollapsing] = useState(false);
+  const [expandedAt, setExpandedAt] = useState<number | null>(null);
   const { ref: intersectionRef, isVisible } = useIntersectionObserver({
-    threshold: 0.5,
+    threshold: 0.3,
     rootMargin: '-10% 0px -10% 0px'
   });
 
-  // Auto-shrink when card scrolls out of view
+  // Smart auto-collapse with debounce and user interaction respect
   useEffect(() => {
     if (!isVisible && isExpanded) {
-      setIsExpanded(false);
+      const now = Date.now();
+      const timeSinceExpanded = expandedAt ? now - expandedAt : Infinity;
+      
+      // Don't auto-collapse if recently expanded (less than 2 seconds)
+      if (timeSinceExpanded < 2000) return;
+      
+      // Show warning state first
+      setIsCollapsing(true);
+      
+      // Debounced collapse after 500ms
+      const timer = setTimeout(() => {
+        setIsExpanded(false);
+        setIsCollapsing(false);
+        setExpandedAt(null);
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    } else {
+      setIsCollapsing(false);
     }
-  }, [isVisible, isExpanded]);
+  }, [isVisible, isExpanded, expandedAt]);
 
   const getUrgencyStyles = () => {
     switch (urgency) {
@@ -85,7 +105,13 @@ export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps
   };
 
   const handleCardClick = () => {
+    if (!isExpanded) {
+      setExpandedAt(Date.now());
+    } else {
+      setExpandedAt(null);
+    }
     setIsExpanded(!isExpanded);
+    setIsCollapsing(false);
   };
 
   const handleActionClick = (e: React.MouseEvent) => {
@@ -99,10 +125,10 @@ export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps
     return (
       <div 
         ref={intersectionRef}
-        className="animate-scale-in col-span-full" 
+        className="animate-card-expand col-span-full origin-top-left" 
         style={{ 
-          animationDuration: '0.15s',
-          transformOrigin: 'top left'
+          opacity: isCollapsing ? 0.8 : 1,
+          transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
         }}
       >
         <SmallBizCard
@@ -126,7 +152,7 @@ export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps
             <X className="h-3 w-3" />
           </Button>
 
-          <div className="space-y-4 pt-6">
+          <div className="space-y-4 pt-6 animate-content-fade-in">
             <div className="flex items-center justify-center">
               <Badge variant="default" className="text-sm bg-success/20 text-success border-success/30">
                 All set — 0 tasks pending
@@ -149,12 +175,16 @@ export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps
       ref={intersectionRef}
       onClick={handleCardClick}
       className={cn(
-        "w-16 h-16 rounded-lg border-2 flex items-center justify-center",
-        "cursor-pointer transition-all duration-200 hover:scale-105",
+        "w-16 h-16 rounded-lg border-2 flex items-center justify-center origin-top-left",
+        "cursor-pointer transition-all duration-300 hover:scale-105",
         "text-xs font-bold shadow-sm hover:shadow-md",
         getUrgencyStyles()
       )}
-      style={{ transformOrigin: 'top left' }}
+      style={{ 
+        transformOrigin: 'top left',
+        opacity: isCollapsing ? 0.8 : 1,
+        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+      }}
       title={`${task.title}${task.due_date ? ` - Due: ${new Date(task.due_date).toLocaleDateString()}` : ''}`}
     >
       {icon}

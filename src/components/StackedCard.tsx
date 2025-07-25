@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 
 interface StackedCardProps {
@@ -23,17 +23,46 @@ export const StackedCard = ({
   content,
   expandedContent
 }: StackedCardProps) => {
+  const [isCollapsing, setIsCollapsing] = useState(false);
+  const [expandedAt, setExpandedAt] = useState<number | null>(null);
   const { ref: intersectionRef, isVisible } = useIntersectionObserver({
     threshold: 0.3,
     rootMargin: '-20% 0px -20% 0px'
   });
 
-  // Auto-collapse when card scrolls significantly out of view
+  // Smart auto-collapse with debounce and user interaction respect
   useEffect(() => {
     if (!isVisible && isExpanded) {
-      onToggle(id);
+      const now = Date.now();
+      const timeSinceExpanded = expandedAt ? now - expandedAt : Infinity;
+      
+      // Don't auto-collapse if recently expanded (less than 2 seconds)
+      if (timeSinceExpanded < 2000) return;
+      
+      // Show warning state first
+      setIsCollapsing(true);
+      
+      // Debounced collapse after 500ms
+      const timer = setTimeout(() => {
+        onToggle(id);
+        setIsCollapsing(false);
+        setExpandedAt(null);
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    } else {
+      setIsCollapsing(false);
     }
-  }, [isVisible, isExpanded, id, onToggle]);
+  }, [isVisible, isExpanded, id, onToggle, expandedAt]);
+
+  // Track when cards are expanded
+  useEffect(() => {
+    if (isExpanded && !expandedAt) {
+      setExpandedAt(Date.now());
+    } else if (!isExpanded) {
+      setExpandedAt(null);
+    }
+  }, [isExpanded, expandedAt]);
   const getCardStyles = () => {
     const baseYOffset = index * 8;
     const baseXOffset = index * 12;
@@ -41,8 +70,9 @@ export const StackedCard = ({
     if (isExpanded) {
       return {
         transform: `translateY(${baseYOffset}px) translateX(${baseXOffset}px) scale(1)`,
+        transformOrigin: 'top left',
         zIndex: 50,
-        opacity: 1
+        opacity: isCollapsing ? 0.8 : 1
       };
     }
 
@@ -51,6 +81,7 @@ export const StackedCard = ({
 
     return {
       transform: `translateY(${baseYOffset}px) translateX(${baseXOffset}px) scale(${scale})`,
+      transformOrigin: 'top left',
       zIndex: 10 - index,
       opacity: Math.max(opacity, 0.7)
     };
@@ -62,12 +93,15 @@ export const StackedCard = ({
     <Card
       ref={intersectionRef}
       className={cn(
-        "absolute inset-0 cursor-pointer transition-all duration-300 ease-out",
+        "absolute inset-0 cursor-pointer origin-top-left",
         "shadow-lg hover:shadow-xl border-2",
         isExpanded ? "border-primary/30" : "border-border",
         "bg-card/95 backdrop-blur-sm"
       )}
-      style={cardStyles}
+      style={{
+        ...cardStyles,
+        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+      }}
       onClick={() => onToggle(id)}
     >
       <CardHeader className="pb-2">
@@ -82,7 +116,7 @@ export const StackedCard = ({
       </CardHeader>
       
       {isExpanded && (
-        <CardContent className="pt-0">
+        <CardContent className="pt-0 animate-content-fade-in">
           {expandedContent || content}
         </CardContent>
       )}
