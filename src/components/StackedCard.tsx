@@ -22,21 +22,22 @@ export const StackedCard = ({
   expandedContent
 }: StackedCardProps) => {
   const getCardStyles = () => {
+    const baseYOffset = index * 8;
+    const baseXOffset = index * 12;
+    
     if (isExpanded) {
       return {
-        transform: "translateY(0) translateX(0) scale(1)",
+        transform: `translateY(${baseYOffset}px) translateX(${baseXOffset}px) scale(1)`,
         zIndex: 50,
         opacity: 1
       };
     }
 
-    const yOffset = index * 8;
-    const xOffset = index * 12;
     const scale = 1 - (index * 0.02);
     const opacity = 1 - (index * 0.1);
 
     return {
-      transform: `translateY(${yOffset}px) translateX(${xOffset}px) scale(${scale})`,
+      transform: `translateY(${baseYOffset}px) translateX(${baseXOffset}px) scale(${scale})`,
       zIndex: 10 - index,
       opacity: Math.max(opacity, 0.7)
     };
