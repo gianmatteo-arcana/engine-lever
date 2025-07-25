@@ -67,31 +67,40 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
 
   if (size === "medium") {
     return (
-      <div 
-        className={cn(
-          "origin-top-left transition-all ease-in-out",
-          isFullscreen ? "fixed inset-0 z-50 bg-background/95 backdrop-blur-sm duration-500" : "relative duration-300"
+      <>
+        {/* Backdrop for fullscreen mode */}
+        {isFullscreen && (
+          <div 
+            className="fixed inset-0 z-40 bg-background/95 backdrop-blur-sm animate-fade-in"
+            onClick={() => setIsFullscreen(false)}
+          />
         )}
-        style={{ 
-          transformOrigin: 'top left',
-          transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)'
-        }}
-      >
+        
+        {/* Card container */}
         <div 
           className={cn(
-            "origin-top-left transition-all ease-in-out",
+            "origin-top-left transition-all ease-out",
             isFullscreen 
-              ? "fixed top-4 left-4 right-4 bottom-4 overflow-auto duration-500" 
-              : "relative w-full h-full duration-300"
+              ? "fixed z-50 animate-card-expand" 
+              : "relative w-full h-full"
           )}
           style={{ 
             transformOrigin: 'top left',
-            transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)'
+            transitionDuration: '400ms',
+            transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+            ...(isFullscreen && {
+              top: '1rem',
+              left: '1rem',
+              right: '1rem',
+              bottom: '1rem',
+              maxHeight: 'calc(100vh - 2rem)',
+              overflow: 'auto'
+            })
           }}
         >
           {isFullscreen ? (
             // Fullscreen view
-            <div className="bg-card border rounded-lg shadow-lg overflow-hidden h-full animate-card-expand">
+            <div className="bg-card border rounded-lg shadow-lg h-full overflow-hidden">
               {/* Close button */}
               <div className="absolute top-4 right-4 z-10">
                 <Button
@@ -101,86 +110,89 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                     e.stopPropagation();
                     setIsFullscreen(false);
                   }}
-                  className="h-8 w-8 p-0"
+                  className="h-8 w-8 p-0 shadow-lg"
                 >
                   <Minimize2 className="h-4 w-4" />
                 </Button>
               </div>
 
-              {(task.title || task.description) && (
-                <div className="p-6 pb-0">
-                  <div className="flex items-start justify-between pr-12">
-                    <div>
-                      <h2 className="text-2xl font-bold text-foreground">{task.title}</h2>
-                      {task.description && (
-                        <p className="text-muted-foreground mt-2">{task.description}</p>
-                      )}
-                    </div>
-                    {!isGreeting && getUrgencyBadge()}
-                  </div>
-                </div>
-              )}
-
-              {!isGreeting && (
-                <>
-                  <div className="grid gap-4 md:grid-cols-2 p-6">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">Due Date</span>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {task.due_date ? new Date(task.due_date).toLocaleDateString('en-US', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        }) : "No due date set"}
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">Time Remaining</span>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {getDaysUntilDue() >= 0 
-                          ? `${getDaysUntilDue()} days remaining`
-                          : `${Math.abs(getDaysUntilDue())} days overdue`
-                        }
-                      </p>
-                    </div>
-                  </div>
-
-                  {urgency === "overdue" && (
-                    <div className="flex items-center gap-3 p-4 mx-6 mb-4 bg-destructive/10 border border-destructive/20 rounded-lg animate-content-fade-in">
-                      <AlertTriangle className="h-5 w-5 text-destructive" />
+              <div className="h-full overflow-auto">
+                {(task.title || task.description) && (
+                  <div className="p-6 pb-0 animate-content-fade-in">
+                    <div className="flex items-start justify-between pr-12">
                       <div>
-                        <p className="font-medium text-destructive">This task is overdue</p>
-                        <p className="text-sm text-destructive/80">
-                          Immediate action is required to maintain compliance
+                        <h2 className="text-2xl font-bold text-foreground">{task.title}</h2>
+                        {task.description && (
+                          <p className="text-muted-foreground mt-2 text-base leading-relaxed">{task.description}</p>
+                        )}
+                      </div>
+                      {!isGreeting && getUrgencyBadge()}
+                    </div>
+                  </div>
+                )}
+
+                {!isGreeting && (
+                  <div className="animate-content-fade-in" style={{ animationDelay: '100ms' }}>
+                    <div className="grid gap-6 md:grid-cols-2 p-6">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-5 w-5 text-muted-foreground" />
+                          <span className="text-base font-medium">Due Date</span>
+                        </div>
+                        <p className="text-muted-foreground leading-relaxed">
+                          {task.due_date ? new Date(task.due_date).toLocaleDateString('en-US', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          }) : "No due date set"}
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-5 w-5 text-muted-foreground" />
+                          <span className="text-base font-medium">Time Remaining</span>
+                        </div>
+                        <p className="text-muted-foreground leading-relaxed">
+                          {getDaysUntilDue() >= 0 
+                            ? `${getDaysUntilDue()} days remaining`
+                            : `${Math.abs(getDaysUntilDue())} days overdue`
+                          }
                         </p>
                       </div>
                     </div>
-                  )}
 
-                  <div className="flex gap-3 p-6 pt-0 animate-content-fade-in">
-                    {onAction && (
-                      <Button 
-                        onClick={onAction}
-                        className="flex-1"
-                        variant={urgency === "overdue" ? "destructive" : "default"}
-                      >
-                        {actionLabel || (urgency === "overdue" ? "Complete Now" : "Start Task")}
-                      </Button>
+                    {urgency === "overdue" && (
+                      <div className="flex items-center gap-3 p-4 mx-6 mb-6 bg-destructive/10 border border-destructive/20 rounded-lg">
+                        <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" />
+                        <div>
+                          <p className="font-medium text-destructive">This task is overdue</p>
+                          <p className="text-sm text-destructive/80 leading-relaxed">
+                            Immediate action is required to maintain compliance
+                          </p>
+                        </div>
+                      </div>
                     )}
-                    <Button variant="outline" onClick={onClick}>
-                      View Details
-                    </Button>
+
+                    <div className="flex gap-3 p-6 pt-0">
+                      {onAction && (
+                        <Button 
+                          onClick={onAction}
+                          className="flex-1"
+                          variant={urgency === "overdue" ? "destructive" : "default"}
+                          size="lg"
+                        >
+                          {actionLabel || (urgency === "overdue" ? "Complete Now" : "Start Task")}
+                        </Button>
+                      )}
+                      <Button variant="outline" onClick={onClick} size="lg">
+                        View Details
+                      </Button>
+                    </div>
                   </div>
-                </>
-              )}
+                )}
+              </div>
             </div>
           ) : (
             // Medium size view
@@ -190,7 +202,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
               variant={getVariantFromUrgency()}
               onClick={onClick}
               expandable={true}
-              className="cursor-pointer origin-top-left"
+              className="cursor-pointer origin-top-left transition-all duration-300 ease-out"
             >
               <div className="space-y-4">
                 {!isGreeting && (
@@ -235,7 +247,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                         e.stopPropagation();
                         onAction();
                       }}
-                      className="flex items-center gap-2 w-fit"
+                      className="flex items-center gap-2 w-fit transition-all duration-200 hover:scale-105"
                     >
                       <MessageCircle className="h-4 w-4" />
                       {actionLabel || "Chat with Ally"}
@@ -250,7 +262,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                       e.stopPropagation();
                       setIsFullscreen(true);
                     }}
-                    className="flex items-center gap-2 w-fit"
+                    className="flex items-center gap-2 w-fit transition-all duration-200 hover:scale-105"
                   >
                     <Maximize2 className="h-4 w-4" />
                     Expand
@@ -260,7 +272,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
             </SmallBizCard>
           )}
         </div>
-      </div>
+      </>
     );
   }
 
