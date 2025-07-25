@@ -3,7 +3,8 @@ import { cn } from "@/lib/utils";
 import { SmallBizCard } from "./SmallBizCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, AlertTriangle, MessageCircle } from "lucide-react";
+import { Calendar, Clock, AlertTriangle, MessageCircle, Maximize2, Minimize2 } from "lucide-react";
+import { useState } from "react";
 import type { Database } from "@/integrations/supabase/types";
 
 type TaskRow = Database['public']['Tables']['tasks']['Row'];
@@ -27,6 +28,7 @@ interface TaskCardProps {
 }
 
 export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, isGreeting }: TaskCardProps) => {
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const getDaysUntilDue = () => {
     if (!task.due_date) return 0;
     
@@ -65,64 +67,200 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
 
   if (size === "medium") {
     return (
-      <SmallBizCard
-        title={task.title}
-        description={task.description}
-        variant={getVariantFromUrgency()}
-        onClick={onClick}
-        expandable={true}
-        className="cursor-pointer"
+      <div 
+        className={cn(
+          "origin-top-left transition-all ease-in-out",
+          isFullscreen ? "fixed inset-0 z-50 bg-background/95 backdrop-blur-sm duration-500" : "relative duration-300"
+        )}
+        style={{ 
+          transformOrigin: 'top left',
+          transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)'
+        }}
       >
-        <div className="space-y-4">
-          {!isGreeting && (
-            <>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">
-                    Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : "No due date"}
-                  </span>
-                </div>
-                {getUrgencyBadge()}
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">
-                  {getDaysUntilDue() >= 0 
-                    ? `${getDaysUntilDue()} days remaining`
-                    : `${Math.abs(getDaysUntilDue())} days overdue`
-                  }
-                </span>
+        <div 
+          className={cn(
+            "origin-top-left transition-all ease-in-out",
+            isFullscreen 
+              ? "fixed top-4 left-4 right-4 bottom-4 overflow-auto duration-500" 
+              : "relative w-full h-full duration-300"
+          )}
+          style={{ 
+            transformOrigin: 'top left',
+            transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)'
+          }}
+        >
+          {isFullscreen ? (
+            // Fullscreen view
+            <div className="bg-card border rounded-lg shadow-lg overflow-hidden h-full animate-card-expand">
+              {/* Close button */}
+              <div className="absolute top-4 right-4 z-10">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsFullscreen(false);
+                  }}
+                  className="h-8 w-8 p-0"
+                >
+                  <Minimize2 className="h-4 w-4" />
+                </Button>
               </div>
 
-              {urgency === "overdue" && (
-                <div className="flex items-center gap-2 p-3 bg-destructive/10 rounded-lg">
-                  <AlertTriangle className="h-4 w-4 text-destructive" />
-                  <span className="text-sm text-destructive font-medium">
-                    Action Required
-                  </span>
+              {(task.title || task.description) && (
+                <div className="p-6 pb-0">
+                  <div className="flex items-start justify-between pr-12">
+                    <div>
+                      <h2 className="text-2xl font-bold text-foreground">{task.title}</h2>
+                      {task.description && (
+                        <p className="text-muted-foreground mt-2">{task.description}</p>
+                      )}
+                    </div>
+                    {!isGreeting && getUrgencyBadge()}
+                  </div>
                 </div>
               )}
-            </>
-          )}
-          
-          {onAction && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAction();
-              }}
-              className="flex items-center gap-2 w-fit"
+
+              {!isGreeting && (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2 p-6">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">Due Date</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {task.due_date ? new Date(task.due_date).toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        }) : "No due date set"}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">Time Remaining</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {getDaysUntilDue() >= 0 
+                          ? `${getDaysUntilDue()} days remaining`
+                          : `${Math.abs(getDaysUntilDue())} days overdue`
+                        }
+                      </p>
+                    </div>
+                  </div>
+
+                  {urgency === "overdue" && (
+                    <div className="flex items-center gap-3 p-4 mx-6 mb-4 bg-destructive/10 border border-destructive/20 rounded-lg animate-content-fade-in">
+                      <AlertTriangle className="h-5 w-5 text-destructive" />
+                      <div>
+                        <p className="font-medium text-destructive">This task is overdue</p>
+                        <p className="text-sm text-destructive/80">
+                          Immediate action is required to maintain compliance
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 p-6 pt-0 animate-content-fade-in">
+                    {onAction && (
+                      <Button 
+                        onClick={onAction}
+                        className="flex-1"
+                        variant={urgency === "overdue" ? "destructive" : "default"}
+                      >
+                        {actionLabel || (urgency === "overdue" ? "Complete Now" : "Start Task")}
+                      </Button>
+                    )}
+                    <Button variant="outline" onClick={onClick}>
+                      View Details
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            // Medium size view
+            <SmallBizCard
+              title={task.title}
+              description={task.description}
+              variant={getVariantFromUrgency()}
+              onClick={onClick}
+              expandable={true}
+              className="cursor-pointer origin-top-left"
             >
-              <MessageCircle className="h-4 w-4" />
-              {actionLabel || "Chat with Ally"}
-            </Button>
+              <div className="space-y-4">
+                {!isGreeting && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">
+                          Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : "No due date"}
+                        </span>
+                      </div>
+                      {getUrgencyBadge()}
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        {getDaysUntilDue() >= 0 
+                          ? `${getDaysUntilDue()} days remaining`
+                          : `${Math.abs(getDaysUntilDue())} days overdue`
+                        }
+                      </span>
+                    </div>
+
+                    {urgency === "overdue" && (
+                      <div className="flex items-center gap-2 p-3 bg-destructive/10 rounded-lg">
+                        <AlertTriangle className="h-4 w-4 text-destructive" />
+                        <span className="text-sm text-destructive font-medium">
+                          Action Required
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+                
+                <div className="flex items-center gap-2">
+                  {onAction && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAction();
+                      }}
+                      className="flex items-center gap-2 w-fit"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      {actionLabel || "Chat with Ally"}
+                    </Button>
+                  )}
+                  
+                  {/* Fullscreen button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsFullscreen(true);
+                    }}
+                    className="flex items-center gap-2 w-fit"
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                    Expand
+                  </Button>
+                </div>
+              </div>
+            </SmallBizCard>
           )}
         </div>
-      </SmallBizCard>
+      </div>
     );
   }
 
