@@ -1,6 +1,8 @@
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { useEffect } from "react";
+import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 
 interface StackedCardProps {
   id: string;
@@ -21,6 +23,17 @@ export const StackedCard = ({
   content,
   expandedContent
 }: StackedCardProps) => {
+  const { ref: intersectionRef, isVisible } = useIntersectionObserver({
+    threshold: 0.3,
+    rootMargin: '-20% 0px -20% 0px'
+  });
+
+  // Auto-collapse when card scrolls significantly out of view
+  useEffect(() => {
+    if (!isVisible && isExpanded) {
+      onToggle(id);
+    }
+  }, [isVisible, isExpanded, id, onToggle]);
   const getCardStyles = () => {
     const baseYOffset = index * 8;
     const baseXOffset = index * 12;
@@ -47,6 +60,7 @@ export const StackedCard = ({
 
   return (
     <Card
+      ref={intersectionRef}
       className={cn(
         "absolute inset-0 cursor-pointer transition-all duration-300 ease-out",
         "shadow-lg hover:shadow-xl border-2",

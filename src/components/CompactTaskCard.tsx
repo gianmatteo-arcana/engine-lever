@@ -1,9 +1,10 @@
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SmallBizCard } from "./SmallBizCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, AlertTriangle, X } from "lucide-react";
+import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import type { Database } from "@/integrations/supabase/types";
 
 type TaskRow = Database['public']['Tables']['tasks']['Row'];
@@ -24,6 +25,17 @@ interface CompactTaskCardProps {
 
 export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const { ref: intersectionRef, isVisible } = useIntersectionObserver({
+    threshold: 0.5,
+    rootMargin: '-10% 0px -10% 0px'
+  });
+
+  // Auto-shrink when card scrolls out of view
+  useEffect(() => {
+    if (!isVisible && isExpanded) {
+      setIsExpanded(false);
+    }
+  }, [isVisible, isExpanded]);
 
   const getUrgencyStyles = () => {
     switch (urgency) {
@@ -85,7 +97,14 @@ export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps
 
   if (isExpanded) {
     return (
-      <div className="animate-scale-in col-span-full" style={{ animationDuration: '0.15s' }}>
+      <div 
+        ref={intersectionRef}
+        className="animate-scale-in col-span-full" 
+        style={{ 
+          animationDuration: '0.15s',
+          transformOrigin: 'top left'
+        }}
+      >
         <SmallBizCard
           title="Business Snapshot"
           description="Where your paperwork stands today"
@@ -127,6 +146,7 @@ export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps
 
   return (
     <div
+      ref={intersectionRef}
       onClick={handleCardClick}
       className={cn(
         "w-16 h-16 rounded-lg border-2 flex items-center justify-center",
@@ -134,6 +154,7 @@ export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps
         "text-xs font-bold shadow-sm hover:shadow-md",
         getUrgencyStyles()
       )}
+      style={{ transformOrigin: 'top left' }}
       title={`${task.title}${task.due_date ? ` - Due: ${new Date(task.due_date).toLocaleDateString()}` : ''}`}
     >
       {icon}
