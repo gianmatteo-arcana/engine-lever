@@ -92,7 +92,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
         >
           {isFullscreen ? (
             // Fullscreen view
-            <div className="bg-card border rounded-lg shadow-lg min-h-full overflow-hidden">
+            <div className="bg-card border rounded-lg shadow-lg h-full overflow-hidden flex flex-col">
               {/* Close button */}
               <div className="absolute top-4 right-4 z-10">
                 <Button
@@ -108,7 +108,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                 </Button>
               </div>
 
-              <div className="h-full overflow-auto">
+              <div className="flex-1 overflow-auto flex flex-col">
                 {(task.title || task.description) && (
                   <div className="p-6 pb-0 animate-content-fade-in">
                     <div className="flex items-start justify-between pr-12">
