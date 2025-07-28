@@ -99,7 +99,15 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
       };
       setChatMessages(prev => [...prev, aiResponse]);
     } catch (error) {
-      console.error(error);
+      console.error('OpenAI API Error:', error);
+      // Also show a user-friendly error in Dev Mode
+      if (error instanceof Error) {
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+      }
       const fallback: ChatMessage = {
         id: (Date.now() + 1).toString(),
         content: getAIResponse(message),
