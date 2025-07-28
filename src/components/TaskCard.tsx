@@ -110,73 +110,66 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
 
               <div className="flex-1 overflow-auto flex flex-col">
                 {/* Ally AI Assistant Header */}
-                <div className="p-6 pb-0 animate-content-fade-in">
+                <div className="p-6 pb-4 animate-content-fade-in">
                   <div className="flex items-center gap-3 pr-12">
                     <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
                       <MessageCircle className="h-6 w-6 text-primary" />
                     </div>
                     <div>
                       <h2 className="text-2xl font-bold text-foreground">Ally - Your AI Assistant</h2>
-                      <p className="text-muted-foreground text-base">Ready to help you with your business tasks</p>
+                      <p className="text-muted-foreground text-base">I'm here to help with your compliance needs</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Chat Interface Content */}
-                <div className="flex-1 p-6 animate-content-fade-in" style={{ animationDelay: '100ms' }}>
+                <div className="flex-1 p-6 pt-0 animate-content-fade-in" style={{ animationDelay: '100ms' }}>
                   <div className="h-full flex flex-col">
-                    {/* Task Context */}
-                    <div className="bg-muted/50 rounded-lg p-4 mb-4">
-                      <h3 className="font-medium text-foreground mb-2">Current Task</h3>
-                      <p className="text-sm text-muted-foreground">{task.title}</p>
-                      {task.description && (
-                        <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
-                      )}
+                    {/* Welcome Message */}
+                    <div className="flex items-start gap-3 mb-6">
+                      <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                        <MessageCircle className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="bg-muted/50 rounded-lg p-4 flex-1">
+                        <p className="text-sm text-foreground">
+                          Hello! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?
+                        </p>
+                      </div>
                     </div>
 
-                    {/* Active Chat Area */}
-                    <div className="flex-1 bg-background border rounded-lg p-4 flex flex-col">
-                      {/* Chat Messages */}
-                      <div className="flex-1 space-y-4 mb-4">
-                        <div className="flex items-start gap-3">
-                          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                            <MessageCircle className="h-4 w-4 text-primary" />
-                          </div>
-                          <div className="bg-muted/50 rounded-lg p-3 max-w-[80%]">
-                            <p className="text-sm text-foreground">
-                              Hi! I'm here to help you with "{task.title}". What would you like to know about this task?
-                            </p>
-                          </div>
+                    {/* Quick Action Buttons */}
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                      <Button variant="outline" className="justify-start h-auto py-3 px-4">
+                        <span className="text-sm">Review my compliance status</span>
+                      </Button>
+                      <Button variant="outline" className="justify-start h-auto py-3 px-4">
+                        <span className="text-sm">Update Statement of Information</span>
+                      </Button>
+                      <Button variant="outline" className="justify-start h-auto py-3 px-4 flex items-center gap-2">
+                        <div className="w-4 h-4 border border-current rounded flex items-center justify-center">
+                          <div className="w-2 h-2 border-l border-b border-current transform rotate-45 scale-75"></div>
                         </div>
-                      </div>
+                        <span className="text-sm">Review letter</span>
+                      </Button>
+                      <Button variant="outline" className="justify-start h-auto py-3 px-4">
+                        <span className="text-sm">Ask a question</span>
+                      </Button>
+                    </div>
 
-                      {/* Chat Input */}
-                      <div className="flex gap-2">
+                    {/* Chat Input Area */}
+                    <div className="mt-auto">
+                      <div className="flex gap-2 p-4 bg-background border rounded-lg">
                         <input 
                           type="text" 
-                          placeholder="Ask Ally about this task..."
-                          className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          placeholder="Ask me anything..."
+                          className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground"
                         />
-                        <Button size="sm">
-                          Send
+                        <Button size="sm" className="px-3">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                          </svg>
                         </Button>
                       </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-3 mt-4">
-                      {onAction && (
-                        <Button 
-                          onClick={onAction}
-                          className="flex-1"
-                          size="lg"
-                        >
-                          Start Chat
-                        </Button>
-                      )}
-                      <Button variant="outline" onClick={onClick} size="lg">
-                        View Task Details
-                      </Button>
                     </div>
                   </div>
                 </div>
