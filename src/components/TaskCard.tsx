@@ -81,7 +81,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           className={cn(
             "transition-all ease-out",
             isFullscreen 
-              ? "fixed inset-4 z-50" 
+              ? "fixed top-4 left-4 right-4 bottom-20 z-50" 
               : "relative w-full h-full"
           )}
           style={{ 
@@ -92,7 +92,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
         >
           {isFullscreen ? (
             // Fullscreen view
-            <div className="bg-card border rounded-lg shadow-lg h-screen overflow-hidden">
+            <div className="bg-card border rounded-lg shadow-lg h-full overflow-hidden">
               {/* Close button */}
               <div className="absolute top-4 right-4 z-10">
                 <Button
