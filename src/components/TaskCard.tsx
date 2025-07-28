@@ -109,81 +109,58 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
               </div>
 
               <div className="flex-1 overflow-auto flex flex-col">
-                {(task.title || task.description) && (
-                  <div className="p-6 pb-0 animate-content-fade-in">
-                    <div className="flex items-start justify-between pr-12">
-                      <div>
-                        <h2 className="text-2xl font-bold text-foreground">{task.title}</h2>
-                        {task.description && (
-                          <p className="text-muted-foreground mt-2 text-base leading-relaxed">{task.description}</p>
-                        )}
-                      </div>
-                      {!isGreeting && getUrgencyBadge()}
+                {/* Ally AI Assistant Header */}
+                <div className="p-6 pb-0 animate-content-fade-in">
+                  <div className="flex items-center gap-3 pr-12">
+                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                      <MessageCircle className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-foreground">Ally - Your AI Assistant</h2>
+                      <p className="text-muted-foreground text-base">Ready to help you with your business tasks</p>
                     </div>
                   </div>
-                )}
+                </div>
 
-                {!isGreeting && (
-                  <div className="animate-content-fade-in" style={{ animationDelay: '100ms' }}>
-                    <div className="grid gap-6 md:grid-cols-2 p-6">
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-5 w-5 text-muted-foreground" />
-                          <span className="text-base font-medium">Due Date</span>
-                        </div>
-                        <p className="text-muted-foreground leading-relaxed">
-                          {task.due_date ? new Date(task.due_date).toLocaleDateString('en-US', {
-                            weekday: 'long',
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          }) : "No due date set"}
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-5 w-5 text-muted-foreground" />
-                          <span className="text-base font-medium">Time Remaining</span>
-                        </div>
-                        <p className="text-muted-foreground leading-relaxed">
-                          {getDaysUntilDue() >= 0 
-                            ? `${getDaysUntilDue()} days remaining`
-                            : `${Math.abs(getDaysUntilDue())} days overdue`
-                          }
-                        </p>
-                      </div>
+                {/* Chat Interface Content */}
+                <div className="flex-1 p-6 animate-content-fade-in" style={{ animationDelay: '100ms' }}>
+                  <div className="h-full flex flex-col">
+                    {/* Task Context */}
+                    <div className="bg-muted/50 rounded-lg p-4 mb-4">
+                      <h3 className="font-medium text-foreground mb-2">Current Task</h3>
+                      <p className="text-sm text-muted-foreground">{task.title}</p>
+                      {task.description && (
+                        <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
+                      )}
                     </div>
 
-                    {urgency === "overdue" && (
-                      <div className="flex items-center gap-3 p-4 mx-6 mb-6 bg-destructive/10 border border-destructive/20 rounded-lg">
-                        <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" />
-                        <div>
-                          <p className="font-medium text-destructive">This task is overdue</p>
-                          <p className="text-sm text-destructive/80 leading-relaxed">
-                            Immediate action is required to maintain compliance
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                    {/* Chat Area Placeholder */}
+                    <div className="flex-1 bg-background border rounded-lg p-4 flex flex-col justify-center items-center">
+                      <MessageCircle className="h-16 w-16 text-muted-foreground/50 mb-4" />
+                      <h3 className="text-lg font-medium text-foreground mb-2">Chat with Ally</h3>
+                      <p className="text-sm text-muted-foreground text-center max-w-md">
+                        Start a conversation about your task. Ally can help you understand requirements, 
+                        plan next steps, or answer any questions you might have.
+                      </p>
+                    </div>
 
-                    <div className="flex gap-3 p-6 pt-0">
+                    {/* Action Buttons */}
+                    <div className="flex gap-3 mt-4">
                       {onAction && (
                         <Button 
                           onClick={onAction}
                           className="flex-1"
-                          variant={urgency === "overdue" ? "destructive" : "default"}
                           size="lg"
                         >
-                          {actionLabel || (urgency === "overdue" ? "Complete Now" : "Start Task")}
+                          Start Chat
                         </Button>
                       )}
                       <Button variant="outline" onClick={onClick} size="lg">
-                        View Details
+                        View Task Details
                       </Button>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             </div>
           ) : (
