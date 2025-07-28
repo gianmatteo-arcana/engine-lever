@@ -233,7 +233,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        // Removed onAction() call to prevent navigation
+                        onAction();
                       }}
                       className="flex items-center gap-2 w-fit transition-all duration-200 hover:scale-105"
                     >
