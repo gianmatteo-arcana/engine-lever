@@ -86,7 +86,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     setIsTyping(true);
     try {
       const llmMessages = [...chatMessages, newMessage].map(m => ({
-        role: m.sender === 'ai' ? 'assistant' : 'user',
+        role: m.sender === 'ai' ? 'assistant' as const : 'user' as const,
         content: m.content,
       }));
       const aiText = await generateResponse(llmMessages);
