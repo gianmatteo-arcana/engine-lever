@@ -79,23 +79,15 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
         {/* Card container */}
         <div 
           className={cn(
-            "origin-top-left transition-all ease-out",
+            "transition-all ease-out",
             isFullscreen 
-              ? "fixed z-50 animate-card-expand" 
+              ? "fixed inset-4 z-50" 
               : "relative w-full h-full"
           )}
           style={{ 
             transformOrigin: 'top left',
             transitionDuration: '400ms',
             transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
-            ...(isFullscreen && {
-              top: '1rem',
-              left: '1rem',
-              right: '1rem',
-              bottom: '1rem',
-              maxHeight: 'calc(100vh - 2rem)',
-              overflow: 'auto'
-            })
           }}
         >
           {isFullscreen ? (
