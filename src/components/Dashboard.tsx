@@ -11,6 +11,7 @@ import { useTasks } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MessageCircle, X, User, LogOut, ChevronUp, List, Layers } from "lucide-react";
+import { generateResponse } from "@/integrations/llm";
 
 interface ChatMessage {
   id: string;
@@ -50,6 +51,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
       pills: ["Review my compliance status", "Update Statement of Information", "Review letter", "Ask a question"]
     }
   ]);
+  const [isTyping, setIsTyping] = useState(false);
 
   // Store card position before expanding to maintain scroll position
   const handleChatToggle = () => {
@@ -72,7 +74,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     }
   }, [showChat, greetingCardPosition]);
 
-  const handleSendMessage = (message: string) => {
+  const handleSendMessage = async (message: string) => {
     const newMessage: ChatMessage = {
       id: Date.now().toString(),
       content: message,
@@ -81,18 +83,34 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     };
 
     setChatMessages(prev => [...prev, newMessage]);
-
-    // Simulate AI response
-    setTimeout(() => {
+    setIsTyping(true);
+    try {
+      const llmMessages = [...chatMessages, newMessage].map(m => ({
+        role: m.sender === 'ai' ? 'assistant' : 'user',
+        content: m.content,
+      }));
+      const aiText = await generateResponse(llmMessages);
       const aiResponse: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        content: aiText,
+        sender: "ai",
+        timestamp: new Date(),
+        pills: getResponsePills(message)
+      };
+      setChatMessages(prev => [...prev, aiResponse]);
+    } catch (error) {
+      console.error(error);
+      const fallback: ChatMessage = {
         id: (Date.now() + 1).toString(),
         content: getAIResponse(message),
         sender: "ai",
         timestamp: new Date(),
         pills: getResponsePills(message)
       };
-      setChatMessages(prev => [...prev, aiResponse]);
-    }, 1000);
+      setChatMessages(prev => [...prev, fallback]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   const handlePillClick = (pill: string) => {
@@ -252,6 +270,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                   messages={chatMessages}
                   onSendMessage={handleSendMessage}
                   onPillClick={handlePillClick}
+                  isTyping={isTyping}
                   placeholder="Ask me anything about this task..."
                   className="h-full"
                 />
@@ -322,6 +341,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                 messages={chatMessages}
                 onSendMessage={handleSendMessage}
                 onPillClick={handlePillClick}
+                isTyping={isTyping}
                 placeholder="Ask me anything about your filing..."
                 className="h-full"
               />
@@ -520,6 +540,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                       messages={chatMessages}
                       onSendMessage={handleSendMessage}
                       onPillClick={handlePillClick}
+                      isTyping={isTyping}
                       placeholder="Ask me anything..."
                       className="h-[600px]"
                       onClose={handleChatToggle}
