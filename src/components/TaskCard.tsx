@@ -81,7 +81,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           className={cn(
             "transition-all ease-out",
             isFullscreen 
-              ? "fixed top-4 left-4 right-4 bottom-20 z-50" 
+              ? "relative z-50 w-full min-h-[80vh]" 
               : "relative w-full h-full"
           )}
           style={{ 
