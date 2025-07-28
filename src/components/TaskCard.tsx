@@ -134,14 +134,33 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                       )}
                     </div>
 
-                    {/* Chat Area Placeholder */}
-                    <div className="flex-1 bg-background border rounded-lg p-4 flex flex-col justify-center items-center">
-                      <MessageCircle className="h-16 w-16 text-muted-foreground/50 mb-4" />
-                      <h3 className="text-lg font-medium text-foreground mb-2">Chat with Ally</h3>
-                      <p className="text-sm text-muted-foreground text-center max-w-md">
-                        Start a conversation about your task. Ally can help you understand requirements, 
-                        plan next steps, or answer any questions you might have.
-                      </p>
+                    {/* Active Chat Area */}
+                    <div className="flex-1 bg-background border rounded-lg p-4 flex flex-col">
+                      {/* Chat Messages */}
+                      <div className="flex-1 space-y-4 mb-4">
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                            <MessageCircle className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-3 max-w-[80%]">
+                            <p className="text-sm text-foreground">
+                              Hi! I'm here to help you with "{task.title}". What would you like to know about this task?
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Chat Input */}
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          placeholder="Ask Ally about this task..."
+                          className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        />
+                        <Button size="sm">
+                          Send
+                        </Button>
+                      </div>
                     </div>
 
                     {/* Action Buttons */}
