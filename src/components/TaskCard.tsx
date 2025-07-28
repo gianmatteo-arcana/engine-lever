@@ -92,7 +92,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
         >
           {isFullscreen ? (
             // Fullscreen view
-            <div className="bg-card border rounded-lg shadow-lg h-full overflow-hidden">
+            <div className="bg-card border rounded-lg shadow-lg min-h-full overflow-hidden">
               {/* Close button */}
               <div className="absolute top-4 right-4 z-10">
                 <Button
