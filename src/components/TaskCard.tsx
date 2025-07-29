@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, AlertTriangle, MessageCircle, Maximize2, Minimize2, Send } from "lucide-react";
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { generateResponse } from "@/integrations/llm";
 import type { Database } from "@/integrations/supabase/types";
 
 type TaskRow = Database['public']['Tables']['tasks']['Row'];
@@ -91,51 +91,61 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
     setIsLoading(true);
     
     try {
-      console.log("About to call supabase.functions.invoke...");
-      console.log("Supabase client:", !!supabase);
+      console.log("=== CHAT SUBMIT START ===");
+      console.log("User message:", userMessage);
       
-      const functionCall = supabase.functions.invoke('chat-completion', {
-        body: {
-          messages: [{ role: 'user', content: userMessage }],
-          masterPrompt: `You are Ally, an AI compliance assistant helping with the task: "${task.title}". ${task.description ? `Task description: ${task.description}` : ''} Be helpful, friendly, and provide actionable advice about business compliance and requirements.`
-        }
-      });
+      // Create RequestEnvelope with task context
+      const requestEnvelope = {
+        user_message: userMessage,
+        task: {
+          id: task.id,
+          title: task.title,
+          description: task.description || '',
+          status: task.status as 'not_started' | 'in_progress' | 'completed' | 'snoozed' | 'ignored'
+        },
+        business_profile: {
+          name: "Demo Business",
+          type: "LLC", 
+          state: "California"
+        },
+        memory_context: chatMessages.slice(-3).map(m => `${m.role}: ${m.content}`),
+        psych_state: {
+          stress_level: 'medium' as const,
+          confidence_level: 'medium' as const,
+          overwhelm_indicator: false,
+          tone_preference: 'encouraging' as const
+        },
+        session_id: `task_${task.id}_${Date.now()}`
+      };
       
-      console.log("Function call created, awaiting response...");
-      const { data, error } = await functionCall;
+      console.log("About to call generateResponse...");
+      const responsePayload = await generateResponse(requestEnvelope);
       
-      console.log("=== SUPABASE RESPONSE ===");
-      console.log("Data:", data);
-      console.log("Error:", error);
-      console.log("Data type:", typeof data);
-      console.log("Error type:", typeof error);
-
-      if (error) {
-        console.error('=== SUPABASE FUNCTION ERROR ===');
-        console.error('Error object:', error);
-        console.error('Error message:', error.message);
-        console.error('Error details:', error.details);
-        console.error('Error hint:', error.hint);
-        console.error('Error code:', error.code);
-        throw new Error(error.message || 'Supabase function error');
-      }
-
-      console.log("=== CHECKING RESPONSE DATA ===");
-      if (data?.content) {
-        console.log("✅ AI response received:", data.content);
-        setChatMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
-      } else {
-        console.error("❌ No content in response");
-        console.log("Full data object:", JSON.stringify(data, null, 2));
-        throw new Error('No response content received');
-      }
+      console.log("✅ AI response received:", responsePayload);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: responsePayload.message }]);
+      
     } catch (error) {
-      console.error("=== CHAT ERROR CAUGHT ===");
-      console.error("Error type:", typeof error);
-      console.error("Error constructor:", error.constructor.name);
-      console.error("Error message:", error.message);
-      console.error("Error stack:", error.stack);
-      console.error("Full error object:", error);
+      console.error('=== CHAT ERROR CAUGHT ===');
+      console.error('Error type:', typeof error);
+      console.error('Error constructor:', error?.constructor?.name);
+      console.error('Error message:', error?.message);
+      console.error('Error stack:', error?.stack);
+      console.error('Full error object:', error);
+      
+      // In dev mode, also throw to surface in dev console
+      if (import.meta.env.DEV) {
+        console.error('🚨 DEV MODE: Throwing error to surface in DevTools');
+        // Create a more informative error for dev mode
+        const devError = new Error(`TaskCard Chat Error: ${error?.message || 'Unknown error'}`);
+        devError.stack = error?.stack;
+        // Add original error details to the message for dev debugging
+        devError.message += `\n\nOriginal Error: ${JSON.stringify({
+          name: error?.constructor?.name,
+          message: error?.message,
+          stack: error?.stack
+        }, null, 2)}`;
+        throw devError;
+      }
       
       setChatMessages(prev => [...prev, { 
         role: 'assistant', 
