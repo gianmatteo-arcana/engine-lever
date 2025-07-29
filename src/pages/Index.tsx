@@ -40,9 +40,24 @@ const Index = () => {
               createdAt: new Date(profile.created_at)
             };
             setUserProfile(userData);
+          } else {
+            // Fallback user data if DB fetch fails
+            const fallbackUser: UserProfile = {
+              name: "Gianmatteo",
+              email: "gianmatteo.costanza@gmail.com",
+              createdAt: new Date()
+            };
+            setUserProfile(fallbackUser);
           }
         } catch (error) {
           console.error('Error fetching demo user data:', error);
+          // Always provide fallback user data
+          const fallbackUser: UserProfile = {
+            name: "Gianmatteo",
+            email: "gianmatteo.costanza@gmail.com",
+            createdAt: new Date()
+          };
+          setUserProfile(fallbackUser);
         }
         setLoading(false);
       };

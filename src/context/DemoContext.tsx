@@ -17,7 +17,7 @@ export const useDemoMode = () => {
 };
 
 export const DemoProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(true); // Set to true by default for demo
 
   const enterDemoMode = () => {
     setIsDemoMode(true);
