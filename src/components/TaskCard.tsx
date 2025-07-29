@@ -78,10 +78,11 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
     };
   }, [isFullscreen, isAutoShrinking]);
   
-  const handleChatSubmit = async () => {
-    if (!chatInput.trim() || isLoading) return;
+  const handleChatSubmit = async (message?: string) => {
+    const messageToSend = message || chatInput.trim();
+    if (!messageToSend || isLoading) return;
     
-    const userMessage = chatInput.trim();
+    const userMessage = messageToSend;
     console.log("=== CHAT SUBMIT START ===");
     console.log("User message:", userMessage);
     
@@ -310,21 +311,21 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                         <Button 
                           variant="outline" 
                           className="justify-start h-auto py-3 px-4"
-                          onClick={() => setChatInput("What's my current compliance status?")}
+                          onClick={() => handleChatSubmit("What's my current compliance status?")}
                         >
                           <span className="text-sm">Review my compliance status</span>
                         </Button>
                         <Button 
                           variant="outline" 
                           className="justify-start h-auto py-3 px-4"
-                          onClick={() => setChatInput("How do I update my Statement of Information?")}
+                          onClick={() => handleChatSubmit("How do I update my Statement of Information?")}
                         >
                           <span className="text-sm">Update Statement of Information</span>
                         </Button>
                         <Button 
                           variant="outline" 
                           className="justify-start h-auto py-3 px-4 flex items-center gap-2"
-                          onClick={() => setChatInput("Can you help me review a letter?")}
+                          onClick={() => handleChatSubmit("Can you help me review a letter?")}
                         >
                           <div className="w-4 h-4 border border-current rounded flex items-center justify-center">
                             <div className="w-2 h-2 border-l border-b border-current transform rotate-45 scale-75"></div>
@@ -334,7 +335,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                         <Button 
                           variant="outline" 
                           className="justify-start h-auto py-3 px-4"
-                          onClick={() => setChatInput("I have a question about compliance")}
+                          onClick={() => handleChatSubmit("I have a question about compliance")}
                         >
                           <span className="text-sm">Ask a question</span>
                         </Button>
@@ -399,7 +400,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                       <Button 
                         size="sm" 
                         className="px-3"
-                        onClick={handleChatSubmit}
+                        onClick={() => handleChatSubmit()}
                         disabled={isLoading || !chatInput.trim()}
                       >
                         {isLoading ? (
