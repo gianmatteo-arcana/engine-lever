@@ -111,21 +111,14 @@ export const TaskGrid = ({
               />
               <div className={`grid gap-3 px-4 ${isArchived ? 'grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10' : 'grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10'}`}>
                 {monthTasks.map((task, taskIndex) => (
-                  <div
+                  <CompactTaskCard
                     key={task.id}
-                    className="animate-scale-in"
-                    style={{ 
-                      animationDelay: `${(index * 0.1) + (taskIndex * 0.05)}s`,
-                      animationFillMode: 'both'
-                    }}
-                  >
-                    <CompactTaskCard
-                      task={task}
-                      urgency={getTaskUrgency(task)}
-                      onClick={() => onTaskClick(task.id)}
-                      overlayIcon={overlayIcons?.[task.id]}
-                    />
-                  </div>
+                    task={task}
+                    urgency={getTaskUrgency(task)}
+                    onClick={() => onTaskClick(task.id)}
+                    overlayIcon={overlayIcons?.[task.id]}
+                    animationDelay={`${(index * 0.1) + (taskIndex * 0.05)}s`}
+                  />
                 ))}
               </div>
             </div>

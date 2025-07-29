@@ -22,9 +22,10 @@ interface CompactTaskCardProps {
   onClick: () => void;
   urgency: "overdue" | "urgent" | "normal";
   overlayIcon?: "checkmark" | "warning" | "alarm";
+  animationDelay?: string;
 }
 
-export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: CompactTaskCardProps) => {
+export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon, animationDelay }: CompactTaskCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isCollapsing, setIsCollapsing] = useState(false);
   const [expandedAt, setExpandedAt] = useState<number | null>(null);
@@ -141,10 +142,12 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: Compact
     return (
       <div 
         ref={intersectionRef}
-        className="animate-card-expand col-span-full md:col-span-6 lg:col-span-8 min-w-[400px]" 
+        className="animate-card-expand col-span-full md:col-span-6 lg:col-span-8 min-w-[400px] animate-scale-in" 
         style={{ 
           opacity: isCollapsing ? 0.8 : 1,
-          transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+          transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          animationDelay: animationDelay || '0s',
+          animationFillMode: 'both'
         }}
       >
         <SmallBizCard
@@ -232,14 +235,16 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: Compact
       ref={intersectionRef}
       onClick={handleCardClick}
       className={cn(
-        "w-16 h-16 rounded-lg border-2 flex items-center justify-center",
+        "w-16 h-16 rounded-lg border-2 flex items-center justify-center animate-scale-in",
         "cursor-pointer transition-all duration-300 hover:scale-105",
         "text-xs font-bold shadow-sm hover:shadow-md",
         getUrgencyStyles()
       )}
       style={{ 
         opacity: isCollapsing ? 0.8 : 1,
-        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+        animationDelay: animationDelay || '0s',
+        animationFillMode: 'both'
       }}
       title={`${task.title}${task.due_date ? ` - Due: ${new Date(task.due_date).toLocaleDateString()}` : ''}`}
     >
