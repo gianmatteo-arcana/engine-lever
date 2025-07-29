@@ -81,7 +81,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
     };
   }, [isFullscreen, isAutoShrinking]);
   
-  const handleChatSubmit = async (message?: string) => {
+  const handleChatSubmit = async (message?: string, isActionInstruction = false) => {
     const messageToSend = message || chatInput.trim();
     if (!messageToSend || isLoading) return;
     
@@ -89,8 +89,10 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
     console.log("=== CHAT SUBMIT START ===");
     console.log("User message:", userMessage);
     
-    // Add user message to chat
-    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    // Only add user message to chat if it's not an action instruction
+    if (!isActionInstruction) {
+      setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    }
     setChatInput("");
     setIsLoading(true);
     
@@ -192,15 +194,15 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
     }
   };
 
-  const handleActionClick = (instruction: string, actionIndex: number) => {
+  const handleActionClick = (instruction: string, actionIndex: number, messageIndex: number) => {
     // Create a unique ID for this action click
-    const actionId = `${chatMessages.length}-${actionIndex}`;
+    const actionId = `${messageIndex}-${actionIndex}`;
     
     // Mark this action as clicked
     setClickedActionIds(prev => new Set(prev).add(actionId));
     
     // Send the instruction to the LLM (this is the AI instruction, not shown to user)
-    handleChatSubmit(instruction);
+    handleChatSubmit(instruction, true);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -407,7 +409,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                                        key={actionIndex}
                                        variant="outline"
                                        size="sm"
-                                       onClick={() => handleActionClick(action.instruction, actionIndex)}
+                                       onClick={() => handleActionClick(action.instruction, actionIndex, messageIndex)}
                                        disabled={isClicked}
                                        className={cn(
                                          "h-7 px-2 text-xs transition-all duration-200",
