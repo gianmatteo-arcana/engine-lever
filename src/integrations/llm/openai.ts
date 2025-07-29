@@ -55,12 +55,27 @@ export async function generateOpenAIResponse(requestEnvelope: RequestEnvelope): 
     console.log("Response timestamp:", data.timestamp);
     
     if (requestEnvelope.env === 'dev') {
-      console.log("=== DEV MODE: FULL RESPONSE ===", requestId);
-      console.log("Message content:", data.message);
-      console.log("Actions:", data.actions);
-      if (data.dev_notes) {
-        console.log("Dev notes:", data.dev_notes);
-      }
+    console.log("=== DEV MODE: FULL RESPONSE ===", requestId);
+    console.log("Message content:", data.message);
+    console.log("Actions:", data.actions);
+    if (data.dev_notes) {
+      console.log("Dev notes:", data.dev_notes);
+    }
+    
+    // Log to DevConsole in DEV MODE
+    if ((window as any).devConsoleLog) {
+      (window as any).devConsoleLog({
+        type: 'info',
+        message: `[DEV] Parsed Request Envelope - Session: ${requestId}`,
+        data: requestEnvelope
+      });
+      
+      (window as any).devConsoleLog({
+        type: 'info', 
+        message: `[DEV] Validated Response Payload - Session: ${requestId}`,
+        data: data
+      });
+    }
     }
 
     return data as ResponsePayload;
