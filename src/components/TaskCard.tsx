@@ -36,6 +36,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
   const [isLoading, setIsLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', content: string, actions?: any[]}>>([]);
   const [showBusinessProfileSetup, setShowBusinessProfileSetup] = useState(false);
+  const [clickedActionIds, setClickedActionIds] = useState<Set<string>>(new Set());
   const cardRef = useRef<HTMLDivElement>(null);
   const mediumCardRef = useRef<HTMLDivElement>(null);
 
@@ -191,12 +192,24 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
     }
   };
 
+  const handleActionClick = (instruction: string, actionIndex: number) => {
+    // Create a unique ID for this action click
+    const actionId = `${chatMessages.length}-${actionIndex}`;
+    
+    // Mark this action as clicked
+    setClickedActionIds(prev => new Set(prev).add(actionId));
+    
+    // Send the instruction to the LLM (this is the AI instruction, not shown to user)
+    handleChatSubmit(instruction);
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleChatSubmit();
     }
   };
+
   const getDaysUntilDue = () => {
     if (!task.due_date) return 0;
     
@@ -305,7 +318,6 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                 </div>
               </div>
 
-
               {/* Chat Interface Content */}
               <div className="flex-1 p-6 pt-0 animate-content-fade-in" style={{ animationDelay: '100ms' }}>
                 <div className="h-full flex flex-col">
@@ -363,8 +375,8 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                   {/* Chat Messages */}
                   {chatMessages.length > 0 && (
                     <div className="flex-1 overflow-y-auto space-y-4 mb-6">
-                      {chatMessages.map((message, index) => (
-                        <div key={index} className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                      {chatMessages.map((message, messageIndex) => (
+                        <div key={messageIndex} className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                             message.role === 'user' 
                               ? 'bg-primary text-primary-foreground' 
@@ -386,17 +398,28 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                              {/* Action Pills for AI messages */}
                              {message.role === 'assistant' && message.actions && message.actions.length > 0 && (
                                <div className="flex flex-wrap gap-2 mt-3">
-                                 {message.actions.map((action, actionIndex) => (
-                                   <Button
-                                     key={actionIndex}
-                                     variant="outline"
-                                     size="sm"
-                                     onClick={() => handleChatSubmit(action.instruction)}
-                                     className="h-7 px-2 text-xs border-primary/20 bg-primary-light/20 hover:bg-primary-light/40 hover:border-primary/40"
-                                   >
-                                     {action.label}
-                                   </Button>
-                                 ))}
+                                 {message.actions.map((action, actionIndex) => {
+                                   const actionId = `${messageIndex}-${actionIndex}`;
+                                   const isClicked = clickedActionIds.has(actionId);
+                                   
+                                   return (
+                                     <Button
+                                       key={actionIndex}
+                                       variant="outline"
+                                       size="sm"
+                                       onClick={() => handleActionClick(action.instruction, actionIndex)}
+                                       disabled={isClicked}
+                                       className={cn(
+                                         "h-7 px-2 text-xs transition-all duration-200",
+                                         isClicked
+                                           ? "bg-primary text-primary-foreground border-primary opacity-75 pointer-events-none"
+                                           : "border-primary/20 bg-primary-light/20 hover:bg-primary-light/40 hover:border-primary/40"
+                                       )}
+                                     >
+                                       {action.label}
+                                     </Button>
+                                   );
+                                 })}
                                </div>
                              )}
                            </div>
