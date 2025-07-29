@@ -783,26 +783,6 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                           />
                         )}
                         
-                        {/* Business Profile Setup Card */}
-                        <SmallBizCard
-                          title="Business Profile Setup"
-                          description="Complete your business information"
-                          variant="warning"
-                        >
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-foreground">Profile Completion</span>
-                              <span className="text-sm font-medium text-warning">85% Complete</span>
-                            </div>
-                            <div className="w-full bg-muted rounded-full h-2">
-                              <div className="bg-warning h-2 rounded-full" style={{ width: '85%' }} />
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              Add business address and contact details to complete your profile.
-                            </p>
-                          </div>
-                        </SmallBizCard>
-
                         {/* Business Snapshot Card */}
                         <SmallBizCard
                           title="Business Snapshot"
