@@ -149,9 +149,9 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: Compact
         }}
       >
         <SmallBizCard
-          title="Business Snapshot"
-          description="Where your paperwork stands today"
-          variant="success"
+          title={task.title}
+          description={task.description}
+          variant={getVariantFromUrgency()}
           onClick={handleCardClick}
           expandable={true}
           className="cursor-pointer relative"
@@ -170,15 +170,56 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: Compact
           </Button>
 
           <div className="space-y-4 pt-6 animate-content-fade-in">
+            {/* Task Details */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">
+                  Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : "No due date"}
+                </span>
+              </div>
+              {getUrgencyBadge()}
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                {task.due_date ? (
+                  getDaysUntilDue() >= 0 
+                    ? `${getDaysUntilDue()} days remaining`
+                    : `${Math.abs(getDaysUntilDue())} days overdue`
+                ) : "No deadline"}
+              </span>
+            </div>
+
+            {/* Status Badge */}
             <div className="flex items-center justify-center">
-              <Badge variant="default" className="text-sm bg-success/20 text-success border-success/30">
-                All set — 0 tasks pending
+              <Badge variant="default" className={cn(
+                "text-sm",
+                task.status === 'completed' 
+                  ? "bg-success/20 text-success border-success/30"
+                  : "bg-primary/20 text-primary border-primary/30"
+              )}>
+                {task.status === 'completed' ? 'Completed' : 'Archived'}
               </Badge>
             </div>
             
+            {/* Task specific content based on task type */}
             <div className="text-center">
-              <p className="text-muted-foreground">
-                Nice work! We'll tap you when something needs attention.
+              <p className="text-muted-foreground text-sm">
+                {task.task_type === 'operating_agreement' && 'Operating agreement review and updates completed successfully.'}
+                {task.task_type === 'boi_report' && 'Beneficial Ownership Information report filed with FinCEN.'}
+                {task.task_type === 'franchise_tax' && 'Annual franchise tax payment submitted to the state.'}
+                {task.task_type === 'registered_agent' && 'Registered agent information updated in state records.'}
+                {task.task_type === 'banking' && 'Business banking requirements reviewed and confirmed.'}
+                {task.task_type === 'ein_verification' && 'Employer Identification Number status verified with IRS.'}
+                {task.task_type === 'sales_tax' && 'Sales tax permit application submitted and approved.'}
+                {task.task_type === 'payroll_tax' && 'Payroll tax requirements setup completed.'}
+                {task.task_type === 'insurance' && 'Workers compensation insurance policy renewed.'}
+                {task.task_type === 'license_renewal' && 'Business license renewal completed successfully.'}
+                {!['operating_agreement', 'boi_report', 'franchise_tax', 'registered_agent', 'banking', 'ein_verification', 'sales_tax', 'payroll_tax', 'insurance', 'license_renewal'].includes(task.task_type) && 
+                  'Task completed successfully.'
+                }
               </p>
             </div>
           </div>
