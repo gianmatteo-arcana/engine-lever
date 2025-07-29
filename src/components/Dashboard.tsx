@@ -11,7 +11,7 @@ import { useTasks } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MessageCircle, X, User, LogOut, ChevronUp, List, Layers, LayoutGrid } from "lucide-react";
-import { generateResponse, getLLMProvider } from "@/integrations/llm";
+import { generateResponse, getLLMProvider, setLLMProvider } from "@/integrations/llm";
 import { ChatMessage, Task, DatabaseTask } from "@/integrations/llm/types";
 
 interface DashboardProps {
@@ -30,6 +30,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     }
     return "timeline";
   });
+  const [llmProvider, setLlmProvider] = useState(() => getLLMProvider());
   const { tasks, loading, error, getMostUrgentTask, getFutureTasks, getTaskUrgency } = useTasks();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const welcomeTaskRef = useRef<HTMLDivElement>(null);
@@ -375,6 +376,12 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     localStorage.setItem('dashboard-layout-mode', mode);
   };
 
+  // Handle LLM provider change
+  const handleLLMProviderChange = (provider: "openai" | "claude") => {
+    setLlmProvider(provider);
+    setLLMProvider(provider);
+  };
+
   // Scroll to home position - showing bottom portion of compact cards
   const scrollToHomePosition = () => {
     if (welcomeTaskRef.current && scrollContainerRef.current) {
@@ -560,27 +567,48 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
               <span className="text-sm text-muted-foreground">Your AI Compliance Assistant</span>
             </div>
             <div className="flex items-center gap-3">
-              {/* Dev Mode Layout Selector */}
+              {/* Dev Mode Selectors */}
               {import.meta.env.DEV && (
-                <Select value={layoutMode} onValueChange={handleLayoutModeChange}>
-                  <SelectTrigger className="w-[140px] h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border border-border shadow-lg">
-                    <SelectItem value="timeline" className="text-xs">
-                      <div className="flex items-center gap-2">
-                        <List className="h-3 w-3" />
-                        Timeline Mode
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="stacked" className="text-xs">
-                      <div className="flex items-center gap-2">
-                        <Layers className="h-3 w-3" />
-                        Stacked Mode
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                <>
+                  <Select value={layoutMode} onValueChange={handleLayoutModeChange}>
+                    <SelectTrigger className="w-[140px] h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border border-border shadow-lg z-50">
+                      <SelectItem value="timeline" className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <List className="h-3 w-3" />
+                          Timeline Mode
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="stacked" className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <Layers className="h-3 w-3" />
+                          Stacked Mode
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={llmProvider} onValueChange={handleLLMProviderChange}>
+                    <SelectTrigger className="w-[120px] h-8 text-xs">
+                      <SelectValue placeholder="LLM" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border border-border shadow-lg z-50">
+                      <SelectItem value="openai" className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-green-500">●</span>
+                          OpenAI
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="claude" className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-blue-500">●</span>
+                          Claude
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </>
               )}
               <Button
                 variant="outline"
@@ -649,27 +677,48 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
             <span className="text-sm text-muted-foreground">The business ally you can trust.</span>
           </div>
           <div className="flex items-center gap-3">
-            {/* Dev Mode Layout Selector */}
+            {/* Dev Mode Selectors */}
             {import.meta.env.DEV && (
-              <Select value={layoutMode} onValueChange={handleLayoutModeChange}>
-                <SelectTrigger className="w-[140px] h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border border-border shadow-lg">
-                  <SelectItem value="timeline" className="text-xs">
-                    <div className="flex items-center gap-2">
-                      <List className="h-3 w-3" />
-                      Timeline Mode
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="stacked" className="text-xs">
-                    <div className="flex items-center gap-2">
-                      <Layers className="h-3 w-3" />
-                      Stacked Mode
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <>
+                <Select value={layoutMode} onValueChange={handleLayoutModeChange}>
+                  <SelectTrigger className="w-[140px] h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border border-border shadow-lg z-50">
+                    <SelectItem value="timeline" className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <List className="h-3 w-3" />
+                        Timeline Mode
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="stacked" className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <Layers className="h-3 w-3" />
+                        Stacked Mode
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={llmProvider} onValueChange={handleLLMProviderChange}>
+                  <SelectTrigger className="w-[120px] h-8 text-xs">
+                    <SelectValue placeholder="LLM" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border border-border shadow-lg z-50">
+                    <SelectItem value="openai" className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-500">●</span>
+                        OpenAI
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="claude" className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-blue-500">●</span>
+                        Claude
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
             )}
             <div className="flex items-center gap-2">
               <Button
