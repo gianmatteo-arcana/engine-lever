@@ -3,7 +3,7 @@ import { SmallBizCard } from "./SmallBizCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, AlertTriangle, MessageCircle, Maximize2, Minimize2, Send } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -30,10 +30,24 @@ interface TaskCardProps {
 export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, isGreeting }: TaskCardProps) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isAutoShrinking, setIsAutoShrinking] = useState(false);
+  const [mediumHeight, setMediumHeight] = useState(0);
   const [chatInput, setChatInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', content: string}>>([]);
   const cardRef = useRef<HTMLDivElement>(null);
+  const mediumCardRef = useRef<HTMLDivElement>(null);
+
+  // Measure the medium card height so the fullscreen view can shrink to it
+  useLayoutEffect(() => {
+    const measure = () => {
+      if (mediumCardRef.current) {
+        setMediumHeight(mediumCardRef.current.offsetHeight);
+      }
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   // Intersection observer to detect when card is scrolled out of view
   useEffect(() => {
@@ -196,12 +210,15 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           {/* Fullscreen view - always rendered but conditionally visible */}
             <div
               className={cn(
-                "bg-card border rounded-lg shadow-lg overflow-hidden flex flex-col transition-all duration-[2000ms] ease-in-out",
-                isFullscreen ? "opacity-100 visible" : "opacity-0 invisible absolute inset-0 pointer-events-none",
-                isAutoShrinking && "animate-auto-shrink"
+                "bg-card border rounded-lg shadow-lg overflow-hidden flex flex-col transition-[height,opacity] duration-[2000ms] ease-in-out",
+                isFullscreen ? "opacity-100 visible" : "opacity-0 invisible absolute inset-0 pointer-events-none"
               )}
               style={{
-                height: isFullscreen ? 'calc(100vh - 200px)' : 'auto',
+                height: isAutoShrinking
+                  ? mediumHeight || 'auto'
+                  : isFullscreen
+                    ? 'calc(100vh - 200px)'
+                    : 'auto',
                 transformOrigin: 'top left'
               }}
             >
@@ -362,10 +379,15 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           </div>
 
           {/* Medium size view - always rendered but conditionally visible */}
-          <div className={cn(
-            "transition-all duration-[2000ms] ease-out",
-            isFullscreen ? "opacity-0 invisible pointer-events-none" : "opacity-100 visible"
-          )}>
+          <div
+            ref={mediumCardRef}
+            className={cn(
+              "transition-opacity duration-[2000ms] ease-in-out",
+              isFullscreen && !isAutoShrinking
+                ? "opacity-0 invisible pointer-events-none"
+                : "opacity-100 visible"
+            )}
+          >
             <SmallBizCard
               title={task.title}
               description={task.description}
