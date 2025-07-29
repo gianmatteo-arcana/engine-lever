@@ -23,9 +23,10 @@ interface CompactTaskCardProps {
   urgency: "overdue" | "urgent" | "normal";
   overlayIcon?: "checkmark" | "warning" | "alarm";
   animationDelay?: string;
+  size?: "collapsed" | "medium" | "full";
 }
 
-export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon, animationDelay }: CompactTaskCardProps) => {
+export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon, animationDelay, size = "collapsed" }: CompactTaskCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isCollapsing, setIsCollapsing] = useState(false);
   const [expandedAt, setExpandedAt] = useState<number | null>(null);
@@ -111,6 +112,19 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon, animation
     }
   };
 
+  const getSizeClasses = () => {
+    switch (size) {
+      case "collapsed":
+        return "col-span-1";
+      case "medium":
+        return "col-span-3 sm:col-span-4 md:col-span-5 lg:col-span-6";
+      case "full":
+        return "col-span-full";
+      default:
+        return "col-span-1";
+    }
+  };
+
   const handleCardClick = () => {
     if (!isExpanded) {
       setExpandedAt(Date.now());
@@ -142,7 +156,7 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon, animation
     return (
       <div 
         ref={intersectionRef}
-        className="animate-card-expand col-span-full md:col-span-6 lg:col-span-8 min-w-[400px] animate-scale-in" 
+        className={cn("animate-card-expand animate-scale-in", getSizeClasses())} 
         style={{ 
           opacity: isCollapsing ? 0.8 : 1,
           transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)',

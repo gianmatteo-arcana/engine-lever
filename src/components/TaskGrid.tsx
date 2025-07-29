@@ -118,6 +118,7 @@ export const TaskGrid = ({
                     onClick={() => onTaskClick(task.id)}
                     overlayIcon={overlayIcons?.[task.id]}
                     animationDelay={`${(index * 0.1) + (taskIndex * 0.05)}s`}
+                    size="medium"
                   />
                 ))}
               </div>
