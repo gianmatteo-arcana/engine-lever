@@ -31,6 +31,7 @@ export interface DatabaseTask {
 export interface Action {
   label: string;
   instruction: string;
+  action_id?: string; // Backend includes this field
 }
 
 export interface PsychState {
