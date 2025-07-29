@@ -123,22 +123,47 @@ export const StackedDashboard = ({
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-4xl mx-auto">
-        <div className="relative h-[600px]">
-          {cards.map((card, index) => (
+        {expandedCard === "welcome" ? (
+          <div className="space-y-6">
             <StackedCard
-              key={card.id}
-              id={card.id}
-              title={card.title}
-              index={index}
-              isExpanded={expandedCard === card.id}
+              key="welcome"
+              id="welcome"
+              title={cards[0].title}
+              index={0}
+              isExpanded={true}
               onToggle={(cardId) => 
                 setExpandedCard(expandedCard === cardId ? null : cardId)
               }
-              content={card.content}
-              expandedContent={card.expandedContent}
+              content={cards[0].content}
+              expandedContent={cards[0].expandedContent}
             />
-          ))}
-        </div>
+            <div className="pt-6">
+              {cards.slice(1).map((card, originalIndex) => (
+                <div key={card.id} className="mb-4">
+                  <h3 className="text-lg font-semibold text-foreground mb-2">{card.title}</h3>
+                  {card.content}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="relative h-[600px]">
+            {cards.map((card, index) => (
+              <StackedCard
+                key={card.id}
+                id={card.id}
+                title={card.title}
+                index={index}
+                isExpanded={expandedCard === card.id}
+                onToggle={(cardId) => 
+                  setExpandedCard(expandedCard === cardId ? null : cardId)
+                }
+                content={card.content}
+                expandedContent={card.expandedContent}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
