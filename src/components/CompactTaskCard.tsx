@@ -127,7 +127,16 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: Compact
   };
 
   // Use literal icon from data or fallback to task type abbreviation
+  console.log('CompactTaskCard DEBUG:', {
+    taskId: task.id,
+    taskData: task.data,
+    dataIcon: task.data?.icon,
+    taskType: task.task_type,
+    overlayIcon
+  });
+  
   const icon = task.data?.icon || task.task_type.substring(0, 2).toUpperCase();
+  console.log('Final icon value:', icon);
 
   if (isExpanded) {
     return (
