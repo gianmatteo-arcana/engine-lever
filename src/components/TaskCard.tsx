@@ -39,6 +39,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
   const [clickedActionIds, setClickedActionIds] = useState<Set<string>>(new Set());
   const cardRef = useRef<HTMLDivElement>(null);
   const mediumCardRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
 
   // Measure the medium card height so the fullscreen view can shrink to it
   useLayoutEffect(() => {
@@ -80,6 +81,14 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
       observer.disconnect();
     };
   }, [isFullscreen, isAutoShrinking]);
+
+  // Auto-scroll to bottom when new messages are added or when loading state changes
+  useEffect(() => {
+    if (messagesRef.current) {
+      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+    }
+  }, [chatMessages, isLoading]);
+  
   
   const handleChatSubmit = async (message?: string, isActionInstruction = false) => {
     const messageToSend = message || chatInput.trim();
@@ -323,7 +332,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
               {/* Chat Interface Content */}
               <div className="flex-1 p-6 pt-0 animate-content-fade-in flex flex-col" style={{ animationDelay: '100ms' }}>
                 {/* Messages Area - Scrollable */}
-                <div className="flex-1 overflow-y-auto min-h-0">
+                <div ref={messagesRef} className="flex-1 overflow-y-auto min-h-0">
                   {/* Welcome Message - only show when no messages */}
                   {chatMessages.length === 0 && (
                     <>
