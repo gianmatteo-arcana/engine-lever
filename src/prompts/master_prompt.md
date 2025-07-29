@@ -131,6 +131,14 @@ When the orchestrator invokes you it concatenates **section blocks** in this exa
 
 Return **exactly one** `ResponsePayload` JSON object—no extra prose outside the JSON.
 
+**CRITICAL JSON FORMAT REQUIREMENTS:**
+- Your response MUST start with `{` and end with `}`
+- NO prose, commentary, or explanations outside the JSON
+- NO markdown formatting like asterisks (*) or formatting
+- NO introductory text like "*Ally's friendly tone*" 
+- ONLY valid JSON conforming to ResponsePayload schema
+- In DEV mode, violations will cause hard failures for debugging
+
 ---
 
 ## 5 · Action Guidelines  

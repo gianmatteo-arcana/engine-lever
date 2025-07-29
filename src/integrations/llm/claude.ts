@@ -39,6 +39,46 @@ export async function generateClaudeResponse(requestEnvelope: RequestEnvelope): 
     console.log("Response duration:", `${duration.toFixed(2)}ms`);
     console.log("Response data keys:", Object.keys(data));
 
+    // Check for DEV mode JSON parse errors first
+    if (requestEnvelope.env === 'dev' && data.error) {
+      console.error('=== DEV MODE: LLM ERROR DETECTED ===', requestId);
+      console.error('Error type:', data.error);
+      console.error('Error details:', data.details);
+      
+      // Log to DevConsole for high visibility
+      if ((window as any).devConsoleLog) {
+        (window as any).devConsoleLog({
+          type: 'error',
+          message: `[CRITICAL] ${data.error}: ${data.message}`,
+          data: data.details
+        });
+      }
+      
+      throw new Error(`DEV MODE: ${data.error} - ${data.message}. Check DevConsole for details.`);
+    }
+
+    // Check for parse errors in dev_notes
+    if (requestEnvelope.env === 'dev' && data.dev_notes && data.dev_notes.includes('Parse error:')) {
+      console.error('=== DEV MODE: JSON PARSE ERROR IN RESPONSE ===', requestId);
+      console.error('Dev notes:', data.dev_notes);
+      
+      // Log to DevConsole for high visibility
+      if ((window as any).devConsoleLog) {
+        (window as any).devConsoleLog({
+          type: 'error',
+          message: `[CRITICAL] Claude returned invalid JSON format`,
+          data: {
+            devNotes: data.dev_notes,
+            responseData: data,
+            requestId: requestId,
+            troubleshooting: 'Claude did not follow JSON-only output instructions'
+          }
+        });
+      }
+      
+      throw new Error(`DEV MODE: Claude JSON parse error detected - ${data.dev_notes}`);
+    }
+
     // Validate ResponsePayload structure
     if (!data.message || !Array.isArray(data.actions)) {
       console.error('=== INVALID RESPONSE PAYLOAD ===', requestId);

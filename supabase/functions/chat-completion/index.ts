@@ -214,6 +214,34 @@ serve(async (req) => {
       console.log('=== END RAW RESPONSE ===');
     }
 
+    // Validate response format before parsing
+    if (!generatedText.trim().startsWith('{')) {
+      console.error('=== INVALID RESPONSE FORMAT ===');
+      console.error('Request ID:', requestEnvelope.session_id);
+      console.error('Response does not start with JSON - starts with:', generatedText.substring(0, 50));
+      console.error('Raw response length:', generatedText.length);
+      
+      if (isDev) {
+        console.error('=== DEV MODE: HARD FAILURE FOR NON-JSON RESPONSE ===');
+        console.error('Full raw response:', generatedText);
+        return new Response(JSON.stringify({
+          error: 'LLM_PARSE_ERROR',
+          message: 'LLM returned prose instead of JSON in DEV mode',
+          details: {
+            responsePreview: generatedText.substring(0, 500),
+            responseLength: generatedText.length,
+            expectedFormat: 'JSON object starting with {',
+            actualStart: generatedText.substring(0, 50),
+            requestId: requestEnvelope.session_id,
+            provider: provider
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 422
+        });
+      }
+    }
+
     // Parse and validate ResponsePayload
     let responsePayload: ResponsePayload;
     try {
@@ -276,7 +304,27 @@ serve(async (req) => {
       console.error('Raw text preview:', generatedText.substring(0, 200) + '...');
       console.error('Request ID:', requestEnvelope.session_id);
       
-      // Fallback response
+      if (isDev) {
+        console.error('=== DEV MODE: HARD FAILURE FOR JSON PARSE ERROR ===');
+        console.error('Full raw response:', generatedText);
+        return new Response(JSON.stringify({
+          error: 'LLM_JSON_PARSE_ERROR',
+          message: 'Failed to parse LLM response as JSON in DEV mode',
+          details: {
+            parseError: parseError.message,
+            responsePreview: generatedText.substring(0, 500),
+            responseLength: generatedText.length,
+            requestId: requestEnvelope.session_id,
+            provider: provider,
+            troubleshooting: 'LLM returned invalid JSON format - check master prompt instructions'
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 422
+        });
+      }
+      
+      // Fallback response for production
       responsePayload = {
         message: generatedText || "I'm sorry, I couldn't process your request properly.",
         actions: [],
