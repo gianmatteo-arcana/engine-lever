@@ -753,27 +753,47 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                     </div>
                   )}
 
-                  {/* Archived Tasks Section */}
-                  {archivedTasks.length > 0 && (
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold text-foreground">Archived Tasks</h3>
-                      <TaskGrid 
-                        tasks={archivedTasks} 
-                        onTaskClick={(taskId) => console.log('Clicked archived task:', taskId)}
-                        overlayIcons={archivedTaskOverlayIcons}
-                        isArchived={true}
-                        className="archived-tasks"
-                      />
-                    </div>
-                  )}
                 </div>
 
+                {/* Chat Interface - Right Column */}
+                {showChat && (
+                  <div className="lg:col-span-1">
+                    <ChatInterface
+                      messages={chatMessages}
+                      onSendMessage={handleSendMessage}
+                      onPillClick={handlePillClick}
+                      isTyping={isTyping}
+                      placeholder="Ask me anything about your business compliance..."
+                      className="sticky top-20 h-[calc(100vh-120px)]"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
+
           {/* Extra space for scrolling wiggle room */}
           <div className="h-96"></div>
         </div>
+
+        {/* Archived Tasks Section - Same container structure as future tasks */}
+        {archivedTasks.length > 0 && (
+          <div className="bg-muted/20">
+            <div className="container mx-auto px-4 py-2">
+              <div className="pb-2">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-foreground px-4">Archived Tasks</h3>
+                </div>
+                <TaskGrid 
+                  tasks={archivedTasks} 
+                  onTaskClick={(taskId) => console.log('Clicked archived task:', taskId)}
+                  overlayIcons={archivedTaskOverlayIcons}
+                  isArchived={true}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* User Profile Card */}
