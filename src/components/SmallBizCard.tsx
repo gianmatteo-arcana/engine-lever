@@ -44,9 +44,9 @@ export const SmallBizCard = ({
           {title}
         </CardTitle>
         {description && (
-          <p className="text-muted-foreground">
-            Ally is watching your deadlines so you don't have to. Two filings are in progress—tap Chat with Ally if you'd like a quick update or have any questions about your business.
-          </p>
+          <CardDescription className="text-muted-foreground">
+            {description}
+          </CardDescription>
         )}
       </CardHeader>
       <CardContent>
