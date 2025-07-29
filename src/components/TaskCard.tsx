@@ -383,7 +383,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
             ref={mediumCardRef}
             className={cn(
               "transition-opacity duration-[2000ms] ease-in-out",
-              isFullscreen && !isAutoShrinking
+              isFullscreen
                 ? "opacity-0 invisible pointer-events-none"
                 : "opacity-100 visible"
             )}
