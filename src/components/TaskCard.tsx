@@ -29,6 +29,37 @@ interface TaskCardProps {
 
 export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, isGreeting }: TaskCardProps) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const handleChatSubmit = async () => {
+    if (!chatInput.trim() || isLoading) return;
+    
+    console.log("Submitting chat message:", chatInput);
+    setIsLoading(true);
+    
+    try {
+      // TODO: Replace with actual API call to your chat service
+      console.log("Sending message to API:", chatInput);
+      
+      // Simulate API call for now
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log("Message sent successfully");
+      
+      setChatInput("");
+    } catch (error) {
+      console.error("Error sending message:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleChatSubmit();
+    }
+  };
   const getDaysUntilDue = () => {
     if (!task.due_date) return 0;
     
@@ -153,11 +184,24 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                       <div className="flex gap-2 p-4 bg-background border rounded-lg">
                         <input 
                           type="text" 
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          onKeyPress={handleKeyPress}
                           placeholder="Ask me anything..."
-                          className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground"
+                          disabled={isLoading}
+                          className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground disabled:opacity-50"
                         />
-                        <Button size="sm" className="px-3">
-                          <Send className="w-4 h-4" />
+                        <Button 
+                          size="sm" 
+                          className="px-3"
+                          onClick={handleChatSubmit}
+                          disabled={isLoading || !chatInput.trim()}
+                        >
+                          {isLoading ? (
+                            <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                          ) : (
+                            <Send className="w-4 h-4" />
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -291,11 +335,24 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                     <div className="flex gap-2 p-3 bg-background border rounded-lg">
                       <input 
                         type="text" 
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyPress={handleKeyPress}
                         placeholder="Ask me anything..."
-                        className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground"
+                        disabled={isLoading}
+                        className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground disabled:opacity-50"
                       />
-                      <Button size="sm" className="px-2">
-                        <Send className="w-3 h-3" />
+                      <Button 
+                        size="sm" 
+                        className="px-2"
+                        onClick={handleChatSubmit}
+                        disabled={isLoading || !chatInput.trim()}
+                      >
+                        {isLoading ? (
+                          <div className="w-3 h-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        ) : (
+                          <Send className="w-3 h-3" />
+                        )}
                       </Button>
                     </div>
                   </div>
