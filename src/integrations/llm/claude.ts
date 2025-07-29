@@ -2,19 +2,19 @@ import { RequestEnvelope, ResponsePayload } from './types';
 import { supabase } from '@/integrations/supabase/client';
 import masterPrompt from '@/prompts/master_prompt.md?raw';
 
-export async function generateOpenAIResponse(requestEnvelope: RequestEnvelope): Promise<ResponsePayload> {
+export async function generateClaudeResponse(requestEnvelope: RequestEnvelope): Promise<ResponsePayload> {
   const requestId = requestEnvelope.session_id || 'unknown';
   const startTime = performance.now();
-  
+
   try {
     console.log("=== CLIENT CALLING EDGE FUNCTION ===", requestId);
     console.log("Request envelope keys:", Object.keys(requestEnvelope));
     console.log("Environment mode:", requestEnvelope.env);
-    
+
     const { data, error } = await supabase.functions.invoke('chat-completion', {
       body: {
         requestEnvelope,
-        provider: 'openai',
+        provider: 'claude',
         masterPrompt
       }
     });
@@ -54,7 +54,7 @@ export async function generateOpenAIResponse(requestEnvelope: RequestEnvelope): 
     console.log("Message length:", data.message.length);
     console.log("Actions count:", data.actions.length);
     console.log("Response timestamp:", data.timestamp);
-    
+
     if (requestEnvelope.env === 'dev') {
     console.log("=== DEV MODE: FULL RESPONSE ===", requestId);
     console.log("Message content:", data.message);
@@ -62,7 +62,7 @@ export async function generateOpenAIResponse(requestEnvelope: RequestEnvelope): 
     if (data.dev_notes) {
       console.log("Dev notes:", data.dev_notes);
     }
-    
+
     // Log to DevConsole in DEV MODE
     if ((window as any).devConsoleLog) {
       (window as any).devConsoleLog({
@@ -70,9 +70,9 @@ export async function generateOpenAIResponse(requestEnvelope: RequestEnvelope): 
         message: `[DEV] Parsed Request Envelope - Session: ${requestId}`,
         data: requestEnvelope
       });
-      
+
       (window as any).devConsoleLog({
-        type: 'info', 
+        type: 'info',
         message: `[DEV] Validated Response Payload - Session: ${requestId}`,
         data: data
       });
@@ -83,11 +83,11 @@ export async function generateOpenAIResponse(requestEnvelope: RequestEnvelope): 
   } catch (error) {
     const endTime = performance.now();
     const duration = endTime - startTime;
-    
-    console.error('=== OPENAI INTEGRATION ERROR ===', requestId);
+
+    console.error('=== CLAUDE INTEGRATION ERROR ===', requestId);
     console.error('Error duration:', `${duration.toFixed(2)}ms`);
-    console.error('Error type:', error.constructor.name);
-    console.error('Error message:', error.message);
+    console.error('Error type:', (error as any).constructor.name);
+    console.error('Error message:', (error as any).message);
     console.error('Full error:', error);
     throw error;
   }

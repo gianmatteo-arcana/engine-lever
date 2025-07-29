@@ -11,7 +11,7 @@ import { useTasks } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MessageCircle, X, User, LogOut, ChevronUp, List, Layers, LayoutGrid } from "lucide-react";
-import { generateResponse } from "@/integrations/llm";
+import { generateResponse, getLLMProvider } from "@/integrations/llm";
 import { ChatMessage, Task, DatabaseTask } from "@/integrations/llm/types";
 
 interface DashboardProps {
@@ -137,7 +137,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
         env: 'dev' as const // Enable DEV MODE logging
       };
       
-      const responsePayload = await generateResponse(requestEnvelope);
+      const responsePayload = await generateResponse(requestEnvelope, getLLMProvider());
       
       console.log("=== AI RESPONSE ANALYSIS ===");
       console.log("Full responsePayload:", JSON.stringify(responsePayload, null, 2));

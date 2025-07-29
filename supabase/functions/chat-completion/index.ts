@@ -2,6 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,14 +55,15 @@ serve(async (req) => {
   }
 
   try {
-    if (!openAIApiKey) {
-      throw new Error('OpenAI API key not configured in Supabase secrets');
-    }
-
-    const { requestEnvelope, masterPrompt } = await req.json();
+    const { requestEnvelope, provider: reqProvider, masterPrompt } = await req.json();
 
     if (!requestEnvelope || !requestEnvelope.user_message) {
       throw new Error('RequestEnvelope with user_message is required');
+    }
+
+    const provider = (reqProvider ?? Deno.env.get('LLM_PROVIDER') ?? 'openai') as 'openai' | 'claude';
+    if (provider !== 'openai' && provider !== 'claude') {
+      throw new Error(`Unsupported provider: ${provider}`);
     }
 
     const isDev = requestEnvelope.env === 'dev';
@@ -127,53 +129,82 @@ serve(async (req) => {
       console.log('Total prompt length:', assembledPrompt.length);
     }
 
-    const openAIStartTime = Date.now();
-    console.log('=== CALLING OPENAI API ===');
+    const llmStartTime = Date.now();
+    console.log(`=== CALLING ${provider.toUpperCase()} API ===`);
     console.log('Request ID:', requestEnvelope.session_id);
     console.log('Prompt length:', assembledPrompt.length);
-    
+
     if (isDev) {
-      console.log('=== FULL PROMPT BEING SENT TO OPENAI ===');
+      console.log(`=== FULL PROMPT BEING SENT TO ${provider.toUpperCase()} ===`);
       console.log(assembledPrompt);
       console.log('=== END PROMPT ===');
     }
-    
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'user', content: assembledPrompt }
-        ],
-        temperature: 0.2,
-        response_format: { type: "json_object" }
-      }),
-    });
 
-    const openAIEndTime = Date.now();
-    const openAIDuration = openAIEndTime - openAIStartTime;
-    
-    console.log('=== OPENAI API RESPONSE ===');
-    console.log('Duration:', `${openAIDuration}ms`);
+    let response: Response;
+    if (provider === 'claude') {
+      if (!anthropicApiKey) {
+        throw new Error('Anthropic API key not configured in Supabase secrets');
+      }
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': `${anthropicApiKey}`,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'claude-3-haiku-20240307',
+          max_tokens: 1024,
+          temperature: 0.2,
+          messages: [{ role: 'user', content: assembledPrompt }]
+        })
+      });
+    } else {
+      if (!openAIApiKey) {
+        throw new Error('OpenAI API key not configured in Supabase secrets');
+      }
+      response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'user', content: assembledPrompt }
+          ],
+          temperature: 0.2,
+          response_format: { type: "json_object" }
+        }),
+      });
+    }
+
+    const llmEndTime = Date.now();
+    const llmDuration = llmEndTime - llmStartTime;
+
+    console.log(`=== ${provider.toUpperCase()} API RESPONSE ===`);
+    console.log('Duration:', `${llmDuration}ms`);
     console.log('Status:', response.status);
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error('=== OPENAI API ERROR ===');
+      console.error(`=== ${provider.toUpperCase()} API ERROR ===`);
       console.error('Status:', response.status);
       console.error('Error data:', errorData);
       console.error('Request ID:', requestEnvelope.session_id);
-      throw new Error(`OpenAI request failed: ${response.status} - ${errorData}`);
+      throw new Error(`${provider} request failed: ${response.status} - ${errorData}`);
     }
 
     const data = await response.json();
-    const generatedText = data.choices?.[0]?.message?.content?.trim() ?? '';
+    let generatedText = '';
+    if (provider === 'claude') {
+      generatedText = data.content?.[0]?.text?.trim() ?? '';
+    } else {
+      generatedText = data.choices?.[0]?.message?.content?.trim() ?? '';
+    }
 
-    console.log('=== RAW OPENAI RESPONSE ===');
+    console.log(`=== RAW ${provider.toUpperCase()} RESPONSE ===`);
     console.log('Response length:', generatedText.length);
     console.log('Usage tokens:', data.usage);
     

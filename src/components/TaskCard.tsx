@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, AlertTriangle, MessageCircle, Maximize2, Minimize2, Send } from "lucide-react";
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
-import { generateResponse } from "@/integrations/llm";
+import { generateResponse, getLLMProvider } from "@/integrations/llm";
 import { BusinessProfileSetup } from "./BusinessProfileSetup";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -144,7 +144,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
       }
       
       console.log("About to call generateResponse...");
-      const responsePayload = await generateResponse(requestEnvelope);
+      const responsePayload = await generateResponse(requestEnvelope, getLLMProvider());
       
       console.log("=== TASKCARD AI RESPONSE ANALYSIS ===");
       console.log("Full responsePayload:", JSON.stringify(responsePayload, null, 2));
