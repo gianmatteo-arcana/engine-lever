@@ -239,6 +239,67 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                     Expand
                   </Button>
                 </div>
+
+                {/* Expanded Chat Interface - appears below existing content with animation */}
+                {isFullscreen && (
+                  <div className="animate-fade-in pt-4 border-t border-border">
+                    {/* Ally AI Assistant Header */}
+                    <div className="mb-4 animate-content-fade-in">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                          <MessageCircle className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-foreground">Ally - Your AI Assistant</h3>
+                          <p className="text-sm text-muted-foreground">I'm here to help with your compliance needs</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Welcome Message */}
+                    <div className="flex items-start gap-3 mb-4">
+                      <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                        <MessageCircle className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="bg-muted/50 rounded-lg p-3 flex-1">
+                        <p className="text-sm text-foreground">
+                          Hello! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Quick Action Buttons */}
+                    <div className="grid grid-cols-2 gap-2 mb-4">
+                      <Button variant="outline" size="sm" className="justify-start h-auto py-2 px-3 text-xs">
+                        Review my compliance status
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start h-auto py-2 px-3 text-xs">
+                        Update Statement of Information
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start h-auto py-2 px-3 text-xs flex items-center gap-2">
+                        <div className="w-3 h-3 border border-current rounded flex items-center justify-center">
+                          <div className="w-1.5 h-1.5 border-l border-b border-current transform rotate-45 scale-75"></div>
+                        </div>
+                        Review letter
+                      </Button>
+                      <Button variant="outline" size="sm" className="justify-start h-auto py-2 px-3 text-xs">
+                        Ask a question
+                      </Button>
+                    </div>
+
+                    {/* Chat Input Area */}
+                    <div className="flex gap-2 p-3 bg-background border rounded-lg">
+                      <input 
+                        type="text" 
+                        placeholder="Ask me anything..."
+                        className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground"
+                      />
+                      <Button size="sm" className="px-2">
+                        <Send className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </SmallBizCard>
           )}
