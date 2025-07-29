@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { SmallBizCard } from "./SmallBizCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, AlertTriangle, X } from "lucide-react";
+import { Calendar, Clock, AlertTriangle, X, Check, AlertCircle } from "lucide-react";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -21,9 +21,10 @@ interface CompactTaskCardProps {
   task: Task;
   onClick: () => void;
   urgency: "overdue" | "urgent" | "normal";
+  overlayIcon?: "checkmark" | "warning" | "alarm";
 }
 
-export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps) => {
+export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: CompactTaskCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isCollapsing, setIsCollapsing] = useState(false);
   const [expandedAt, setExpandedAt] = useState<number | null>(null);
@@ -187,7 +188,28 @@ export const CompactTaskCard = ({ task, onClick, urgency }: CompactTaskCardProps
       }}
       title={`${task.title}${task.due_date ? ` - Due: ${new Date(task.due_date).toLocaleDateString()}` : ''}`}
     >
-      {icon}
+      <div className="relative w-full h-full flex items-center justify-center">
+        {icon}
+        {overlayIcon && (
+          <div className="absolute -bottom-1 -right-1">
+            {overlayIcon === "checkmark" && (
+              <div className="w-4 h-4 bg-success rounded-full flex items-center justify-center">
+                <Check className="w-2.5 h-2.5 text-white" />
+              </div>
+            )}
+            {overlayIcon === "warning" && (
+              <div className="w-4 h-4 bg-warning rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-2.5 h-2.5 text-white" />
+              </div>
+            )}
+            {overlayIcon === "alarm" && (
+              <div className="w-4 h-4 bg-destructive rounded-full flex items-center justify-center">
+                <AlertCircle className="w-2.5 h-2.5 text-white" />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

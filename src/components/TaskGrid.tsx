@@ -18,9 +18,10 @@ interface TaskGridProps {
   tasks: Task[];
   onTaskClick: (taskId: string) => void;
   className?: string;
+  overlayIcons?: { [taskId: string]: "checkmark" | "warning" | "alarm" };
 }
 
-export const TaskGrid = ({ tasks, onTaskClick, className }: TaskGridProps) => {
+export const TaskGrid = ({ tasks, onTaskClick, className, overlayIcons }: TaskGridProps) => {
   const getTaskUrgency = (task: Task): "overdue" | "urgent" | "normal" => {
     if (!task.due_date) return "normal";
     
@@ -102,6 +103,7 @@ export const TaskGrid = ({ tasks, onTaskClick, className }: TaskGridProps) => {
                       task={task}
                       urgency={getTaskUrgency(task)}
                       onClick={() => onTaskClick(task.id)}
+                      overlayIcon={overlayIcons?.[task.id]}
                     />
                   </div>
                 ))}

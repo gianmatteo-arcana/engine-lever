@@ -4,6 +4,7 @@ import { SmallBizCard } from "./SmallBizCard";
 import { BusinessProfileCard } from "./BusinessProfileCard";
 import { StatementOfInfoCard } from "./StatementOfInfoCard";
 import { TaskCard } from "./TaskCard";
+import { TaskGrid } from "./TaskGrid";
 import { ChatInterface } from "./ChatInterface";
 
 interface ChatMessage {
@@ -36,6 +37,104 @@ export const StackedDashboard = ({
   handleChatToggle
 }: StackedDashboardProps) => {
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
+
+  // Mock archived tasks data
+  const archivedTasks = [
+    {
+      id: 'archived-1',
+      user_id: 'user-1',
+      title: 'Annual Report Filed',
+      description: 'Filed annual business report',
+      task_type: 'annual_report',
+      status: 'completed',
+      priority: 1,
+      due_date: '2024-11-15',
+      data: { icon: '📊', color: 'primary' },
+      created_at: '2024-10-01T00:00:00Z',
+      updated_at: '2024-11-15T00:00:00Z',
+      completed_at: '2024-11-15T00:00:00Z'
+    },
+    {
+      id: 'archived-2',
+      user_id: 'user-1',
+      title: 'Business License Renewal',
+      description: 'Renewed business license',
+      task_type: 'license',
+      status: 'completed',
+      priority: 2,
+      due_date: '2024-10-30',
+      data: { icon: '📄', color: 'primary' },
+      created_at: '2024-09-01T00:00:00Z',
+      updated_at: '2024-10-28T00:00:00Z',
+      completed_at: '2024-10-28T00:00:00Z'
+    },
+    {
+      id: 'archived-3',
+      user_id: 'user-1',
+      title: 'Tax Payment',
+      description: 'Quarterly tax payment',
+      task_type: 'tax',
+      status: 'completed',
+      priority: 1,
+      due_date: '2024-10-15',
+      data: { icon: '💰', color: 'primary' },
+      created_at: '2024-09-15T00:00:00Z',
+      updated_at: '2024-10-15T00:00:00Z',
+      completed_at: '2024-10-15T00:00:00Z'
+    },
+    {
+      id: 'archived-4',
+      user_id: 'user-1',
+      title: 'Insurance Review',
+      description: 'Annual insurance policy review',
+      task_type: 'insurance',
+      status: 'completed',
+      priority: 3,
+      due_date: '2024-09-30',
+      data: { icon: '🛡️', color: 'primary' },
+      created_at: '2024-08-01T00:00:00Z',
+      updated_at: '2024-09-25T00:00:00Z',
+      completed_at: '2024-09-25T00:00:00Z'
+    },
+    {
+      id: 'archived-5',
+      user_id: 'user-1',
+      title: 'Compliance Audit',
+      description: 'Internal compliance audit',
+      task_type: 'audit',
+      status: 'completed',
+      priority: 1,
+      due_date: '2024-09-15',
+      data: { icon: '🔍', color: 'primary' },
+      created_at: '2024-08-01T00:00:00Z',
+      updated_at: '2024-09-10T00:00:00Z',
+      completed_at: '2024-09-10T00:00:00Z'
+    },
+    {
+      id: 'archived-6',
+      user_id: 'user-1',
+      title: 'Employee Handbook Update',
+      description: 'Updated employee handbook',
+      task_type: 'documentation',
+      status: 'completed',
+      priority: 2,
+      due_date: '2024-08-31',
+      data: { icon: '📖', color: 'primary' },
+      created_at: '2024-07-01T00:00:00Z',
+      updated_at: '2024-08-30T00:00:00Z',
+      completed_at: '2024-08-30T00:00:00Z'
+    }
+  ];
+
+  // Define overlay icons for specific tasks
+  const overlayIcons = {
+    'archived-1': 'checkmark' as const, // Annual Report
+    'archived-2': 'warning' as const,   // Business License has warning
+    'archived-3': 'checkmark' as const, // Tax Payment
+    'archived-4': 'checkmark' as const, // Insurance Review
+    'archived-5': 'alarm' as const,     // Compliance Audit has alarm
+    'archived-6': 'checkmark' as const, // Employee Handbook
+  };
 
   const cards = [
     {
@@ -144,6 +243,17 @@ export const StackedDashboard = ({
                   {card.content}
                 </div>
               ))}
+              
+              {/* Archived Tasks Section */}
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-foreground mb-2">Archived Tasks</h3>
+                <TaskGrid 
+                  tasks={archivedTasks}
+                  onTaskClick={(taskId) => console.log('Clicked archived task:', taskId)}
+                  overlayIcons={overlayIcons}
+                  className="bg-muted/30 rounded-lg p-4"
+                />
+              </div>
             </div>
           </div>
         ) : (
