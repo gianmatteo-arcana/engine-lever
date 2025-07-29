@@ -124,7 +124,7 @@ export const StackedDashboard = ({
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-4xl mx-auto">
         {expandedCard === "welcome" ? (
-          <div className="space-y-6">
+          <div>
             <StackedCard
               key="welcome"
               id="welcome"
@@ -137,7 +137,7 @@ export const StackedDashboard = ({
               content={cards[0].content}
               expandedContent={cards[0].expandedContent}
             />
-            <div className="pt-6">
+            <div className="mt-6">
               {cards.slice(1).map((card, originalIndex) => (
                 <div key={card.id} className="mb-4">
                   <h3 className="text-lg font-semibold text-foreground mb-2">{card.title}</h3>
