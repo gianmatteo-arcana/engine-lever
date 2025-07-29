@@ -38,7 +38,8 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
     if (!chatInput.trim() || isLoading) return;
     
     const userMessage = chatInput.trim();
-    console.log("Submitting chat message:", userMessage);
+    console.log("=== CHAT SUBMIT START ===");
+    console.log("User message:", userMessage);
     
     // Add user message to chat
     setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
@@ -46,33 +47,59 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
     setIsLoading(true);
     
     try {
-      console.log("Calling chat completion API...");
-      const { data, error } = await supabase.functions.invoke('chat-completion', {
+      console.log("About to call supabase.functions.invoke...");
+      console.log("Supabase client:", !!supabase);
+      
+      const functionCall = supabase.functions.invoke('chat-completion', {
         body: {
           messages: [{ role: 'user', content: userMessage }],
           masterPrompt: `You are Ally, an AI compliance assistant helping with the task: "${task.title}". ${task.description ? `Task description: ${task.description}` : ''} Be helpful, friendly, and provide actionable advice about business compliance and requirements.`
         }
       });
+      
+      console.log("Function call created, awaiting response...");
+      const { data, error } = await functionCall;
+      
+      console.log("=== SUPABASE RESPONSE ===");
+      console.log("Data:", data);
+      console.log("Error:", error);
+      console.log("Data type:", typeof data);
+      console.log("Error type:", typeof error);
 
       if (error) {
-        console.error('Supabase function error:', error);
-        throw new Error(error.message || 'Failed to get response');
+        console.error('=== SUPABASE FUNCTION ERROR ===');
+        console.error('Error object:', error);
+        console.error('Error message:', error.message);
+        console.error('Error details:', error.details);
+        console.error('Error hint:', error.hint);
+        console.error('Error code:', error.code);
+        throw new Error(error.message || 'Supabase function error');
       }
 
+      console.log("=== CHECKING RESPONSE DATA ===");
       if (data?.content) {
-        console.log("AI response received:", data.content);
+        console.log("✅ AI response received:", data.content);
         setChatMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
       } else {
+        console.error("❌ No content in response");
+        console.log("Full data object:", JSON.stringify(data, null, 2));
         throw new Error('No response content received');
       }
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("=== CHAT ERROR CAUGHT ===");
+      console.error("Error type:", typeof error);
+      console.error("Error constructor:", error.constructor.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+      console.error("Full error object:", error);
+      
       setChatMessages(prev => [...prev, { 
         role: 'assistant', 
         content: 'Sorry, I encountered an error. Please try again.' 
       }]);
     } finally {
       setIsLoading(false);
+      console.log("=== CHAT SUBMIT END ===");
     }
   };
 
