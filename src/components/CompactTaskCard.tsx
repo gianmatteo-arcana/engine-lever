@@ -1,3 +1,4 @@
+
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { SmallBizCard } from "./SmallBizCard";
@@ -125,6 +126,7 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: Compact
     onClick();
   };
 
+  // Use literal icon from data or fallback to task type abbreviation
   const icon = task.data?.icon || task.task_type.substring(0, 2).toUpperCase();
 
   if (isExpanded) {

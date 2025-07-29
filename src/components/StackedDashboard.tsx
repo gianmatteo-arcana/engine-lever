@@ -38,18 +38,18 @@ export const StackedDashboard = ({
 }: StackedDashboardProps) => {
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
 
-  // Mock archived tasks data
+  // Archived tasks data with literals and completed task information
   const archivedTasks = [
     {
       id: 'archived-1',
       user_id: 'user-1',
-      title: 'Annual Report Filed',
-      description: 'Filed annual business report',
-      task_type: 'annual_report',
+      title: 'BOI Report Filing',
+      description: 'Successfully filed Beneficial Ownership Information report',
+      task_type: 'boi_report',
       status: 'completed',
       priority: 1,
       due_date: '2024-11-15',
-      data: { icon: '📊', color: 'primary' },
+      data: { icon: 'BI', color: 'primary' },
       created_at: '2024-10-01T00:00:00Z',
       updated_at: '2024-11-15T00:00:00Z',
       completed_at: '2024-11-15T00:00:00Z'
@@ -57,13 +57,13 @@ export const StackedDashboard = ({
     {
       id: 'archived-2',
       user_id: 'user-1',
-      title: 'Business License Renewal',
-      description: 'Renewed business license',
-      task_type: 'license',
+      title: 'Operating Agreement Review',
+      description: 'Completed review and update of operating agreement',
+      task_type: 'operating_agreement',
       status: 'completed',
       priority: 2,
       due_date: '2024-10-30',
-      data: { icon: '📄', color: 'primary' },
+      data: { icon: 'OA', color: 'primary' },
       created_at: '2024-09-01T00:00:00Z',
       updated_at: '2024-10-28T00:00:00Z',
       completed_at: '2024-10-28T00:00:00Z'
@@ -71,13 +71,13 @@ export const StackedDashboard = ({
     {
       id: 'archived-3',
       user_id: 'user-1',
-      title: 'Tax Payment',
-      description: 'Quarterly tax payment',
-      task_type: 'tax',
+      title: 'Franchise Tax Payment',
+      description: 'Submitted annual franchise tax payment',
+      task_type: 'franchise_tax',
       status: 'completed',
       priority: 1,
       due_date: '2024-10-15',
-      data: { icon: '💰', color: 'primary' },
+      data: { icon: 'FT', color: 'primary' },
       created_at: '2024-09-15T00:00:00Z',
       updated_at: '2024-10-15T00:00:00Z',
       completed_at: '2024-10-15T00:00:00Z'
@@ -85,13 +85,13 @@ export const StackedDashboard = ({
     {
       id: 'archived-4',
       user_id: 'user-1',
-      title: 'Insurance Review',
-      description: 'Annual insurance policy review',
-      task_type: 'insurance',
+      title: 'Registered Agent Update',
+      description: 'Updated registered agent information',
+      task_type: 'registered_agent',
       status: 'completed',
       priority: 3,
       due_date: '2024-09-30',
-      data: { icon: '🛡️', color: 'primary' },
+      data: { icon: 'RA', color: 'primary' },
       created_at: '2024-08-01T00:00:00Z',
       updated_at: '2024-09-25T00:00:00Z',
       completed_at: '2024-09-25T00:00:00Z'
@@ -99,13 +99,13 @@ export const StackedDashboard = ({
     {
       id: 'archived-5',
       user_id: 'user-1',
-      title: 'Compliance Audit',
-      description: 'Internal compliance audit',
-      task_type: 'audit',
+      title: 'Business Bank Account Review',
+      description: 'Completed review of business banking requirements',
+      task_type: 'banking',
       status: 'completed',
       priority: 1,
       due_date: '2024-09-15',
-      data: { icon: '🔍', color: 'primary' },
+      data: { icon: 'BA', color: 'primary' },
       created_at: '2024-08-01T00:00:00Z',
       updated_at: '2024-09-10T00:00:00Z',
       completed_at: '2024-09-10T00:00:00Z'
@@ -113,27 +113,87 @@ export const StackedDashboard = ({
     {
       id: 'archived-6',
       user_id: 'user-1',
-      title: 'Employee Handbook Update',
-      description: 'Updated employee handbook',
-      task_type: 'documentation',
+      title: 'EIN Verification',
+      description: 'Verified Employer Identification Number status',
+      task_type: 'ein_verification',
       status: 'completed',
       priority: 2,
       due_date: '2024-08-31',
-      data: { icon: '📖', color: 'primary' },
+      data: { icon: 'EV', color: 'primary' },
       created_at: '2024-07-01T00:00:00Z',
       updated_at: '2024-08-30T00:00:00Z',
       completed_at: '2024-08-30T00:00:00Z'
+    },
+    {
+      id: 'archived-7',
+      user_id: 'user-1',
+      title: 'Sales Tax Permit',
+      description: 'Successfully applied for sales tax permit',
+      task_type: 'sales_tax',
+      status: 'completed',
+      priority: 2,
+      due_date: '2024-08-15',
+      data: { icon: 'ST', color: 'primary' },
+      created_at: '2024-07-01T00:00:00Z',
+      updated_at: '2024-08-12T00:00:00Z',
+      completed_at: '2024-08-12T00:00:00Z'
+    },
+    {
+      id: 'archived-8',
+      user_id: 'user-1',
+      title: 'Payroll Tax Setup',
+      description: 'Completed payroll tax requirements setup',
+      task_type: 'payroll_tax',
+      status: 'completed',
+      priority: 1,
+      due_date: '2024-07-31',
+      data: { icon: 'PT', color: 'primary' },
+      created_at: '2024-06-01T00:00:00Z',
+      updated_at: '2024-07-28T00:00:00Z',
+      completed_at: '2024-07-28T00:00:00Z'
+    },
+    {
+      id: 'archived-9',
+      user_id: 'user-1',
+      title: 'Workers Comp Insurance',
+      description: 'Renewed workers compensation insurance',
+      task_type: 'insurance',
+      status: 'completed',
+      priority: 2,
+      due_date: '2024-07-15',
+      data: { icon: 'WC', color: 'primary' },
+      created_at: '2024-06-01T00:00:00Z',
+      updated_at: '2024-07-10T00:00:00Z',
+      completed_at: '2024-07-10T00:00:00Z'
+    },
+    {
+      id: 'archived-10',
+      user_id: 'user-1',
+      title: 'Business License Renewal',
+      description: 'Renewed annual business license',
+      task_type: 'license_renewal',
+      status: 'completed',
+      priority: 1,
+      due_date: '2024-06-30',
+      data: { icon: 'LR', color: 'primary' },
+      created_at: '2024-05-01T00:00:00Z',
+      updated_at: '2024-06-25T00:00:00Z',
+      completed_at: '2024-06-25T00:00:00Z'
     }
   ];
 
   // Define overlay icons for specific tasks
   const overlayIcons = {
-    'archived-1': 'checkmark' as const, // Annual Report
-    'archived-2': 'warning' as const,   // Business License has warning
-    'archived-3': 'checkmark' as const, // Tax Payment
-    'archived-4': 'checkmark' as const, // Insurance Review
-    'archived-5': 'alarm' as const,     // Compliance Audit has alarm
-    'archived-6': 'checkmark' as const, // Employee Handbook
+    'archived-1': 'checkmark' as const, // BOI Report
+    'archived-2': 'checkmark' as const, // Operating Agreement
+    'archived-3': 'checkmark' as const, // Franchise Tax
+    'archived-4': 'warning' as const,   // Registered Agent has warning
+    'archived-5': 'checkmark' as const, // Business Bank Account
+    'archived-6': 'checkmark' as const, // EIN Verification
+    'archived-7': 'checkmark' as const, // Sales Tax Permit
+    'archived-8': 'alarm' as const,     // Payroll Tax has alarm
+    'archived-9': 'checkmark' as const, // Workers Comp
+    'archived-10': 'checkmark' as const, // Business License
   };
 
   const cards = [
@@ -252,6 +312,7 @@ export const StackedDashboard = ({
                   onTaskClick={(taskId) => console.log('Clicked archived task:', taskId)}
                   overlayIcons={overlayIcons}
                   className="bg-muted/30 rounded-lg p-4"
+                  isArchived={true}
                 />
               </div>
             </div>
@@ -283,6 +344,7 @@ export const StackedDashboard = ({
             onTaskClick={(taskId) => console.log('Clicked archived task:', taskId)}
             overlayIcons={overlayIcons}
             className="bg-muted/30 rounded-lg p-4"
+            isArchived={true}
           />
         </div>
       </div>
