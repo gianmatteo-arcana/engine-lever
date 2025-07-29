@@ -73,6 +73,11 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   }, [showChat, greetingCardPosition]);
 
   const handleSendMessage = async (message: string) => {
+    console.log("🚨 DASHBOARD CHAT START 🚨");
+    console.log("User message:", message);
+    console.log("Selected task:", selectedTask);
+    console.log("Chat messages count:", chatMessages.length);
+    
     const newMessage: ChatMessage = {
       id: Date.now().toString(),
       content: message,
@@ -82,6 +87,10 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
 
     setChatMessages(prev => [...prev, newMessage]);
     setIsTyping(true);
+    
+    // Add a very visible indicator when using real AI vs fallback
+    console.log("🤖 ATTEMPTING REAL AI CALL...");
+    
     try {
       // Create RequestEnvelope with context
       const requestEnvelope = {
@@ -148,6 +157,9 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
         // Don't throw here as it would break the UI flow, but log extensively
       }
       
+      console.log("🚨 FALLING BACK TO LOCAL AI RESPONSE 🚨");
+      console.log("This means the real AI call failed!");
+      
       const fallback: ChatMessage = {
         id: (Date.now() + 1).toString(),
         content: getAIResponse(message),
@@ -155,9 +167,12 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
         timestamp: new Date(),
         actions: getResponsePills(message).map(pill => ({ label: pill, instruction: pill }))
       };
+      
+      console.log("Fallback message created with actions:", fallback.actions);
       setChatMessages(prev => [...prev, fallback]);
     } finally {
       setIsTyping(false);
+      console.log("🚨 DASHBOARD CHAT END 🚨");
     }
   };
 
@@ -184,17 +199,21 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   };
 
   const getResponsePills = (message: string): string[] => {
+    console.log("🔍 GENERATING FALLBACK PILLS for message:", message);
     const lowerMessage = message.toLowerCase();
     
-    if (lowerMessage.includes("statement") || lowerMessage.includes("update")) {
-      return ["Yes, let's start", "What information do I need?", "Not right now"];
-    }
-
-    if (lowerMessage.includes("review letter")) {
-      return ["Upload document", "Tell me about deadlines", "What should I look for?"];
+    let pills: string[] = [];
+    
+    if (lowerMessage.includes("options") || lowerMessage.includes("help") || lowerMessage.includes("what")) {
+      pills = ["Review my compliance status", "Update Statement of Information", "Ask about deadlines", "Schedule a consultation"];
+    } else if (lowerMessage.includes("compliance") || lowerMessage.includes("status")) {
+      pills = ["Show me my tasks", "What's due soon?", "Schedule filing"];
+    } else {
+      pills = ["Tell me more", "What else can you help with?", "Show my tasks"];
     }
     
-    return ["Tell me about my deadlines", "Help with filing", "What's required?"];
+    console.log("Generated fallback pills:", pills);
+    return pills;
   };
 
   const handleStartStatementUpdate = () => {

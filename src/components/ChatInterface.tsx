@@ -121,18 +121,24 @@ export const ChatInterface = ({
             {/* Action Pills */}
             {message.sender === "ai" && message.actions && message.actions.length > 0 && (
               <div className="flex flex-wrap gap-2 ml-11">
-                 {message.actions.map((action, index) => (
-                   <Button
-                     key={index}
-                     variant="outline"
-                     size="sm"
-                     onClick={() => handleActionClick(action.instruction)}
-                     className="h-8 px-3 text-sm border-primary/20 bg-primary-light/20 hover:bg-primary-light/40 hover:border-primary/40 flex items-center"
-                   >
-                     {getActionIcon(action.label)}
-                     {action.label}
-                   </Button>
-                 ))}
+                 {(() => {
+                   console.log("🎯 RENDERING ACTION PILLS:", message.actions);
+                   return message.actions.map((action, index) => (
+                     <Button
+                       key={index}
+                       variant="outline"
+                       size="sm"
+                       onClick={() => {
+                         console.log("🔘 ACTION PILL CLICKED:", action);
+                         handleActionClick(action.instruction);
+                       }}
+                       className="h-8 px-3 text-sm border-primary/20 bg-primary-light/20 hover:bg-primary-light/40 hover:border-primary/40 flex items-center"
+                     >
+                       {getActionIcon(action.label)}
+                       {action.label}
+                     </Button>
+                   ));
+                 })()}
               </div>
             )}
           </div>
