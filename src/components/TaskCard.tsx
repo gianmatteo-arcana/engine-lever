@@ -3,7 +3,7 @@ import { SmallBizCard } from "./SmallBizCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, AlertTriangle, MessageCircle, Maximize2, Minimize2, Send } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -32,6 +32,31 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
   const [chatInput, setChatInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', content: string}>>([]);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Intersection observer to detect when card is scrolled out of view
+  useEffect(() => {
+    if (!cardRef.current || !isFullscreen) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        // If less than 50% of the card is visible, shrink to medium mode
+        if (entry.intersectionRatio < 0.5) {
+          setIsFullscreen(false);
+        }
+      },
+      {
+        threshold: 0.5 // Trigger when 50% visibility is crossed
+      }
+    );
+
+    observer.observe(cardRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isFullscreen]);
   
   const handleChatSubmit = async () => {
     if (!chatInput.trim() || isLoading) return;
@@ -149,6 +174,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
       <>
         {/* Card container */}
         <div 
+          ref={cardRef}
           className={cn(
             "transition-all ease-out w-full",
             isFullscreen 
