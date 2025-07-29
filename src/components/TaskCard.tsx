@@ -360,7 +360,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
               title={task.title}
               description={task.description}
               variant={getVariantFromUrgency()}
-              onClick={onClick}
+              onClick={() => setIsFullscreen(true)}
               expandable={true}
               className="cursor-pointer origin-top-left transition-all duration-300 ease-out"
             >
