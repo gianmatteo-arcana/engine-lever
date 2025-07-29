@@ -274,6 +274,17 @@ export const StackedDashboard = ({
             ))}
           </div>
         )}
+        
+        {/* Archived Tasks Section - Always visible at bottom */}
+        <div className="mt-8">
+          <h3 className="text-lg font-semibold text-foreground mb-4">Archived Tasks</h3>
+          <TaskGrid 
+            tasks={archivedTasks}
+            onTaskClick={(taskId) => console.log('Clicked archived task:', taskId)}
+            overlayIcons={overlayIcons}
+            className="bg-muted/30 rounded-lg p-4"
+          />
+        </div>
       </div>
     </div>
   );
