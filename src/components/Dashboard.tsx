@@ -541,47 +541,31 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
             {/* Greeting Task Card - Seamless Integration */}
             <div ref={welcomeTaskRef} className="flex justify-center">
               <div className="w-full max-w-2xl">
-                {showChat ? (
-                  // Full-size: Direct ChatInterface integration without TaskCard wrapper
-                  <div className="transition-all duration-300 ease-in-out transform-gpu">
-                    <ChatInterface
-                      messages={chatMessages}
-                      onSendMessage={handleSendMessage}
-                      onPillClick={handlePillClick}
-                      isTyping={isTyping}
-                      placeholder="Ask me anything..."
-                      className="h-[600px]"
-                      onClose={handleChatToggle}
-                      showCloseButton={true}
-                    />
-                  </div>
-                ) : (
-                  // Medium size: TaskCard with smooth transition
-                  <div className="transition-all duration-300 ease-in-out transform-gpu origin-top">
-                    <TaskCard
-                      task={{
-                        id: 'greeting-task',
-                        user_id: 'system',
-                        title: `Welcome back, ${user?.name?.split(' ')[0] || "User"}!`,
-                        description: "Let's keep your business compliant and stress-free. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements.",
-                        task_type: 'greeting',
-                        status: 'active',
-                        priority: 1,
-                        due_date: null,
-                        data: { icon: '👋', color: 'primary' },
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString(),
-                        completed_at: null
-                      }}
-                      size="medium"
-                      urgency="normal"
-                      onClick={() => {}}
-                      onAction={handleChatToggle}
-                      actionLabel="Chat with Ally"
-                      isGreeting={true}
-                    />
-                  </div>
-                )}
+                {/* TaskCard with internal expansion - no more replacement */}
+                <div className="transition-all duration-300 ease-in-out transform-gpu origin-top">
+                  <TaskCard
+                    task={{
+                      id: 'greeting-task',
+                      user_id: 'system',
+                      title: `Welcome back, ${user?.name?.split(' ')[0] || "User"}!`,
+                      description: "Let's keep your business compliant and stress-free. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements.",
+                      task_type: 'greeting',
+                      status: 'active',
+                      priority: 1,
+                      due_date: null,
+                      data: { icon: '👋', color: 'primary' },
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                      completed_at: null
+                    }}
+                    size="medium"
+                    urgency="normal"
+                    onClick={() => {}}
+                    onAction={() => {}}
+                    actionLabel="Chat with Ally"
+                    isGreeting={true}
+                  />
+                </div>
               </div>
             </div>
 
