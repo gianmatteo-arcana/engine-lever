@@ -33,7 +33,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
   const [mediumHeight, setMediumHeight] = useState(0);
   const [chatInput, setChatInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', content: string}>>([]);
+  const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', content: string, actions?: any[]}>>([]);
   const cardRef = useRef<HTMLDivElement>(null);
   const mediumCardRef = useRef<HTMLDivElement>(null);
 
@@ -150,7 +150,11 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
       console.log("Actions array:", responsePayload.actions);
       console.log("Actions length:", responsePayload.actions?.length || 0);
       
-      setChatMessages(prev => [...prev, { role: 'assistant', content: responsePayload.message }]);
+      setChatMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: responsePayload.message,
+        actions: responsePayload.actions 
+      }]);
       
     } catch (error) {
       console.error('=== CHAT ERROR CAUGHT ===');
@@ -359,13 +363,30 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                               <MessageCircle className="h-4 w-4 text-primary" />
                             )}
                           </div>
-                          <div className={`rounded-lg p-3 max-w-[80%] ${
-                            message.role === 'user' 
-                              ? 'bg-primary text-primary-foreground' 
-                              : 'bg-muted/50'
-                          }`}>
-                            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                          </div>
+                           <div className={`rounded-lg p-3 max-w-[80%] ${
+                             message.role === 'user' 
+                               ? 'bg-primary text-primary-foreground' 
+                               : 'bg-muted/50'
+                           }`}>
+                             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                             
+                             {/* Action Pills for AI messages */}
+                             {message.role === 'assistant' && message.actions && message.actions.length > 0 && (
+                               <div className="flex flex-wrap gap-2 mt-3">
+                                 {message.actions.map((action, actionIndex) => (
+                                   <Button
+                                     key={actionIndex}
+                                     variant="outline"
+                                     size="sm"
+                                     onClick={() => handleChatSubmit(action.instruction)}
+                                     className="h-7 px-2 text-xs border-primary/20 bg-primary-light/20 hover:bg-primary-light/40 hover:border-primary/40"
+                                   >
+                                     {action.label}
+                                   </Button>
+                                 ))}
+                               </div>
+                             )}
+                           </div>
                         </div>
                       ))}
                       {isLoading && (
