@@ -125,8 +125,6 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: Compact
     onClick();
   };
 
-  const icon = task.data?.icon || task.task_type.substring(0, 2).toUpperCase();
-
   if (isExpanded) {
     return (
       <div 
@@ -194,7 +192,7 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: Compact
       title={`${task.title}${task.due_date ? ` - Due: ${new Date(task.due_date).toLocaleDateString()}` : ''}`}
     >
       <div className="relative w-full h-full flex items-center justify-center">
-        {icon}
+        BI
         {overlayIcon && (
           <div className="absolute -bottom-1 -right-1">
             {overlayIcon === "checkmark" && (
