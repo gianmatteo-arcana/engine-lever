@@ -460,7 +460,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                 : "opacity-100 visible"
             )}
           >
-            {task.id === 'business-profile-setup' ? (
+            {task.task_type === 'business_profile' ? (
               <SmallBizCard
                 title={task.title}
                 description={task.description}
