@@ -1,3 +1,4 @@
+
 interface MonthDelineatorProps {
   month: string;
   year: number;
@@ -16,7 +17,6 @@ export const MonthDelineator = ({ month, year, taskCount }: MonthDelineatorProps
             {taskCount} task{taskCount !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className="w-8 h-0.5 bg-border"></div>
       </div>
     </div>
   );
