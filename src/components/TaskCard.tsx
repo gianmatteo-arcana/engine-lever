@@ -190,12 +190,15 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           message: error?.message,
           stack: error?.stack
         }, null, 2)}`;
-        throw devError;
+        
+        // Don't throw in the component - just log for debugging
+        console.error('DEV ERROR (not thrown to prevent component crash):', devError);
       }
       
+      // Always add an error message to the chat instead of crashing
       setChatMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: 'Sorry, I encountered an error. Please try again.' 
+        content: 'I apologize, but I encountered an issue processing your request. Please try again or contact support if the problem persists.' 
       }]);
     } finally {
       setIsLoading(false);
