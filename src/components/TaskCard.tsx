@@ -292,16 +292,17 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           {/* Fullscreen view - always rendered but conditionally visible */}
             <div
               className={cn(
-                "bg-card border rounded-lg shadow-lg overflow-hidden flex flex-col transition-[height] duration-[400ms] ease-in-out",
+                "bg-card border rounded-lg shadow-lg flex flex-col transition-all duration-[400ms] ease-in-out",
                 (isFullscreen && !isAutoShrinking) ? "opacity-100 visible" : "opacity-0 invisible absolute inset-0 pointer-events-none"
               )}
               style={{
                 height: isAutoShrinking
                   ? mediumHeight || 'auto'
                   : isFullscreen
-                    ? 'calc(100vh - 200px)'
+                    ? '600px'
                     : 'auto',
-                transformOrigin: 'top left'
+                transformOrigin: 'top left',
+                maxHeight: '600px'
               }}
             >
             {/* Close button */}
@@ -319,171 +320,166 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
               </Button>
             </div>
 
-            <div className="flex-1 overflow-auto flex flex-col">
-              {/* Task Header - consistent with SmallBizCard */}
-              <div className="p-6 pb-3 animate-content-fade-in">
-                <div className="flex items-center gap-3 pr-12">
-                  <div>
-                    <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">{task.title}</h2>
-                    {task.description && (
-                      <p className="text-muted-foreground">{task.description}</p>
-                    )}
-                  </div>
+            {/* Task Header - Fixed at top */}
+            <div className="flex-shrink-0 p-6 pb-3 animate-content-fade-in">
+              <div className="flex items-center gap-3 pr-12">
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">{task.title}</h2>
+                  {task.description && (
+                    <p className="text-muted-foreground">{task.description}</p>
+                  )}
                 </div>
               </div>
+            </div>
 
-              {/* Chat Interface Content */}
-              <div className="flex-1 animate-content-fade-in flex flex-col" style={{ animationDelay: '100ms' }}>
-                {/* Messages Area - Scrollable */}
-                <div ref={messagesRef} className="flex-1 overflow-y-auto min-h-0 p-6 pt-0">
-                  {/* Welcome Message - only show when no messages */}
-                  {chatMessages.length === 0 && (
-                    <>
-                      <div className="flex items-start gap-3 mb-6">
-                        <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                          <MessageCircle className="h-5 w-5 text-primary" />
-                        </div>
-                        <div className="bg-muted/50 rounded-lg p-4 flex-1">
-                          <p className="text-sm text-foreground">
-                            Hello! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?
-                          </p>
-                        </div>
+            {/* Messages Area - Scrollable middle section */}
+            <div ref={messagesRef} className="flex-1 overflow-y-auto min-h-0 px-6">
+              {/* Welcome Message - only show when no messages */}
+              {chatMessages.length === 0 && (
+                <>
+                  <div className="flex items-start gap-3 mb-6">
+                    <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                      <MessageCircle className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-4 flex-1">
+                      <p className="text-sm text-foreground">
+                        Hello! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Quick Action Buttons */}
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                    <Button 
+                      variant="outline" 
+                      className="justify-start h-auto py-3 px-4"
+                      onClick={() => handleChatSubmit("What's my current compliance status?")}
+                    >
+                      <span className="text-sm">Review my compliance status</span>
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="justify-start h-auto py-3 px-4"
+                      onClick={() => handleChatSubmit("How do I update my Statement of Information?")}
+                    >
+                      <span className="text-sm">Update Statement of Information</span>
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="justify-start h-auto py-3 px-4 flex items-center gap-2"
+                      onClick={() => handleChatSubmit("Can you help me review a letter?")}
+                    >
+                      <div className="w-4 h-4 border border-current rounded flex items-center justify-center">
+                        <div className="w-2 h-2 border-l border-b border-current transform rotate-45 scale-75"></div>
                       </div>
+                      <span className="text-sm">Review letter</span>
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="justify-start h-auto py-3 px-4"
+                      onClick={() => handleChatSubmit("I have a question about compliance")}
+                    >
+                      <span className="text-sm">Ask a question</span>
+                    </Button>
+                  </div>
+                </>
+              )}
 
-                      {/* Quick Action Buttons */}
-                      <div className="grid grid-cols-2 gap-3 mb-6">
-                        <Button 
-                          variant="outline" 
-                          className="justify-start h-auto py-3 px-4"
-                          onClick={() => handleChatSubmit("What's my current compliance status?")}
-                        >
-                          <span className="text-sm">Review my compliance status</span>
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          className="justify-start h-auto py-3 px-4"
-                          onClick={() => handleChatSubmit("How do I update my Statement of Information?")}
-                        >
-                          <span className="text-sm">Update Statement of Information</span>
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          className="justify-start h-auto py-3 px-4 flex items-center gap-2"
-                          onClick={() => handleChatSubmit("Can you help me review a letter?")}
-                        >
-                          <div className="w-4 h-4 border border-current rounded flex items-center justify-center">
-                            <div className="w-2 h-2 border-l border-b border-current transform rotate-45 scale-75"></div>
-                          </div>
-                          <span className="text-sm">Review letter</span>
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          className="justify-start h-auto py-3 px-4"
-                          onClick={() => handleChatSubmit("I have a question about compliance")}
-                        >
-                          <span className="text-sm">Ask a question</span>
-                        </Button>
+              {/* Chat Messages */}
+              {chatMessages.length > 0 && (
+                <div className="space-y-4 pb-4">
+                  {chatMessages.map((message, messageIndex) => (
+                    <div key={messageIndex} className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        message.role === 'user' 
+                          ? 'bg-primary text-primary-foreground' 
+                          : 'bg-primary/10'
+                      }`}>
+                        {message.role === 'user' ? (
+                          <span className="text-xs font-semibold">U</span>
+                        ) : (
+                          <MessageCircle className="h-4 w-4 text-primary" />
+                        )}
                       </div>
-                    </>
-                  )}
-
-                  {/* Chat Messages */}
-                  {chatMessages.length > 0 && (
-                    <div className="space-y-4 pb-4">
-                      {chatMessages.map((message, messageIndex) => (
-                        <div key={messageIndex} className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                            message.role === 'user' 
-                              ? 'bg-primary text-primary-foreground' 
-                              : 'bg-primary/10'
-                          }`}>
-                            {message.role === 'user' ? (
-                              <span className="text-xs font-semibold">U</span>
-                            ) : (
-                              <MessageCircle className="h-4 w-4 text-primary" />
-                            )}
-                          </div>
-                           <div className={`rounded-lg p-3 max-w-[80%] ${
-                             message.role === 'user' 
-                               ? 'bg-primary text-primary-foreground' 
-                               : 'bg-muted/50'
-                           }`}>
-                             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                             
-                             {/* Action Pills for AI messages */}
-                             {message.role === 'assistant' && message.actions && message.actions.length > 0 && (
-                               <div className="flex flex-wrap gap-2 mt-3">
-                                 {message.actions.map((action, actionIndex) => {
-                                   const actionId = `${messageIndex}-${actionIndex}`;
-                                   const isClicked = clickedActionIds.has(actionId);
-                                   
-                                   return (
-                                     <Button
-                                       key={actionIndex}
-                                       variant="outline"
-                                       size="sm"
-                                       onClick={() => handleActionClick(action.instruction, actionIndex, messageIndex)}
-                                       disabled={isClicked}
-                                       className={cn(
-                                         "h-7 px-2 text-xs transition-all duration-200",
-                                         isClicked
-                                           ? "bg-primary text-primary-foreground border-primary opacity-75 pointer-events-none"
-                                           : "border-primary/20 bg-primary-light/20 hover:bg-primary-light/40 hover:border-primary/40"
-                                       )}
-                                     >
-                                       {action.label}
-                                     </Button>
-                                   );
-                                 })}
-                               </div>
-                             )}
+                       <div className={`rounded-lg p-3 max-w-[80%] ${
+                         message.role === 'user' 
+                           ? 'bg-primary text-primary-foreground' 
+                           : 'bg-muted/50'
+                       }`}>
+                         <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                         
+                         {/* Action Pills for AI messages */}
+                         {message.role === 'assistant' && message.actions && message.actions.length > 0 && (
+                           <div className="flex flex-wrap gap-2 mt-3">
+                             {message.actions.map((action, actionIndex) => {
+                               const actionId = `${messageIndex}-${actionIndex}`;
+                               const isClicked = clickedActionIds.has(actionId);
+                               
+                               return (
+                                 <Button
+                                   key={actionIndex}
+                                   variant="outline"
+                                   size="sm"
+                                   onClick={() => handleActionClick(action.instruction, actionIndex, messageIndex)}
+                                   disabled={isClicked}
+                                   className={cn(
+                                     "h-7 px-2 text-xs transition-all duration-200",
+                                     isClicked
+                                       ? "bg-primary text-primary-foreground border-primary opacity-75 pointer-events-none"
+                                       : "border-primary/20 bg-primary-light/20 hover:bg-primary-light/40 hover:border-primary/40"
+                                   )}
+                                 >
+                                   {action.label}
+                                 </Button>
+                               );
+                             })}
                            </div>
+                         )}
+                       </div>
+                    </div>
+                  ))}
+                  {isLoading && (
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                        <MessageCircle className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="bg-muted/50 rounded-lg p-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                         </div>
-                      ))}
-                      {isLoading && (
-                        <div className="flex items-start gap-3">
-                          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                            <MessageCircle className="h-4 w-4 text-primary" />
-                          </div>
-                          <div className="bg-muted/50 rounded-lg p-3">
-                            <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
-                              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                      </div>
                     </div>
                   )}
                 </div>
+              )}
+            </div>
 
-                {/* Chat Input Area - Fixed at bottom */}
-                <div className="flex-shrink-0 p-6 pt-0">
-                  <div className="flex gap-2 p-4 bg-background border rounded-lg">
-                    <input 
-                      type="text" 
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      placeholder="Ask me anything..."
-                      disabled={isLoading}
-                      className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground disabled:opacity-50"
-                    />
-                    <Button 
-                      size="sm" 
-                      className="px-3"
-                      onClick={() => handleChatSubmit()}
-                      disabled={isLoading || !chatInput.trim()}
-                    >
-                      {isLoading ? (
-                        <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      ) : (
-                        <Send className="w-4 h-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
+            {/* Chat Input Area - Fixed at bottom */}
+            <div className="flex-shrink-0 p-6 pt-4 border-t bg-card">
+              <div className="flex gap-2 p-4 bg-background border rounded-lg">
+                <input 
+                  type="text" 
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Ask me anything..."
+                  disabled={isLoading}
+                  className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground disabled:opacity-50"
+                />
+                <Button 
+                  size="sm" 
+                  className="px-3 flex-shrink-0"
+                  onClick={() => handleChatSubmit()}
+                  disabled={isLoading || !chatInput.trim()}
+                >
+                  {isLoading ? (
+                    <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
               </div>
             </div>
           </div>
