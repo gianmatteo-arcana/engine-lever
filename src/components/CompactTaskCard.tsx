@@ -1,4 +1,3 @@
-
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { SmallBizCard } from "./SmallBizCard";
@@ -142,7 +141,7 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: Compact
     return (
       <div 
         ref={intersectionRef}
-        className="animate-card-expand col-span-full md:col-span-6 lg:col-span-8 origin-top-left min-w-[400px]" 
+        className="animate-card-expand col-span-full md:col-span-6 lg:col-span-8 min-w-[400px]" 
         style={{ 
           opacity: isCollapsing ? 0.8 : 1,
           transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
@@ -233,13 +232,12 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: Compact
       ref={intersectionRef}
       onClick={handleCardClick}
       className={cn(
-        "w-16 h-16 rounded-lg border-2 flex items-center justify-center origin-top-left",
+        "w-16 h-16 rounded-lg border-2 flex items-center justify-center",
         "cursor-pointer transition-all duration-300 hover:scale-105",
         "text-xs font-bold shadow-sm hover:shadow-md",
         getUrgencyStyles()
       )}
       style={{ 
-        transformOrigin: 'top left',
         opacity: isCollapsing ? 0.8 : 1,
         transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
       }}
