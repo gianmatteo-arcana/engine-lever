@@ -120,23 +120,23 @@ export default {
 						transformOrigin: 'top left'
 					}
 				},
-                                'card-collapse': {
-                                        '0%': {
-                                                transform: 'scale(1)',
-                                                opacity: '1',
-                                                transformOrigin: 'top left'
-                                        },
-                                        '100%': {
-                                                transform: 'scale(0.95)',
-                                                opacity: '0.8',
-                                                transformOrigin: 'top left'
-                                        }
-                                },
-                                'content-fade-in': {
-                                        '0%': {
-                                                opacity: '0',
-                                                transform: 'translateY(8px)'
-                                        },
+      'card-collapse': {
+              '0%': {
+                      transform: 'scale(1)',
+                      opacity: '1',
+                      transformOrigin: 'top left'
+              },
+              '100%': {
+                      transform: 'scale(0.95)',
+                      opacity: '0.8',
+                      transformOrigin: 'top left'
+              }
+      },
+      'content-fade-in': {
+              '0%': {
+                      opacity: '0',
+                      transform: 'translateY(8px)'
+              },
 					'100%': {
 						opacity: '1',
 						transform: 'translateY(0)'
@@ -148,6 +148,7 @@ export default {
 				'accordion-up': 'accordion-up 0.2s ease-out',
 				'scale-in': 'scale-in 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
 				'card-expand': 'card-expand 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                                'card-collapse': 'card-collapse 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                                 'card-collapse': 'card-collapse 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                                 'content-fade-in': 'content-fade-in 0.3s cubic-bezier(0.4, 0, 0.2, 1) 0.1s'
                         }
