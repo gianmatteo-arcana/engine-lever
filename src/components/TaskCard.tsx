@@ -94,9 +94,17 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
       console.log("=== CHAT SUBMIT START ===");
       console.log("User message:", userMessage);
       
-      // Create RequestEnvelope with task context
+      const requestId = `task_${task.id}_${Date.now()}`;
+      const requestStartTime = performance.now();
+      
+      console.log("=== TASKCARD CHAT SUBMIT START ===", requestId);
+      console.log("User input:", userMessage);
+      console.log("Task context:", { id: task.id, title: task.title });
+      
+      // Create RequestEnvelope with task context and debug info
       const requestEnvelope = {
         user_message: userMessage,
+        task_prompt: `You are helping with task: ${task.title}. ${task.description || ''}`,
         task: {
           id: task.id,
           title: task.title,
@@ -115,8 +123,21 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           overwhelm_indicator: false,
           tone_preference: 'encouraging' as const
         },
-        session_id: `task_${task.id}_${Date.now()}`
+        session_id: requestId,
+        env: 'dev' as const
       };
+      
+      console.log("=== SENDING REQUEST ENVELOPE ===", requestId);
+      console.log(JSON.stringify(requestEnvelope, null, 2));
+      
+      // Log to debug console if available
+      if ((window as any).debugLog) {
+        (window as any).debugLog({
+          type: 'request',
+          requestId,
+          data: requestEnvelope
+        });
+      }
       
       console.log("About to call generateResponse...");
       const responsePayload = await generateResponse(requestEnvelope);

@@ -127,8 +127,17 @@ serve(async (req) => {
       console.log('Total prompt length:', assembledPrompt.length);
     }
 
-    console.log('Calling OpenAI with assembled prompt');
-
+    const openAIStartTime = Date.now();
+    console.log('=== CALLING OPENAI API ===');
+    console.log('Request ID:', requestEnvelope.session_id);
+    console.log('Prompt length:', assembledPrompt.length);
+    
+    if (isDev) {
+      console.log('=== FULL PROMPT BEING SENT TO OPENAI ===');
+      console.log(assembledPrompt);
+      console.log('=== END PROMPT ===');
+    }
+    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -145,32 +154,67 @@ serve(async (req) => {
       }),
     });
 
+    const openAIEndTime = Date.now();
+    const openAIDuration = openAIEndTime - openAIStartTime;
+    
+    console.log('=== OPENAI API RESPONSE ===');
+    console.log('Duration:', `${openAIDuration}ms`);
+    console.log('Status:', response.status);
+
     if (!response.ok) {
       const errorData = await response.text();
-      console.error('OpenAI API error:', response.status, errorData);
+      console.error('=== OPENAI API ERROR ===');
+      console.error('Status:', response.status);
+      console.error('Error data:', errorData);
+      console.error('Request ID:', requestEnvelope.session_id);
       throw new Error(`OpenAI request failed: ${response.status} - ${errorData}`);
     }
 
     const data = await response.json();
     const generatedText = data.choices?.[0]?.message?.content?.trim() ?? '';
 
-    console.log('OpenAI response generated successfully');
+    console.log('=== RAW OPENAI RESPONSE ===');
+    console.log('Response length:', generatedText.length);
+    console.log('Usage tokens:', data.usage);
+    
+    if (isDev) {
+      console.log('=== FULL RAW RESPONSE ===');
+      console.log(generatedText);
+      console.log('=== END RAW RESPONSE ===');
+    }
 
     // Parse and validate ResponsePayload
     let responsePayload: ResponsePayload;
     try {
+      console.log('=== PARSING JSON RESPONSE ===');
       responsePayload = JSON.parse(generatedText);
       
-      console.log('=== PARSING AI RESPONSE ===');
+      console.log('=== JSON PARSE SUCCESS ===');
+      console.log('Parsed keys:', Object.keys(responsePayload));
+      
       if (isDev) {
-        console.log('Raw AI response:', generatedText);
-        console.log('Parsed payload:', JSON.stringify(responsePayload, null, 2));
+        console.log('=== PARSED PAYLOAD STRUCTURE ===');
+        console.log('Message type:', typeof responsePayload.message);
+        console.log('Message length:', responsePayload.message?.length || 0);
+        console.log('Actions type:', typeof responsePayload.actions);
+        console.log('Actions is array:', Array.isArray(responsePayload.actions));
+        console.log('Actions length:', responsePayload.actions?.length || 0);
+        console.log('Full parsed payload:', JSON.stringify(responsePayload, null, 2));
       }
       
       // Validate required fields
-      if (!responsePayload.message || !Array.isArray(responsePayload.actions)) {
+      const hasValidMessage = responsePayload.message && typeof responsePayload.message === 'string';
+      const hasValidActions = Array.isArray(responsePayload.actions);
+      
+      console.log('=== VALIDATION CHECK ===');
+      console.log('Valid message:', hasValidMessage);
+      console.log('Valid actions:', hasValidActions);
+      
+      if (!hasValidMessage || !hasValidActions) {
         console.error('=== VALIDATION FAILED ===');
         console.error('Message exists:', !!responsePayload.message);
+        console.error('Message type:', typeof responsePayload.message);
+        console.error('Actions exists:', !!responsePayload.actions);
         console.error('Actions is array:', Array.isArray(responsePayload.actions));
         console.error('Actions value:', responsePayload.actions);
         throw new Error('Invalid ResponsePayload structure');
@@ -184,15 +228,29 @@ serve(async (req) => {
       console.log('=== VALIDATION PASSED ===');
       console.log('Actions count:', responsePayload.actions.length);
       
+      if (responsePayload.actions.length > 0) {
+        console.log('=== ACTIONS FOUND ===');
+        responsePayload.actions.forEach((action, index) => {
+          console.log(`Action ${index + 1}:`, {
+            label: action.label,
+            instruction: action.instruction?.substring(0, 50) + '...'
+          });
+        });
+      }
+      
     } catch (parseError) {
-      console.error('Failed to parse ResponsePayload:', parseError);
-      console.error('Raw response that failed to parse:', generatedText);
+      console.error('=== JSON PARSE ERROR ===');
+      console.error('Parse error:', parseError.message);
+      console.error('Raw text length:', generatedText.length);
+      console.error('Raw text preview:', generatedText.substring(0, 200) + '...');
+      console.error('Request ID:', requestEnvelope.session_id);
+      
       // Fallback response
       responsePayload = {
         message: generatedText || "I'm sorry, I couldn't process your request properly.",
         actions: [],
         timestamp: new Date().toISOString(),
-        dev_notes: `Parse error: ${parseError.message}`
+        dev_notes: `Parse error: ${parseError.message}. Raw response length: ${generatedText.length}`
       };
     }
 
