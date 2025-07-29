@@ -190,9 +190,9 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           {/* Fullscreen view - always rendered but conditionally visible */}
           <div 
             className={cn(
-              "bg-card border rounded-lg shadow-lg overflow-hidden flex flex-col transition-all duration-400",
+              "bg-card border rounded-lg shadow-lg overflow-hidden flex flex-col transition-all duration-[2000ms] ease-out",
               isFullscreen ? "opacity-100 visible" : "opacity-0 invisible absolute inset-0 pointer-events-none"
-            )} 
+            )}
             style={{ height: isFullscreen ? 'calc(100vh - 200px)' : 'auto' }}
           >
             {/* Close button */}
@@ -353,7 +353,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
 
           {/* Medium size view - always rendered but conditionally visible */}
           <div className={cn(
-            "transition-all duration-400",
+            "transition-all duration-[2000ms] ease-out",
             isFullscreen ? "opacity-0 invisible pointer-events-none" : "opacity-100 visible"
           )}>
             <SmallBizCard
