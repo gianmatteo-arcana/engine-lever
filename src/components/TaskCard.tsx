@@ -29,6 +29,7 @@ interface TaskCardProps {
 
 export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, isGreeting }: TaskCardProps) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isAutoShrinking, setIsAutoShrinking] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', content: string}>>([]);
@@ -41,9 +42,14 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
-        // If less than 50% of the card is visible, shrink to medium mode
-        if (entry.intersectionRatio < 0.5) {
-          setIsFullscreen(false);
+        // If less than 50% of the card is visible, trigger auto-shrink
+        if (entry.intersectionRatio < 0.5 && !isAutoShrinking) {
+          setIsAutoShrinking(true);
+          // Allow the shrink animation to play before collapsing
+          setTimeout(() => {
+            setIsFullscreen(false);
+            setIsAutoShrinking(false);
+          }, 2000);
         }
       },
       {
@@ -56,7 +62,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
     return () => {
       observer.disconnect();
     };
-  }, [isFullscreen]);
+  }, [isFullscreen, isAutoShrinking]);
   
   const handleChatSubmit = async () => {
     if (!chatInput.trim() || isLoading) return;
@@ -188,13 +194,17 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           }}
         >
           {/* Fullscreen view - always rendered but conditionally visible */}
-          <div 
-            className={cn(
-              "bg-card border rounded-lg shadow-lg overflow-hidden flex flex-col transition-all duration-[2000ms] ease-out",
-              isFullscreen ? "opacity-100 visible" : "opacity-0 invisible absolute inset-0 pointer-events-none"
-            )}
-            style={{ height: isFullscreen ? 'calc(100vh - 200px)' : 'auto' }}
-          >
+            <div
+              className={cn(
+                "bg-card border rounded-lg shadow-lg overflow-hidden flex flex-col transition-all duration-[2000ms] ease-in-out",
+                isFullscreen ? "opacity-100 visible" : "opacity-0 invisible absolute inset-0 pointer-events-none",
+                isAutoShrinking && "animate-auto-shrink"
+              )}
+              style={{
+                height: isFullscreen ? 'calc(100vh - 200px)' : 'auto',
+                transformOrigin: 'top left'
+              }}
+            >
             {/* Close button */}
             <div className="absolute top-4 right-4 z-10">
               <Button
