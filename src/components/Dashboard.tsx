@@ -855,9 +855,6 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
               </div>
             </div>
           </div>
-
-          {/* Extra space for scrolling wiggle room */}
-          <div className="h-96"></div>
         </div>
 
         {/* Archived Tasks Section - Same container structure as future tasks */}
