@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, AlertTriangle, MessageCircle, Maximize2, Minimize2, Send } from "lucide-react";
 import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
 type TaskRow = Database['public']['Tables']['tasks']['Row'];
@@ -31,24 +32,45 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', content: string}>>([]);
   
   const handleChatSubmit = async () => {
     if (!chatInput.trim() || isLoading) return;
     
-    console.log("Submitting chat message:", chatInput);
+    const userMessage = chatInput.trim();
+    console.log("Submitting chat message:", userMessage);
+    
+    // Add user message to chat
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setChatInput("");
     setIsLoading(true);
     
     try {
-      // TODO: Replace with actual API call to your chat service
-      console.log("Sending message to API:", chatInput);
-      
-      // Simulate API call for now
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log("Message sent successfully");
-      
-      setChatInput("");
+      console.log("Calling chat completion API...");
+      const { data, error } = await supabase.functions.invoke('chat-completion', {
+        body: {
+          messages: [{ role: 'user', content: userMessage }],
+          masterPrompt: `You are Ally, an AI compliance assistant helping with the task: "${task.title}". ${task.description ? `Task description: ${task.description}` : ''} Be helpful, friendly, and provide actionable advice about business compliance and requirements.`
+        }
+      });
+
+      if (error) {
+        console.error('Supabase function error:', error);
+        throw new Error(error.message || 'Failed to get response');
+      }
+
+      if (data?.content) {
+        console.log("AI response received:", data.content);
+        setChatMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
+      } else {
+        throw new Error('No response content received');
+      }
     } catch (error) {
       console.error("Error sending message:", error);
+      setChatMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: 'Sorry, I encountered an error. Please try again.' 
+      }]);
     } finally {
       setIsLoading(false);
     }
@@ -148,36 +170,98 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                 {/* Chat Interface Content */}
                 <div className="flex-1 p-6 pt-0 animate-content-fade-in" style={{ animationDelay: '100ms' }}>
                   <div className="h-full flex flex-col">
-                    {/* Welcome Message */}
-                    <div className="flex items-start gap-3 mb-6">
-                      <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                        <MessageCircle className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="bg-muted/50 rounded-lg p-4 flex-1">
-                        <p className="text-sm text-foreground">
-                          Hello! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Quick Action Buttons */}
-                    <div className="grid grid-cols-2 gap-3 mb-6">
-                      <Button variant="outline" className="justify-start h-auto py-3 px-4">
-                        <span className="text-sm">Review my compliance status</span>
-                      </Button>
-                      <Button variant="outline" className="justify-start h-auto py-3 px-4">
-                        <span className="text-sm">Update Statement of Information</span>
-                      </Button>
-                      <Button variant="outline" className="justify-start h-auto py-3 px-4 flex items-center gap-2">
-                        <div className="w-4 h-4 border border-current rounded flex items-center justify-center">
-                          <div className="w-2 h-2 border-l border-b border-current transform rotate-45 scale-75"></div>
+                    {/* Welcome Message - only show when no messages */}
+                    {chatMessages.length === 0 && (
+                      <>
+                        <div className="flex items-start gap-3 mb-6">
+                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                            <MessageCircle className="h-5 w-5 text-primary" />
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-4 flex-1">
+                            <p className="text-sm text-foreground">
+                              Hello! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?
+                            </p>
+                          </div>
                         </div>
-                        <span className="text-sm">Review letter</span>
-                      </Button>
-                      <Button variant="outline" className="justify-start h-auto py-3 px-4">
-                        <span className="text-sm">Ask a question</span>
-                      </Button>
-                    </div>
+
+                        {/* Quick Action Buttons */}
+                        <div className="grid grid-cols-2 gap-3 mb-6">
+                          <Button 
+                            variant="outline" 
+                            className="justify-start h-auto py-3 px-4"
+                            onClick={() => setChatInput("What's my current compliance status?")}
+                          >
+                            <span className="text-sm">Review my compliance status</span>
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            className="justify-start h-auto py-3 px-4"
+                            onClick={() => setChatInput("How do I update my Statement of Information?")}
+                          >
+                            <span className="text-sm">Update Statement of Information</span>
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            className="justify-start h-auto py-3 px-4 flex items-center gap-2"
+                            onClick={() => setChatInput("Can you help me review a letter?")}
+                          >
+                            <div className="w-4 h-4 border border-current rounded flex items-center justify-center">
+                              <div className="w-2 h-2 border-l border-b border-current transform rotate-45 scale-75"></div>
+                            </div>
+                            <span className="text-sm">Review letter</span>
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            className="justify-start h-auto py-3 px-4"
+                            onClick={() => setChatInput("I have a question about compliance")}
+                          >
+                            <span className="text-sm">Ask a question</span>
+                          </Button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Chat Messages */}
+                    {chatMessages.length > 0 && (
+                      <div className="flex-1 overflow-y-auto space-y-4 mb-6">
+                        {chatMessages.map((message, index) => (
+                          <div key={index} className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              message.role === 'user' 
+                                ? 'bg-primary text-primary-foreground' 
+                                : 'bg-primary/10'
+                            }`}>
+                              {message.role === 'user' ? (
+                                <span className="text-xs font-semibold">U</span>
+                              ) : (
+                                <MessageCircle className="h-4 w-4 text-primary" />
+                              )}
+                            </div>
+                            <div className={`rounded-lg p-3 max-w-[80%] ${
+                              message.role === 'user' 
+                                ? 'bg-primary text-primary-foreground' 
+                                : 'bg-muted/50'
+                            }`}>
+                              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                            </div>
+                          </div>
+                        ))}
+                        {isLoading && (
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                              <MessageCircle className="h-4 w-4 text-primary" />
+                            </div>
+                            <div className="bg-muted/50 rounded-lg p-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
+                                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Chat Input Area */}
                     <div className="mt-auto">
@@ -300,36 +384,102 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                       </div>
                     </div>
 
-                    {/* Welcome Message */}
-                    <div className="flex items-start gap-3 mb-4">
-                      <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                        <MessageCircle className="h-4 w-4 text-primary" />
-                      </div>
-                      <div className="bg-muted/50 rounded-lg p-3 flex-1">
-                        <p className="text-sm text-foreground">
-                          Hello! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Quick Action Buttons */}
-                    <div className="grid grid-cols-2 gap-2 mb-4">
-                      <Button variant="outline" size="sm" className="justify-start h-auto py-2 px-3 text-xs">
-                        Review my compliance status
-                      </Button>
-                      <Button variant="outline" size="sm" className="justify-start h-auto py-2 px-3 text-xs">
-                        Update Statement of Information
-                      </Button>
-                      <Button variant="outline" size="sm" className="justify-start h-auto py-2 px-3 text-xs flex items-center gap-2">
-                        <div className="w-3 h-3 border border-current rounded flex items-center justify-center">
-                          <div className="w-1.5 h-1.5 border-l border-b border-current transform rotate-45 scale-75"></div>
+                    {/* Welcome Message - only show when no messages */}
+                    {chatMessages.length === 0 && (
+                      <>
+                        <div className="flex items-start gap-3 mb-4">
+                          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                            <MessageCircle className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-3 flex-1">
+                            <p className="text-sm text-foreground">
+                              Hello! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?
+                            </p>
+                          </div>
                         </div>
-                        Review letter
-                      </Button>
-                      <Button variant="outline" size="sm" className="justify-start h-auto py-2 px-3 text-xs">
-                        Ask a question
-                      </Button>
-                    </div>
+
+                        {/* Quick Action Buttons */}
+                        <div className="grid grid-cols-2 gap-2 mb-4">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="justify-start h-auto py-2 px-3 text-xs"
+                            onClick={() => setChatInput("What's my current compliance status?")}
+                          >
+                            Review my compliance status
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="justify-start h-auto py-2 px-3 text-xs"
+                            onClick={() => setChatInput("How do I update my Statement of Information?")}
+                          >
+                            Update Statement of Information
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="justify-start h-auto py-2 px-3 text-xs flex items-center gap-2"
+                            onClick={() => setChatInput("Can you help me review a letter?")}
+                          >
+                            <div className="w-3 h-3 border border-current rounded flex items-center justify-center">
+                              <div className="w-1.5 h-1.5 border-l border-b border-current transform rotate-45 scale-75"></div>
+                            </div>
+                            Review letter
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="justify-start h-auto py-2 px-3 text-xs"
+                            onClick={() => setChatInput("I have a question about compliance")}
+                          >
+                            Ask a question
+                          </Button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Chat Messages */}
+                    {chatMessages.length > 0 && (
+                      <div className="max-h-60 overflow-y-auto space-y-3 mb-4">
+                        {chatMessages.map((message, index) => (
+                          <div key={index} className={`flex items-start gap-2 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              message.role === 'user' 
+                                ? 'bg-primary text-primary-foreground' 
+                                : 'bg-primary/10'
+                            }`}>
+                              {message.role === 'user' ? (
+                                <span className="text-xs font-semibold">U</span>
+                              ) : (
+                                <MessageCircle className="h-3 w-3 text-primary" />
+                              )}
+                            </div>
+                            <div className={`rounded-lg p-2 max-w-[80%] ${
+                              message.role === 'user' 
+                                ? 'bg-primary text-primary-foreground text-right' 
+                                : 'bg-muted/50'
+                            }`}>
+                              <p className="text-xs whitespace-pre-wrap">{message.content}</p>
+                            </div>
+                          </div>
+                        ))}
+                        {isLoading && (
+                          <div className="flex items-start gap-2">
+                            <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                              <MessageCircle className="h-3 w-3 text-primary" />
+                            </div>
+                            <div className="bg-muted/50 rounded-lg p-2">
+                              <div className="flex items-center gap-1">
+                                <div className="w-1 h-1 bg-primary rounded-full animate-bounce"></div>
+                                <div className="w-1 h-1 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                                <div className="w-1 h-1 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Chat Input Area */}
                     <div className="flex gap-2 p-3 bg-background border rounded-lg">
