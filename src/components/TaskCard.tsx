@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Calendar, Clock, AlertTriangle, MessageCircle, Maximize2, Minimize2, Send } from "lucide-react";
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { generateResponse } from "@/integrations/llm";
+import { BusinessProfileSetup } from "./BusinessProfileSetup";
 import type { Database } from "@/integrations/supabase/types";
 
 type TaskRow = Database['public']['Tables']['tasks']['Row'];
@@ -34,6 +35,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
   const [chatInput, setChatInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', content: string, actions?: any[]}>>([]);
+  const [showBusinessProfileSetup, setShowBusinessProfileSetup] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const mediumCardRef = useRef<HTMLDivElement>(null);
 
@@ -234,6 +236,17 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
   if (size === "medium") {
     return (
       <>
+        {/* Business Profile Setup Modal */}
+        <BusinessProfileSetup
+          isOpen={showBusinessProfileSetup}
+          onClose={() => setShowBusinessProfileSetup(false)}
+          onComplete={() => {
+            setShowBusinessProfileSetup(false);
+            // Handle completion if needed
+          }}
+          taskId="business-profile-setup"
+        />
+
         {/* Card container */}
         <div 
           ref={cardRef}
@@ -447,69 +460,107 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                 : "opacity-100 visible"
             )}
           >
-            <SmallBizCard
-              title={task.title}
-              description={task.description}
-              variant={getVariantFromUrgency()}
-              onClick={() => setIsFullscreen(true)}
-              expandable={true}
-              className="cursor-pointer origin-top-left transition-all duration-300 ease-out"
-            >
-              <div className="space-y-4">
-                {!isGreeting && (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">
-                          Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : "No due date"}
-                        </span>
-                      </div>
-                      {getUrgencyBadge()}
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">
-                        {getDaysUntilDue() >= 0 
-                          ? `${getDaysUntilDue()} days remaining`
-                          : `${Math.abs(getDaysUntilDue())} days overdue`
-                        }
-                      </span>
-                    </div>
-
-                    {urgency === "overdue" && (
-                      <div className="flex items-center gap-2 p-3 bg-destructive/10 rounded-lg">
-                        <AlertTriangle className="h-4 w-4 text-destructive" />
-                        <span className="text-sm text-destructive font-medium">
-                          Action Required
-                        </span>
-                      </div>
-                    )}
-                  </>
-                )}
-                
-                <div className="flex items-center gap-2">
-                  {onAction && (
+            {task.id === 'business-profile-setup' ? (
+              <SmallBizCard
+                title={task.title}
+                description={task.description}
+                variant={getVariantFromUrgency()}
+                onClick={() => setShowBusinessProfileSetup(true)}
+                expandable={false}
+                className="cursor-pointer origin-top-left transition-all duration-300 ease-out"
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-foreground">Profile Completion</span>
+                    <span className="text-sm font-medium text-warning">85% Complete</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div className="bg-warning h-2 rounded-full" style={{ width: '85%' }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Add business address and contact details to complete your profile.
+                  </p>
+                  
+                  <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (onAction) {
-                          onAction();
-                        }
-                        setIsFullscreen(true);
+                        setShowBusinessProfileSetup(true);
                       }}
                       className="flex items-center gap-2 w-fit transition-all duration-200 hover:scale-105"
                     >
-                      <MessageCircle className="h-4 w-4" />
-                      {actionLabel || "Chat with Ally"}
+                      Continue Setup
                     </Button>
-                  )}
+                  </div>
                 </div>
-              </div>
-            </SmallBizCard>
+              </SmallBizCard>
+            ) : (
+              <SmallBizCard
+                title={task.title}
+                description={task.description}
+                variant={getVariantFromUrgency()}
+                onClick={() => setIsFullscreen(true)}
+                expandable={true}
+                className="cursor-pointer origin-top-left transition-all duration-300 ease-out"
+              >
+                <div className="space-y-4">
+                  {!isGreeting && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">
+                            Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : "No due date"}
+                          </span>
+                        </div>
+                        {getUrgencyBadge()}
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">
+                          {getDaysUntilDue() >= 0 
+                            ? `${getDaysUntilDue()} days remaining`
+                            : `${Math.abs(getDaysUntilDue())} days overdue`
+                          }
+                        </span>
+                      </div>
+
+                      {urgency === "overdue" && (
+                        <div className="flex items-center gap-2 p-3 bg-destructive/10 rounded-lg">
+                          <AlertTriangle className="h-4 w-4 text-destructive" />
+                          <span className="text-sm text-destructive font-medium">
+                            Action Required
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                
+                  <div className="flex items-center gap-2">
+                    {onAction && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onAction) {
+                            onAction();
+                          }
+                          setIsFullscreen(true);
+                        }}
+                        className="flex items-center gap-2 w-fit transition-all duration-200 hover:scale-105"
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                        {actionLabel || "Chat with Ally"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </SmallBizCard>
+            )}
           </div>
         </div>
       </>
