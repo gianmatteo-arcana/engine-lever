@@ -646,7 +646,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
             >
               SmallBizAlly
             </h1>
-            <span className="text-sm text-muted-foreground">Your AI Compliance Assistant</span>
+            <span className="text-sm text-muted-foreground">The business ally you can trust.</span>
           </div>
           <div className="flex items-center gap-3">
             {/* Dev Mode Layout Selector */}
