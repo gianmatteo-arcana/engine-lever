@@ -330,9 +330,9 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
               </div>
 
               {/* Chat Interface Content */}
-              <div className="flex-1 p-6 pt-0 animate-content-fade-in flex flex-col" style={{ animationDelay: '100ms' }}>
+              <div className="flex-1 animate-content-fade-in flex flex-col" style={{ animationDelay: '100ms' }}>
                 {/* Messages Area - Scrollable */}
-                <div ref={messagesRef} className="flex-1 overflow-y-auto min-h-0">
+                <div ref={messagesRef} className="flex-1 overflow-y-auto min-h-0 p-6 pt-0">
                   {/* Welcome Message - only show when no messages */}
                   {chatMessages.length === 0 && (
                     <>
@@ -456,7 +456,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                 </div>
 
                 {/* Chat Input Area - Fixed at bottom */}
-                <div className="mt-4 flex-shrink-0">
+                <div className="flex-shrink-0 p-6 pt-0">
                   <div className="flex gap-2 p-4 bg-background border rounded-lg">
                     <input 
                       type="text" 
