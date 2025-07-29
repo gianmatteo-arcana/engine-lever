@@ -321,8 +321,9 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
               </div>
 
               {/* Chat Interface Content */}
-              <div className="flex-1 p-6 pt-0 animate-content-fade-in" style={{ animationDelay: '100ms' }}>
-                <div className="h-full flex flex-col">
+              <div className="flex-1 p-6 pt-0 animate-content-fade-in flex flex-col" style={{ animationDelay: '100ms' }}>
+                {/* Messages Area - Scrollable */}
+                <div className="flex-1 overflow-y-auto min-h-0">
                   {/* Welcome Message - only show when no messages */}
                   {chatMessages.length === 0 && (
                     <>
@@ -376,7 +377,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
 
                   {/* Chat Messages */}
                   {chatMessages.length > 0 && (
-                    <div className="flex-1 overflow-y-auto space-y-4 mb-6">
+                    <div className="space-y-4 pb-4">
                       {chatMessages.map((message, messageIndex) => (
                         <div key={messageIndex} className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -443,32 +444,32 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                       )}
                     </div>
                   )}
+                </div>
 
-                  {/* Chat Input Area */}
-                  <div className="mt-auto">
-                    <div className="flex gap-2 p-4 bg-background border rounded-lg">
-                      <input 
-                        type="text" 
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        placeholder="Ask me anything..."
-                        disabled={isLoading}
-                        className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground disabled:opacity-50"
-                      />
-                      <Button 
-                        size="sm" 
-                        className="px-3"
-                        onClick={() => handleChatSubmit()}
-                        disabled={isLoading || !chatInput.trim()}
-                      >
-                        {isLoading ? (
-                          <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                        ) : (
-                          <Send className="w-4 h-4" />
-                        )}
-                      </Button>
-                    </div>
+                {/* Chat Input Area - Fixed at bottom */}
+                <div className="mt-4 flex-shrink-0">
+                  <div className="flex gap-2 p-4 bg-background border rounded-lg">
+                    <input 
+                      type="text" 
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder="Ask me anything..."
+                      disabled={isLoading}
+                      className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground disabled:opacity-50"
+                    />
+                    <Button 
+                      size="sm" 
+                      className="px-3"
+                      onClick={() => handleChatSubmit()}
+                      disabled={isLoading || !chatInput.trim()}
+                    >
+                      {isLoading ? (
+                        <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                    </Button>
                   </div>
                 </div>
               </div>
