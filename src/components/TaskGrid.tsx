@@ -107,7 +107,7 @@ export const TaskGrid = ({
                 year={year}
                 taskCount={monthTasks.length}
               />
-              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3 px-4">
+              <div className={`grid gap-3 px-4 ${isArchived ? 'grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10' : 'grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10'}`}>
                 {monthTasks.map((task, taskIndex) => (
                   <div
                     key={task.id}

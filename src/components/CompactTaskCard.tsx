@@ -59,6 +59,11 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: Compact
   }, [isVisible, isExpanded, expandedAt]);
 
   const getUrgencyStyles = () => {
+    // For archived tasks, use calming blue tones regardless of original urgency
+    if (overlayIcon) {
+      return "bg-primary/10 border-primary/20 text-primary hover:bg-primary/15";
+    }
+    
     switch (urgency) {
       case "overdue":
         return "bg-destructive/20 border-destructive/40 text-destructive hover:bg-destructive/30";

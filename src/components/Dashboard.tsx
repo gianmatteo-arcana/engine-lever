@@ -683,17 +683,73 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                     </div>
                   )}
 
-                  {/* Most Urgent Task - Medium Size */}
-                  {mostUrgentTask && (
+                  {/* Priority Tasks Section */}
+                  {(mostUrgentTask || true) && (
                     <div className="space-y-4">
-                      <h3 className="text-lg font-semibold text-foreground">Priority Task</h3>
-                      <TaskCard
-                        task={mostUrgentTask}
-                        size="medium"
-                        urgency={getTaskUrgency(mostUrgentTask)}
-                        onClick={() => handleTaskClick(mostUrgentTask.id)}
-                        onAction={() => handleTaskAction(mostUrgentTask.id)}
-                      />
+                      <h3 className="text-lg font-semibold text-foreground">Priority Tasks</h3>
+                      <div className="space-y-4">
+                        {/* Most Urgent Task */}
+                        {mostUrgentTask && (
+                          <TaskCard
+                            task={mostUrgentTask}
+                            size="medium"
+                            urgency={getTaskUrgency(mostUrgentTask)}
+                            onClick={() => handleTaskClick(mostUrgentTask.id)}
+                            onAction={() => handleTaskAction(mostUrgentTask.id)}
+                          />
+                        )}
+                        
+                        {/* Business Profile Setup Card */}
+                        <SmallBizCard
+                          title="Business Profile Setup"
+                          description="Complete your business information"
+                          variant="warning"
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-foreground">Profile Completion</span>
+                              <span className="text-sm font-medium text-warning">85% Complete</span>
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-2">
+                              <div className="bg-warning h-2 rounded-full" style={{ width: '85%' }} />
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Add business address and contact details to complete your profile.
+                            </p>
+                          </div>
+                        </SmallBizCard>
+
+                        {/* Business Snapshot Card */}
+                        <SmallBizCard
+                          title="Business Snapshot"
+                          description="Where your paperwork stands today"
+                          variant="success"
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-foreground">Current Status</span>
+                              <span className="text-sm font-medium text-success">
+                                {tasks.filter(t => t.status === 'pending').length === 0 
+                                  ? "All set — 0 tasks pending"
+                                  : `${tasks.filter(t => t.status === 'pending').length} items need attention`}
+                              </span>
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-2">
+                              <div 
+                                className="bg-success h-2 rounded-full" 
+                                style={{ 
+                                  width: `${Math.max(20, 100 - (tasks.filter(t => t.status === 'pending').length * 15))}%` 
+                                }}
+                              />
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {tasks.filter(t => t.status === 'pending').length === 0 
+                                ? "Nice work! We'll tap you when something needs attention." 
+                                : "Complete your pending tasks to improve compliance."}
+                            </p>
+                          </div>
+                        </SmallBizCard>
+                      </div>
                     </div>
                   )}
 
@@ -706,40 +762,10 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                         onTaskClick={(taskId) => console.log('Clicked archived task:', taskId)}
                         overlayIcons={archivedTaskOverlayIcons}
                         isArchived={true}
+                        className="archived-tasks"
                       />
                     </div>
                   )}
-
-                  {/* Business Snapshot */}
-                  <SmallBizCard
-                    title="Business Snapshot"
-                    description="Where your paperwork stands today"
-                    variant="warning"
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-foreground">Current Status</span>
-                        <span className="text-sm font-medium text-warning">
-                          {tasks.filter(t => t.status === 'pending').length === 0 
-                            ? "All set — 0 tasks pending"
-                            : `${tasks.filter(t => t.status === 'pending').length} items need attention`}
-                        </span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div 
-                          className="bg-warning h-2 rounded-full" 
-                          style={{ 
-                            width: `${Math.max(20, 100 - (tasks.filter(t => t.status === 'pending').length * 15))}%` 
-                          }}
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {tasks.filter(t => t.status === 'pending').length === 0 
-                          ? "Nice work! We'll tap you when something needs attention." 
-                          : "Complete your pending tasks to improve compliance."}
-                      </p>
-                    </div>
-                  </SmallBizCard>
                 </div>
 
               </div>
