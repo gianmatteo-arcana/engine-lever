@@ -1,4 +1,3 @@
-
 import { cn } from "@/lib/utils";
 import { SmallBizCard } from "./SmallBizCard";
 import { Badge } from "@/components/ui/badge";
@@ -162,166 +161,175 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
             transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
           }}
         >
-          {isFullscreen ? (
-            // Fullscreen view
-            <div className="bg-card border rounded-lg shadow-lg overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
-              {/* Close button */}
-              <div className="absolute top-4 right-4 z-10">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsFullscreen(false);
-                  }}
-                  className="h-8 w-8 p-0 shadow-lg"
-                >
-                  <Minimize2 className="h-4 w-4" />
-                </Button>
-              </div>
+          {/* Fullscreen view - always rendered but conditionally visible */}
+          <div 
+            className={cn(
+              "bg-card border rounded-lg shadow-lg overflow-hidden flex flex-col transition-all duration-400",
+              isFullscreen ? "opacity-100 visible" : "opacity-0 invisible absolute inset-0 pointer-events-none"
+            )} 
+            style={{ height: isFullscreen ? 'calc(100vh - 200px)' : 'auto' }}
+          >
+            {/* Close button */}
+            <div className="absolute top-4 right-4 z-10">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsFullscreen(false);
+                }}
+                className="h-8 w-8 p-0 shadow-lg"
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
+            </div>
 
-              <div className="flex-1 overflow-auto flex flex-col">
-                {/* Ally AI Assistant Header */}
-                <div className="p-6 pb-4 animate-content-fade-in">
-                  <div className="flex items-center gap-3 pr-12">
-                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                      <MessageCircle className="h-6 w-6 text-primary" />
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-bold text-foreground">Ally - Your AI Assistant</h2>
-                      <p className="text-muted-foreground text-base">I'm here to help with your compliance needs</p>
-                    </div>
+            <div className="flex-1 overflow-auto flex flex-col">
+              {/* Ally AI Assistant Header */}
+              <div className="p-6 pb-4 animate-content-fade-in">
+                <div className="flex items-center gap-3 pr-12">
+                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                    <MessageCircle className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-foreground">Ally - Your AI Assistant</h2>
+                    <p className="text-muted-foreground text-base">I'm here to help with your compliance needs</p>
                   </div>
                 </div>
+              </div>
 
-                {/* Chat Interface Content */}
-                <div className="flex-1 p-6 pt-0 animate-content-fade-in" style={{ animationDelay: '100ms' }}>
-                  <div className="h-full flex flex-col">
-                    {/* Welcome Message - only show when no messages */}
-                    {chatMessages.length === 0 && (
-                      <>
-                        <div className="flex items-start gap-3 mb-6">
-                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                            <MessageCircle className="h-5 w-5 text-primary" />
-                          </div>
-                          <div className="bg-muted/50 rounded-lg p-4 flex-1">
-                            <p className="text-sm text-foreground">
-                              Hello! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?
-                            </p>
-                          </div>
+              {/* Chat Interface Content */}
+              <div className="flex-1 p-6 pt-0 animate-content-fade-in" style={{ animationDelay: '100ms' }}>
+                <div className="h-full flex flex-col">
+                  {/* Welcome Message - only show when no messages */}
+                  {chatMessages.length === 0 && (
+                    <>
+                      <div className="flex items-start gap-3 mb-6">
+                        <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                          <MessageCircle className="h-5 w-5 text-primary" />
                         </div>
-
-                        {/* Quick Action Buttons */}
-                        <div className="grid grid-cols-2 gap-3 mb-6">
-                          <Button 
-                            variant="outline" 
-                            className="justify-start h-auto py-3 px-4"
-                            onClick={() => setChatInput("What's my current compliance status?")}
-                          >
-                            <span className="text-sm">Review my compliance status</span>
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            className="justify-start h-auto py-3 px-4"
-                            onClick={() => setChatInput("How do I update my Statement of Information?")}
-                          >
-                            <span className="text-sm">Update Statement of Information</span>
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            className="justify-start h-auto py-3 px-4 flex items-center gap-2"
-                            onClick={() => setChatInput("Can you help me review a letter?")}
-                          >
-                            <div className="w-4 h-4 border border-current rounded flex items-center justify-center">
-                              <div className="w-2 h-2 border-l border-b border-current transform rotate-45 scale-75"></div>
-                            </div>
-                            <span className="text-sm">Review letter</span>
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            className="justify-start h-auto py-3 px-4"
-                            onClick={() => setChatInput("I have a question about compliance")}
-                          >
-                            <span className="text-sm">Ask a question</span>
-                          </Button>
+                        <div className="bg-muted/50 rounded-lg p-4 flex-1">
+                          <p className="text-sm text-foreground">
+                            Hello! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?
+                          </p>
                         </div>
-                      </>
-                    )}
-
-                    {/* Chat Messages */}
-                    {chatMessages.length > 0 && (
-                      <div className="flex-1 overflow-y-auto space-y-4 mb-6">
-                        {chatMessages.map((message, index) => (
-                          <div key={index} className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                              message.role === 'user' 
-                                ? 'bg-primary text-primary-foreground' 
-                                : 'bg-primary/10'
-                            }`}>
-                              {message.role === 'user' ? (
-                                <span className="text-xs font-semibold">U</span>
-                              ) : (
-                                <MessageCircle className="h-4 w-4 text-primary" />
-                              )}
-                            </div>
-                            <div className={`rounded-lg p-3 max-w-[80%] ${
-                              message.role === 'user' 
-                                ? 'bg-primary text-primary-foreground' 
-                                : 'bg-muted/50'
-                            }`}>
-                              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                            </div>
-                          </div>
-                        ))}
-                        {isLoading && (
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                              <MessageCircle className="h-4 w-4 text-primary" />
-                            </div>
-                            <div className="bg-muted/50 rounded-lg p-3">
-                              <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
-                                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
                       </div>
-                    )}
 
-                    {/* Chat Input Area */}
-                    <div className="mt-auto">
-                      <div className="flex gap-2 p-4 bg-background border rounded-lg">
-                        <input 
-                          type="text" 
-                          value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
-                          onKeyPress={handleKeyPress}
-                          placeholder="Ask me anything..."
-                          disabled={isLoading}
-                          className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground disabled:opacity-50"
-                        />
+                      {/* Quick Action Buttons */}
+                      <div className="grid grid-cols-2 gap-3 mb-6">
                         <Button 
-                          size="sm" 
-                          className="px-3"
-                          onClick={handleChatSubmit}
-                          disabled={isLoading || !chatInput.trim()}
+                          variant="outline" 
+                          className="justify-start h-auto py-3 px-4"
+                          onClick={() => setChatInput("What's my current compliance status?")}
                         >
-                          {isLoading ? (
-                            <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                          ) : (
-                            <Send className="w-4 h-4" />
-                          )}
+                          <span className="text-sm">Review my compliance status</span>
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          className="justify-start h-auto py-3 px-4"
+                          onClick={() => setChatInput("How do I update my Statement of Information?")}
+                        >
+                          <span className="text-sm">Update Statement of Information</span>
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          className="justify-start h-auto py-3 px-4 flex items-center gap-2"
+                          onClick={() => setChatInput("Can you help me review a letter?")}
+                        >
+                          <div className="w-4 h-4 border border-current rounded flex items-center justify-center">
+                            <div className="w-2 h-2 border-l border-b border-current transform rotate-45 scale-75"></div>
+                          </div>
+                          <span className="text-sm">Review letter</span>
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          className="justify-start h-auto py-3 px-4"
+                          onClick={() => setChatInput("I have a question about compliance")}
+                        >
+                          <span className="text-sm">Ask a question</span>
                         </Button>
                       </div>
+                    </>
+                  )}
+
+                  {/* Chat Messages */}
+                  {chatMessages.length > 0 && (
+                    <div className="flex-1 overflow-y-auto space-y-4 mb-6">
+                      {chatMessages.map((message, index) => (
+                        <div key={index} className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            message.role === 'user' 
+                              ? 'bg-primary text-primary-foreground' 
+                              : 'bg-primary/10'
+                          }`}>
+                            {message.role === 'user' ? (
+                              <span className="text-xs font-semibold">U</span>
+                            ) : (
+                              <MessageCircle className="h-4 w-4 text-primary" />
+                            )}
+                          </div>
+                          <div className={`rounded-lg p-3 max-w-[80%] ${
+                            message.role === 'user' 
+                              ? 'bg-primary text-primary-foreground' 
+                              : 'bg-muted/50'
+                          }`}>
+                            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                          </div>
+                        </div>
+                      ))}
+                      {isLoading && (
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                            <MessageCircle className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
+                              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Chat Input Area */}
+                  <div className="mt-auto">
+                    <div className="flex gap-2 p-4 bg-background border rounded-lg">
+                      <input 
+                        type="text" 
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        placeholder="Ask me anything..."
+                        disabled={isLoading}
+                        className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground disabled:opacity-50"
+                      />
+                      <Button 
+                        size="sm" 
+                        className="px-3"
+                        onClick={handleChatSubmit}
+                        disabled={isLoading || !chatInput.trim()}
+                      >
+                        {isLoading ? (
+                          <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        ) : (
+                          <Send className="w-4 h-4" />
+                        )}
+                      </Button>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          ) : (
-            // Medium size view
+          </div>
+
+          {/* Medium size view - always rendered but conditionally visible */}
+          <div className={cn(
+            "transition-all duration-400",
+            isFullscreen ? "opacity-0 invisible pointer-events-none" : "opacity-100 visible"
+          )}>
             <SmallBizCard
               title={task.title}
               description={task.description}
@@ -394,149 +402,9 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                     Expand
                   </Button>
                 </div>
-
-                {/* Expanded Chat Interface - appears below existing content with animation */}
-                {isFullscreen && (
-                  <div className="animate-fade-in pt-4 border-t border-border">
-                    {/* Ally AI Assistant Header */}
-                    <div className="mb-4 animate-content-fade-in">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                          <MessageCircle className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-semibold text-foreground">Ally - Your AI Assistant</h3>
-                          <p className="text-sm text-muted-foreground">I'm here to help with your compliance needs</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Welcome Message - only show when no messages */}
-                    {chatMessages.length === 0 && (
-                      <>
-                        <div className="flex items-start gap-3 mb-4">
-                          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                            <MessageCircle className="h-4 w-4 text-primary" />
-                          </div>
-                          <div className="bg-muted/50 rounded-lg p-3 flex-1">
-                            <p className="text-sm text-foreground">
-                              Hello! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Quick Action Buttons */}
-                        <div className="grid grid-cols-2 gap-2 mb-4">
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="justify-start h-auto py-2 px-3 text-xs"
-                            onClick={() => setChatInput("What's my current compliance status?")}
-                          >
-                            Review my compliance status
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="justify-start h-auto py-2 px-3 text-xs"
-                            onClick={() => setChatInput("How do I update my Statement of Information?")}
-                          >
-                            Update Statement of Information
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="justify-start h-auto py-2 px-3 text-xs flex items-center gap-2"
-                            onClick={() => setChatInput("Can you help me review a letter?")}
-                          >
-                            <div className="w-3 h-3 border border-current rounded flex items-center justify-center">
-                              <div className="w-1.5 h-1.5 border-l border-b border-current transform rotate-45 scale-75"></div>
-                            </div>
-                            Review letter
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="justify-start h-auto py-2 px-3 text-xs"
-                            onClick={() => setChatInput("I have a question about compliance")}
-                          >
-                            Ask a question
-                          </Button>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Chat Messages */}
-                    {chatMessages.length > 0 && (
-                      <div className="max-h-60 overflow-y-auto space-y-3 mb-4">
-                        {chatMessages.map((message, index) => (
-                          <div key={index} className={`flex items-start gap-2 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
-                              message.role === 'user' 
-                                ? 'bg-primary text-primary-foreground' 
-                                : 'bg-primary/10'
-                            }`}>
-                              {message.role === 'user' ? (
-                                <span className="text-xs font-semibold">U</span>
-                              ) : (
-                                <MessageCircle className="h-3 w-3 text-primary" />
-                              )}
-                            </div>
-                            <div className={`rounded-lg p-2 max-w-[80%] ${
-                              message.role === 'user' 
-                                ? 'bg-primary text-primary-foreground text-right' 
-                                : 'bg-muted/50'
-                            }`}>
-                              <p className="text-xs whitespace-pre-wrap">{message.content}</p>
-                            </div>
-                          </div>
-                        ))}
-                        {isLoading && (
-                          <div className="flex items-start gap-2">
-                            <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                              <MessageCircle className="h-3 w-3 text-primary" />
-                            </div>
-                            <div className="bg-muted/50 rounded-lg p-2">
-                              <div className="flex items-center gap-1">
-                                <div className="w-1 h-1 bg-primary rounded-full animate-bounce"></div>
-                                <div className="w-1 h-1 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                                <div className="w-1 h-1 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Chat Input Area */}
-                    <div className="flex gap-2 p-3 bg-background border rounded-lg">
-                      <input 
-                        type="text" 
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        placeholder="Ask me anything..."
-                        disabled={isLoading}
-                        className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground disabled:opacity-50"
-                      />
-                      <Button 
-                        size="sm" 
-                        className="px-2"
-                        onClick={handleChatSubmit}
-                        disabled={isLoading || !chatInput.trim()}
-                      >
-                        {isLoading ? (
-                          <div className="w-3 h-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                        ) : (
-                          <Send className="w-3 h-3" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
               </div>
             </SmallBizCard>
-          )}
+          </div>
         </div>
       </>
     );
