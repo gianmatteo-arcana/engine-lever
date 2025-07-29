@@ -68,21 +68,13 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
   if (size === "medium") {
     return (
       <>
-        {/* Backdrop for fullscreen mode */}
-        {isFullscreen && (
-          <div 
-            className="fixed inset-0 z-40 bg-background/95 backdrop-blur-sm animate-fade-in"
-            onClick={() => setIsFullscreen(false)}
-          />
-        )}
-        
         {/* Card container */}
         <div 
           className={cn(
-            "transition-all ease-out",
+            "transition-all ease-out w-full",
             isFullscreen 
-              ? "relative z-50 w-full min-h-[80vh]" 
-              : "relative w-full h-full"
+              ? "relative min-h-[600px] mb-6" 
+              : "relative h-full"
           )}
           style={{ 
             transformOrigin: 'top left',
