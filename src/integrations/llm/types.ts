@@ -42,11 +42,13 @@ export interface PsychState {
 
 export interface RequestEnvelope {
   user_message: string;
+  task_prompt?: string;
   task?: Task;
   business_profile?: Record<string, any>;
   memory_context?: string[];
   psych_state?: PsychState;
   session_id?: string;
+  env?: 'production' | 'dev';
 }
 
 export interface ResponsePayload {

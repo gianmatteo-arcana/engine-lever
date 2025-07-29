@@ -10,11 +10,13 @@ const corsHeaders = {
 
 interface RequestEnvelope {
   user_message: string;
+  task_prompt?: string;
   task?: any;
   business_profile?: any;
   memory_context?: string[];
   psych_state?: any;
   session_id?: string;
+  env?: 'production' | 'dev';
 }
 
 interface ResponsePayload {
@@ -23,6 +25,26 @@ interface ResponsePayload {
   actions: Array<{ label: string; instruction: string; }>;
   timestamp: string;
   dev_notes?: string;
+}
+
+// Helper function to get formatted section or "NONE"
+function getFormattedSection(data: any, sectionName: string): string {
+  if (!data) return "NONE";
+  
+  if (typeof data === 'string') {
+    return data.trim() || "NONE";
+  }
+  
+  if (Array.isArray(data)) {
+    return data.length > 0 ? JSON.stringify(data, null, 2) : "NONE";
+  }
+  
+  if (typeof data === 'object') {
+    const keys = Object.keys(data);
+    return keys.length > 0 ? JSON.stringify(data, null, 2) : "NONE";
+  }
+  
+  return "NONE";
 }
 
 serve(async (req) => {
@@ -42,41 +64,68 @@ serve(async (req) => {
       throw new Error('RequestEnvelope with user_message is required');
     }
 
-    // Assemble prompt according to Prompt-Assembly Protocol
+    const isDev = requestEnvelope.env === 'dev';
+
+    // Assemble prompt according to EXACT Prompt-Assembly Protocol
     const promptSections = [];
     
-    // Add master prompt
-    if (masterPrompt) {
-      promptSections.push(`### MASTER_PROMPT\n${masterPrompt}`);
+    // 1. SYSTEM_PROMPT (was MASTER_PROMPT)
+    promptSections.push(`### SYSTEM_PROMPT`);
+    promptSections.push(masterPrompt || "NONE");
+    
+    // 2. TASK_PROMPT
+    promptSections.push(`### TASK_PROMPT`);
+    promptSections.push(getFormattedSection(requestEnvelope.task_prompt, "TASK_PROMPT"));
+    
+    // 3. TASK (was TASK_CONTEXT)
+    promptSections.push(`### TASK`);
+    promptSections.push(getFormattedSection(requestEnvelope.task, "TASK"));
+    
+    // 4. MEMORY_CONTEXT
+    promptSections.push(`### MEMORY_CONTEXT`);
+    promptSections.push(getFormattedSection(requestEnvelope.memory_context, "MEMORY_CONTEXT"));
+    
+    // 5. BUSINESS_PROFILE
+    promptSections.push(`### BUSINESS_PROFILE`);
+    promptSections.push(getFormattedSection(requestEnvelope.business_profile, "BUSINESS_PROFILE"));
+    
+    // 6. PSYCH_STATE
+    promptSections.push(`### PSYCH_STATE`);
+    promptSections.push(getFormattedSection(requestEnvelope.psych_state, "PSYCH_STATE"));
+    
+    // 7. USER_MESSAGE
+    promptSections.push(`### USER_MESSAGE`);
+    promptSections.push(getFormattedSection(requestEnvelope.user_message, "USER_MESSAGE"));
+    
+    const assembledPrompt = promptSections.join('\n');
+
+    // Extensive DEV MODE logging
+    if (isDev) {
+      console.log('\n🔧 === DEV MODE: PROMPT ASSEMBLY PROTOCOL COMPLIANCE ===');
+      console.log('📋 Section order validation:');
+      console.log('1. ✅ SYSTEM_PROMPT');
+      console.log('2. ✅ TASK_PROMPT');
+      console.log('3. ✅ TASK');
+      console.log('4. ✅ MEMORY_CONTEXT');
+      console.log('5. ✅ BUSINESS_PROFILE');
+      console.log('6. ✅ PSYCH_STATE');
+      console.log('7. ✅ USER_MESSAGE');
+      
+      console.log('\n📝 Individual sections:');
+      console.log('SYSTEM_PROMPT length:', (masterPrompt || "NONE").length);
+      console.log('TASK_PROMPT:', requestEnvelope.task_prompt || "NONE");
+      console.log('TASK:', requestEnvelope.task ? JSON.stringify(requestEnvelope.task, null, 2) : "NONE");
+      console.log('MEMORY_CONTEXT:', requestEnvelope.memory_context || "NONE");
+      console.log('BUSINESS_PROFILE:', requestEnvelope.business_profile ? JSON.stringify(requestEnvelope.business_profile, null, 2) : "NONE");
+      console.log('PSYCH_STATE:', requestEnvelope.psych_state ? JSON.stringify(requestEnvelope.psych_state, null, 2) : "NONE");
+      console.log('USER_MESSAGE:', requestEnvelope.user_message || "NONE");
+      
+      console.log('\n🎯 FULL ASSEMBLED PROMPT:');
+      console.log('==========================================');
+      console.log(assembledPrompt);
+      console.log('==========================================');
+      console.log('Total prompt length:', assembledPrompt.length);
     }
-    
-    // Add business profile if available
-    if (requestEnvelope.business_profile) {
-      promptSections.push(`### BUSINESS_PROFILE\n${JSON.stringify(requestEnvelope.business_profile, null, 2)}`);
-    }
-    
-    // Add task context if available
-    if (requestEnvelope.task) {
-      promptSections.push(`### TASK_CONTEXT\n${JSON.stringify(requestEnvelope.task, null, 2)}`);
-    }
-    
-    // Add memory context if available
-    if (requestEnvelope.memory_context && requestEnvelope.memory_context.length > 0) {
-      promptSections.push(`### MEMORY_CONTEXT\n${requestEnvelope.memory_context.join('\n')}`);
-    }
-    
-    // Add psychological state if available
-    if (requestEnvelope.psych_state) {
-      promptSections.push(`### PSYCH_STATE\n${JSON.stringify(requestEnvelope.psych_state, null, 2)}`);
-    }
-    
-    // Add user message
-    promptSections.push(`### USER_MESSAGE\n${requestEnvelope.user_message}`);
-    
-    // Add response format instruction
-    promptSections.push(`### RESPONSE_FORMAT\nRespond with a valid JSON object matching the ResponsePayload structure with message, actions array, and timestamp.`);
-    
-    const assembledPrompt = promptSections.join('\n\n');
 
     console.log('Calling OpenAI with assembled prompt');
 
@@ -87,7 +136,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-2025-04-14',
+        model: 'gpt-4o-mini',
         messages: [
           { role: 'user', content: assembledPrompt }
         ],
@@ -113,8 +162,10 @@ serve(async (req) => {
       responsePayload = JSON.parse(generatedText);
       
       console.log('=== PARSING AI RESPONSE ===');
-      console.log('Raw AI response:', generatedText);
-      console.log('Parsed payload:', JSON.stringify(responsePayload, null, 2));
+      if (isDev) {
+        console.log('Raw AI response:', generatedText);
+        console.log('Parsed payload:', JSON.stringify(responsePayload, null, 2));
+      }
       
       // Validate required fields
       if (!responsePayload.message || !Array.isArray(responsePayload.actions)) {

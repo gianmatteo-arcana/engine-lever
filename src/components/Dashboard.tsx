@@ -92,28 +92,49 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     console.log("🤖 ATTEMPTING REAL AI CALL...");
     
     try {
-      // Create RequestEnvelope with context
+      // Helper functions for dynamic sections
+      const getTaskPrompt = (): string | undefined => {
+        // Stub for now - returns undefined which will become "NONE"
+        return undefined;
+      };
+
+      const getMemoryContext = (): string[] => {
+        // Get last 5 chat messages as context
+        const context = chatMessages.slice(-5).map(m => `${m.sender}: ${m.content}`);
+        return context.length > 0 ? context : [];
+      };
+
+      const getBusinessProfile = async (): Promise<Record<string, any> | undefined> => {
+        // TODO: Query actual user profile from Supabase profiles table
+        // For now, return basic demo data
+        return {
+          name: "Demo Business",
+          type: "LLC", 
+          state: "California",
+          user_name: user?.name || "Gianmatteo"
+        };
+      };
+
+      // Create RequestEnvelope with context following exact protocol
       const requestEnvelope = {
         user_message: message,
+        task_prompt: getTaskPrompt(),
         task: selectedTask ? {
           id: selectedTask.id,
           title: selectedTask.title,
           description: selectedTask.description || '',
           status: selectedTask.status as 'not_started' | 'in_progress' | 'completed' | 'snoozed' | 'ignored'
         } : undefined,
-        business_profile: {
-          name: "Demo Business",
-          type: "LLC",
-          state: "California"
-        },
-        memory_context: chatMessages.slice(-5).map(m => `${m.sender}: ${m.content}`),
+        business_profile: await getBusinessProfile(),
+        memory_context: getMemoryContext(),
         psych_state: {
           stress_level: 'medium' as const,
           confidence_level: 'medium' as const,
           overwhelm_indicator: false,
           tone_preference: 'encouraging' as const
         },
-        session_id: `session_${Date.now()}`
+        session_id: `session_${Date.now()}`,
+        env: 'dev' as const // Enable DEV MODE logging
       };
       
       const responsePayload = await generateResponse(requestEnvelope);
