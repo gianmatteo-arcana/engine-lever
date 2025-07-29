@@ -19,9 +19,16 @@ interface TaskGridProps {
   onTaskClick: (taskId: string) => void;
   className?: string;
   overlayIcons?: { [taskId: string]: "checkmark" | "warning" | "alarm" };
+  isArchived?: boolean;
 }
 
-export const TaskGrid = ({ tasks, onTaskClick, className, overlayIcons }: TaskGridProps) => {
+export const TaskGrid = ({ 
+  tasks, 
+  onTaskClick, 
+  className = '',
+  overlayIcons = {},
+  isArchived = false
+}: TaskGridProps) => {
   const getTaskUrgency = (task: Task): "overdue" | "urgent" | "normal" => {
     if (!task.due_date) return "normal";
     
@@ -51,13 +58,24 @@ export const TaskGrid = ({ tasks, onTaskClick, className, overlayIcons }: TaskGr
       groups[monthYear].push(task);
     });
 
-    // Sort months chronologically (latest first - December at top, August at bottom)
+    // Sort by year and month - reverse chronological for archived (latest first), chronological for regular (earliest first)
     const sortedGroups = Object.entries(groups).sort(([a], [b]) => {
       const [yearA, monthA] = a.split('-').map(Number);
       const [yearB, monthB] = b.split('-').map(Number);
       
-      if (yearA !== yearB) return yearB - yearA; // Reverse year order
-      return monthB - monthA; // Reverse month order
+      if (isArchived) {
+        // For archived tasks: latest first (reverse chronological)
+        if (yearA !== yearB) {
+          return yearB - yearA;
+        }
+        return monthB - monthA;
+      } else {
+        // For regular tasks: earliest first (chronological)
+        if (yearA !== yearB) {
+          return yearA - yearB;
+        }
+        return monthA - monthB;
+      }
     });
 
     return sortedGroups;

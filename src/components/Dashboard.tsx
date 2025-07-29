@@ -675,23 +675,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                     <div className="text-center py-8">
                       <p className="text-muted-foreground">Loading tasks...</p>
                     </div>
-        )}
-
-        {/* Archived Tasks Section */}
-        {archivedTasks.length > 0 && (
-          <div className="bg-muted/20">
-            <div className="container mx-auto px-4 py-6">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Archived Tasks</h3>
-              <div className="pb-2">
-                <TaskGrid 
-                  tasks={archivedTasks} 
-                  onTaskClick={(taskId) => console.log('Clicked archived task:', taskId)}
-                  overlayIcons={archivedTaskOverlayIcons}
-                />
-              </div>
-            </div>
-          </div>
-        )}
+                  )}
                   
                   {error && (
                     <div className="text-center py-8">
@@ -709,6 +693,19 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                         urgency={getTaskUrgency(mostUrgentTask)}
                         onClick={() => handleTaskClick(mostUrgentTask.id)}
                         onAction={() => handleTaskAction(mostUrgentTask.id)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Archived Tasks Section */}
+                  {archivedTasks.length > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold text-foreground">Archived Tasks</h3>
+                      <TaskGrid 
+                        tasks={archivedTasks} 
+                        onTaskClick={(taskId) => console.log('Clicked archived task:', taskId)}
+                        overlayIcons={archivedTaskOverlayIcons}
+                        isArchived={true}
                       />
                     </div>
                   )}
