@@ -12,14 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MessageCircle, X, User, LogOut, ChevronUp, List, Layers } from "lucide-react";
 import { generateResponse } from "@/integrations/llm";
-
-interface ChatMessage {
-  id: string;
-  content: string;
-  sender: "user" | "ai";
-  timestamp: Date;
-  pills?: string[];
-}
+import { ChatMessage, Task, DatabaseTask } from "@/integrations/llm/types";
 
 interface DashboardProps {
   user: { name: string; email: string; createdAt?: Date } | null;
@@ -29,7 +22,7 @@ interface DashboardProps {
 export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   const [showChat, setShowChat] = useState(false);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
-  const [selectedTask, setSelectedTask] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<DatabaseTask | null>(null);
   const [showUserProfile, setShowUserProfile] = useState(false);
   const [layoutMode, setLayoutMode] = useState<"timeline" | "stacked">(() => {
     if (typeof window !== 'undefined') {
@@ -48,7 +41,12 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
       content: `Hello ${user?.name?.split(' ')[0] || "there"}! Welcome back. I'm Ally, your AI compliance assistant, ready to help you stay on top of all your business requirements and keep your business compliant and stress-free. How can I assist you today?`,
       sender: "ai",
       timestamp: new Date(),
-      pills: ["Review my compliance status", "Update Statement of Information", "Review letter", "Ask a question"]
+      actions: [
+        { label: "Review my compliance status", instruction: "Please review my current compliance status" },
+        { label: "Update Statement of Information", instruction: "Help me update my Statement of Information" },
+        { label: "Review letter", instruction: "I need help reviewing a letter" },
+        { label: "Ask a question", instruction: "I have a general question about compliance" }
+      ]
     }
   ]);
   const [isTyping, setIsTyping] = useState(false);
@@ -85,17 +83,37 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     setChatMessages(prev => [...prev, newMessage]);
     setIsTyping(true);
     try {
-      const llmMessages = [...chatMessages, newMessage].map(m => ({
-        role: m.sender === 'ai' ? 'assistant' as const : 'user' as const,
-        content: m.content,
-      }));
-      const aiText = await generateResponse(llmMessages);
+      // Create RequestEnvelope with context
+      const requestEnvelope = {
+        user_message: message,
+        task: selectedTask ? {
+          id: selectedTask.id,
+          title: selectedTask.title,
+          description: selectedTask.description || '',
+          status: selectedTask.status as 'not_started' | 'in_progress' | 'completed' | 'snoozed' | 'ignored'
+        } : undefined,
+        business_profile: {
+          name: "Demo Business",
+          type: "LLC",
+          state: "California"
+        },
+        memory_context: chatMessages.slice(-5).map(m => `${m.sender}: ${m.content}`),
+        psych_state: {
+          stress_level: 'medium' as const,
+          confidence_level: 'medium' as const,
+          overwhelm_indicator: false,
+          tone_preference: 'encouraging' as const
+        },
+        session_id: `session_${Date.now()}`
+      };
+      
+      const responsePayload = await generateResponse(requestEnvelope);
       const aiResponse: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        content: aiText,
+        content: responsePayload.message,
         sender: "ai",
         timestamp: new Date(),
-        pills: getResponsePills(message)
+        actions: responsePayload.actions
       };
       setChatMessages(prev => [...prev, aiResponse]);
     } catch (error) {
@@ -113,7 +131,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
         content: getAIResponse(message),
         sender: "ai",
         timestamp: new Date(),
-        pills: getResponsePills(message)
+        actions: getResponsePills(message).map(pill => ({ label: pill, instruction: pill }))
       };
       setChatMessages(prev => [...prev, fallback]);
     } finally {
@@ -121,8 +139,8 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
     }
   };
 
-  const handlePillClick = (pill: string) => {
-    handleSendMessage(pill);
+  const handleActionClick = (instruction: string) => {
+    handleSendMessage(instruction);
   };
 
   const getAIResponse = (message: string): string => {
@@ -166,15 +184,21 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
       content: "Let's update your Statement of Information! I've pulled the current details on file for Smith Consulting LLC. Are there any changes to your business information?",
       sender: "ai",
       timestamp: new Date(),
-      pills: ["No changes to my business", "We need to make updates"]
+      actions: [
+        { label: "No changes to my business", instruction: "No changes to my business information" },
+        { label: "We need to make updates", instruction: "We need to make updates to our business information" }
+      ]
     };
     
     setChatMessages([welcomeMessage]);
   };
 
   const handleTaskClick = (taskId: string) => {
-    setSelectedTask(taskId);
-    setExpandedCard("task");
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+      setSelectedTask(task);
+      setExpandedCard("task");
+    }
   };
 
   const handleTaskAction = (taskId: string) => {
@@ -319,8 +343,6 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
 
   // Handle full-size task view
   if (selectedTask && expandedCard === "task") {
-    const task = tasks.find(t => t.id === selectedTask);
-    if (task) {
       return (
         <div className="min-h-screen bg-background">
           {/* Header */}
@@ -337,7 +359,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                 >
                   <X className="h-4 w-4" />
                 </Button>
-                <h1 className="text-xl font-semibold text-foreground">{task.title}</h1>
+                <h1 className="text-xl font-semibold text-foreground">{selectedTask.title}</h1>
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -362,11 +384,11 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
               {/* Task Details */}
               <div className="space-y-4">
                 <TaskCard
-                  task={task}
+                  task={selectedTask as any}
                   size="full"
-                  urgency={getTaskUrgency(task)}
+                  urgency={getTaskUrgency(selectedTask as any)}
                   onClick={() => {}}
-                  onAction={() => handleTaskAction(task.id)}
+                  onAction={() => handleTaskAction(selectedTask.id)}
                 />
               </div>
 
@@ -375,7 +397,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                 <ChatInterface
                   messages={chatMessages}
                   onSendMessage={handleSendMessage}
-                  onPillClick={handlePillClick}
+                  onActionClick={handleActionClick}
                   isTyping={isTyping}
                   placeholder="Ask me anything about this task..."
                   className="h-full"
@@ -391,9 +413,8 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
             isVisible={showUserProfile}
           />
         </div>
-      );
+        );
     }
-  }
 
   if (expandedCard === "statement") {
     return (
@@ -446,7 +467,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
               <ChatInterface
                 messages={chatMessages}
                 onSendMessage={handleSendMessage}
-                onPillClick={handlePillClick}
+                onActionClick={handleActionClick}
                 isTyping={isTyping}
                 placeholder="Ask me anything about your filing..."
                 className="h-full"
@@ -531,7 +552,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
           mostUrgentTask={mostUrgentTask}
           chatMessages={chatMessages}
           onSendMessage={handleSendMessage}
-          onPillClick={handlePillClick}
+          onActionClick={handleActionClick}
           onStartStatementUpdate={handleStartStatementUpdate}
           onTaskAction={handleTaskAction}
           handleChatToggle={handleChatToggle}
@@ -761,7 +782,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                     <ChatInterface
                       messages={chatMessages}
                       onSendMessage={handleSendMessage}
-                      onPillClick={handlePillClick}
+                      onActionClick={handleActionClick}
                       isTyping={isTyping}
                       placeholder="Ask me anything about your business compliance..."
                       className="sticky top-20 h-[calc(100vh-120px)]"

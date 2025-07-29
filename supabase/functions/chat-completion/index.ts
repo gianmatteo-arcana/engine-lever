@@ -8,9 +8,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface LLMMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+interface RequestEnvelope {
+  user_message: string;
+  task?: any;
+  business_profile?: any;
+  memory_context?: string[];
+  psych_state?: any;
+  session_id?: string;
+}
+
+interface ResponsePayload {
+  message: string;
+  task_id?: string;
+  actions: Array<{ label: string; instruction: string; }>;
+  timestamp: string;
+  dev_notes?: string;
 }
 
 serve(async (req) => {
@@ -24,19 +36,49 @@ serve(async (req) => {
       throw new Error('OpenAI API key not configured in Supabase secrets');
     }
 
-    const { messages, masterPrompt } = await req.json();
+    const { requestEnvelope, masterPrompt } = await req.json();
 
-    if (!messages || !Array.isArray(messages)) {
-      throw new Error('Messages array is required');
+    if (!requestEnvelope || !requestEnvelope.user_message) {
+      throw new Error('RequestEnvelope with user_message is required');
     }
 
-    // Prepare messages with system prompt
-    const fullMessages: LLMMessage[] = [
-      { role: 'system', content: masterPrompt || 'You are a helpful assistant.' },
-      ...messages
-    ];
+    // Assemble prompt according to Prompt-Assembly Protocol
+    const promptSections = [];
+    
+    // Add master prompt
+    if (masterPrompt) {
+      promptSections.push(`### MASTER_PROMPT\n${masterPrompt}`);
+    }
+    
+    // Add business profile if available
+    if (requestEnvelope.business_profile) {
+      promptSections.push(`### BUSINESS_PROFILE\n${JSON.stringify(requestEnvelope.business_profile, null, 2)}`);
+    }
+    
+    // Add task context if available
+    if (requestEnvelope.task) {
+      promptSections.push(`### TASK_CONTEXT\n${JSON.stringify(requestEnvelope.task, null, 2)}`);
+    }
+    
+    // Add memory context if available
+    if (requestEnvelope.memory_context && requestEnvelope.memory_context.length > 0) {
+      promptSections.push(`### MEMORY_CONTEXT\n${requestEnvelope.memory_context.join('\n')}`);
+    }
+    
+    // Add psychological state if available
+    if (requestEnvelope.psych_state) {
+      promptSections.push(`### PSYCH_STATE\n${JSON.stringify(requestEnvelope.psych_state, null, 2)}`);
+    }
+    
+    // Add user message
+    promptSections.push(`### USER_MESSAGE\n${requestEnvelope.user_message}`);
+    
+    // Add response format instruction
+    promptSections.push(`### RESPONSE_FORMAT\nRespond with a valid JSON object matching the ResponsePayload structure with message, actions array, and timestamp.`);
+    
+    const assembledPrompt = promptSections.join('\n\n');
 
-    console.log('Calling OpenAI with messages:', fullMessages.length);
+    console.log('Calling OpenAI with assembled prompt');
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -45,9 +87,12 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: fullMessages,
+        model: 'gpt-4.1-2025-04-14',
+        messages: [
+          { role: 'user', content: assembledPrompt }
+        ],
         temperature: 0.2,
+        response_format: { type: "json_object" }
       }),
     });
 
@@ -62,7 +107,33 @@ serve(async (req) => {
 
     console.log('OpenAI response generated successfully');
 
-    return new Response(JSON.stringify({ content: generatedText }), {
+    // Parse and validate ResponsePayload
+    let responsePayload: ResponsePayload;
+    try {
+      responsePayload = JSON.parse(generatedText);
+      
+      // Validate required fields
+      if (!responsePayload.message || !Array.isArray(responsePayload.actions)) {
+        throw new Error('Invalid ResponsePayload structure');
+      }
+      
+      // Ensure timestamp is set
+      if (!responsePayload.timestamp) {
+        responsePayload.timestamp = new Date().toISOString();
+      }
+      
+    } catch (parseError) {
+      console.error('Failed to parse ResponsePayload:', parseError);
+      // Fallback response
+      responsePayload = {
+        message: generatedText || "I'm sorry, I couldn't process your request properly.",
+        actions: [],
+        timestamp: new Date().toISOString(),
+        dev_notes: `Parse error: ${parseError.message}`
+      };
+    }
+
+    return new Response(JSON.stringify(responsePayload), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {

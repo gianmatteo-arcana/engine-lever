@@ -4,19 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Bot, User, ScanLine, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-interface ChatMessage {
-  id: string;
-  content: string;
-  sender: "user" | "ai";
-  timestamp: Date;
-  pills?: string[];
-}
+import { ChatMessage, Action } from "@/integrations/llm/types";
 
 interface ChatInterfaceProps {
   messages: ChatMessage[];
   onSendMessage: (message: string) => void;
-  onPillClick?: (pill: string) => void;
+  onActionClick?: (instruction: string) => void;
   isTyping?: boolean;
   placeholder?: string;
   className?: string;
@@ -27,7 +20,7 @@ interface ChatInterfaceProps {
 export const ChatInterface = ({
   messages,
   onSendMessage,
-  onPillClick,
+  onActionClick,
   isTyping = false,
   placeholder = "Type your message...",
   className,
@@ -53,16 +46,16 @@ export const ChatInterface = ({
     }
   };
 
-  const getPillIcon = (pill: string) => {
-    if (pill === "Review letter") {
+  const getActionIcon = (label: string) => {
+    if (label.toLowerCase().includes("review")) {
       return <ScanLine className="h-3 w-3 mr-1" />;
     }
     return null;
   };
 
-  const handlePillClick = (pill: string) => {
-    if (onPillClick) {
-      onPillClick(pill);
+  const handleActionClick = (instruction: string) => {
+    if (onActionClick) {
+      onActionClick(instruction);
     }
   };
 
@@ -125,19 +118,19 @@ export const ChatInterface = ({
               )}
             </div>
 
-            {/* Response Pills */}
-            {message.sender === "ai" && message.pills && message.pills.length > 0 && (
+            {/* Action Pills */}
+            {message.sender === "ai" && message.actions && message.actions.length > 0 && (
               <div className="flex flex-wrap gap-2 ml-11">
-                 {message.pills.map((pill, index) => (
+                 {message.actions.map((action, index) => (
                    <Button
                      key={index}
                      variant="outline"
                      size="sm"
-                     onClick={() => handlePillClick(pill)}
+                     onClick={() => handleActionClick(action.instruction)}
                      className="h-8 px-3 text-sm border-primary/20 bg-primary-light/20 hover:bg-primary-light/40 hover:border-primary/40 flex items-center"
                    >
-                     {getPillIcon(pill)}
-                     {pill}
+                     {getActionIcon(action.label)}
+                     {action.label}
                    </Button>
                  ))}
               </div>

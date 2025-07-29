@@ -20,7 +20,7 @@ interface StackedDashboardProps {
   mostUrgentTask: any;
   chatMessages: ChatMessage[];
   onSendMessage: (message: string) => void;
-  onPillClick: (pill: string) => void;
+  onActionClick: (instruction: string) => void;
   onStartStatementUpdate: () => void;
   onTaskAction: (taskId: string) => void;
   handleChatToggle: () => void;
@@ -31,7 +31,7 @@ export const StackedDashboard = ({
   mostUrgentTask,
   chatMessages,
   onSendMessage,
-  onPillClick,
+  onActionClick,
   onStartStatementUpdate,
   onTaskAction,
   handleChatToggle
@@ -169,7 +169,7 @@ export const StackedDashboard = ({
           <ChatInterface
             messages={chatMessages}
             onSendMessage={onSendMessage}
-            onPillClick={onPillClick}
+            onActionClick={onActionClick}
             placeholder="Ask me anything..."
             className="h-full"
             onClose={() => setExpandedCard(null)}
