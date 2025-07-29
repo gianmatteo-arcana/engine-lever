@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { SmallBizCard } from "./SmallBizCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, AlertTriangle, MessageCircle, Maximize2, Minimize2 } from "lucide-react";
+import { Calendar, Clock, AlertTriangle, MessageCircle, Maximize2, Minimize2, Send } from "lucide-react";
 import { useState } from "react";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -165,9 +165,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                           className="flex-1 px-0 py-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground"
                         />
                         <Button size="sm" className="px-3">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                          </svg>
+                          <Send className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
