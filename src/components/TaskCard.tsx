@@ -197,18 +197,6 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                 </div>
               </div>
 
-              {/* Ally AI Assistant Header */}
-              <div className="px-6 pb-4 animate-content-fade-in">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                    <MessageCircle className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-foreground">Ally - Your AI Assistant</h3>
-                    <p className="text-muted-foreground text-base">I'm here to help with your compliance needs</p>
-                  </div>
-                </div>
-              </div>
 
               {/* Chat Interface Content */}
               <div className="flex-1 p-6 pt-0 animate-content-fade-in" style={{ animationDelay: '100ms' }}>
