@@ -47,9 +47,11 @@ export const TaskGrid = ({
     const groups: { [key: string]: Task[] } = {};
     
     tasks.forEach(task => {
-      if (!task.due_date) return; // Skip tasks without due dates
+      // For archived tasks, group by completed_at; for regular tasks, group by due_date
+      const dateToUse = isArchived ? task.completed_at : task.due_date;
+      if (!dateToUse) return; // Skip tasks without relevant dates
       
-      const date = new Date(task.due_date);
+      const date = new Date(dateToUse);
       const monthYear = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
       
       if (!groups[monthYear]) {
