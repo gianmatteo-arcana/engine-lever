@@ -636,7 +636,16 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
       <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-20">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-primary">SmallBizAlly</h1>
+            <h1 
+              className="text-2xl font-bold text-primary cursor-pointer hover:text-primary/80 transition-colors" 
+              onClick={() => {
+                setSelectedTask(null);
+                setExpandedCard(null);
+                setTimeout(() => scrollToHomePosition(), 100);
+              }}
+            >
+              SmallBizAlly
+            </h1>
             <span className="text-sm text-muted-foreground">Your AI Compliance Assistant</span>
           </div>
           <div className="flex items-center gap-3">
