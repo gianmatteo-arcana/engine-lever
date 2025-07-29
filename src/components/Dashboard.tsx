@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MessageCircle, X, User, LogOut, ChevronUp, List, Layers, LayoutGrid } from "lucide-react";
 import { generateResponse } from "@/integrations/llm";
 import { ChatMessage, Task, DatabaseTask } from "@/integrations/llm/types";
-import { DebugConsole } from "./DebugConsole";
 
 interface DashboardProps {
   user: { name: string; email: string; createdAt?: Date } | null;
@@ -25,7 +24,6 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<DatabaseTask | null>(null);
   const [showUserProfile, setShowUserProfile] = useState(false);
-  const [showDebugConsole, setShowDebugConsole] = useState(false);
   const [layoutMode, setLayoutMode] = useState<"timeline" | "stacked">(() => {
     if (typeof window !== 'undefined') {
       return (localStorage.getItem('dashboard-layout-mode') as "timeline" | "stacked") || "timeline";
@@ -672,16 +670,6 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
               <MessageCircle className="h-4 w-4 mr-2" />
               Chat with Ally
             </Button>
-            {import.meta.env.DEV && (
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setShowDebugConsole(true)}
-                className="text-xs"
-              >
-                Debug
-              </Button>
-            )}
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
@@ -896,11 +884,6 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
         user={user}
         onClose={() => setShowUserProfile(false)}
         isVisible={showUserProfile}
-      />
-      
-      <DebugConsole 
-        isOpen={showDebugConsole} 
-        onClose={() => setShowDebugConsole(false)} 
       />
     </div>
   );

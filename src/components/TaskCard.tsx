@@ -130,12 +130,13 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
       console.log("=== SENDING REQUEST ENVELOPE ===", requestId);
       console.log(JSON.stringify(requestEnvelope, null, 2));
       
-      // Log to debug console if available
-      if ((window as any).debugLog) {
-        (window as any).debugLog({
-          type: 'request',
-          requestId,
-          data: requestEnvelope
+      // Log to DevConsole if available
+      const devLog = (window as any).devConsoleLog;
+      if (devLog) {
+        devLog({
+          type: 'info',
+          message: `🎯 TaskCard: Starting chat for task "${task.title}"`,
+          data: { requestId, taskId: task.id }
         });
       }
       
