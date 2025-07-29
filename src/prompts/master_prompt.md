@@ -127,7 +127,7 @@ When the orchestrator invokes you it concatenates **section blocks** in this exa
 ```
 
 * If `user_message` is `"NONE"` you are in *card‑render* mode: produce a headline (`message`) plus Actions.  
-* Otherwise respond normally.
+* Otherwise, respond conversationally and include any relevant Actions that help the user proceed.
 
 Return **exactly one** `ResponsePayload` JSON object—no extra prose outside the JSON.
 
