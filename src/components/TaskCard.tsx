@@ -63,7 +63,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           setTimeout(() => {
             setIsFullscreen(false);
             setIsAutoShrinking(false);
-          }, 2000);
+          }, 400); // Match the CSS transition duration
         }
       },
       {
@@ -210,8 +210,8 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           {/* Fullscreen view - always rendered but conditionally visible */}
             <div
               className={cn(
-                "bg-card border rounded-lg shadow-lg overflow-hidden flex flex-col transition-[height,opacity] duration-[2000ms] ease-in-out",
-                isFullscreen ? "opacity-100 visible" : "opacity-0 invisible absolute inset-0 pointer-events-none"
+                "bg-card border rounded-lg shadow-lg overflow-hidden flex flex-col transition-[height] duration-[400ms] ease-in-out",
+                (isFullscreen && !isAutoShrinking) ? "opacity-100 visible" : "opacity-0 invisible absolute inset-0 pointer-events-none"
               )}
               style={{
                 height: isAutoShrinking
@@ -382,7 +382,7 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
           <div
             ref={mediumCardRef}
             className={cn(
-              "transition-opacity duration-[2000ms] ease-in-out",
+              "transition-opacity duration-[400ms] ease-in-out",
               isFullscreen
                 ? "opacity-0 invisible pointer-events-none"
                 : "opacity-100 visible"
@@ -437,6 +437,9 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (onAction) {
+                          onAction();
+                        }
                         setIsFullscreen(true);
                       }}
                       className="flex items-center gap-2 w-fit transition-all duration-200 hover:scale-105"
