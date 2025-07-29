@@ -185,14 +185,26 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
             </div>
 
             <div className="flex-1 overflow-auto flex flex-col">
-              {/* Ally AI Assistant Header */}
-              <div className="p-6 pb-4 animate-content-fade-in">
+              {/* Task Header - consistent with SmallBizCard */}
+              <div className="p-6 pb-3 animate-content-fade-in">
                 <div className="flex items-center gap-3 pr-12">
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">{task.title}</h2>
+                    {task.description && (
+                      <p className="text-muted-foreground">{task.description}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Ally AI Assistant Header */}
+              <div className="px-6 pb-4 animate-content-fade-in">
+                <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
                     <MessageCircle className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-foreground">Ally - Your AI Assistant</h2>
+                    <h3 className="text-xl font-bold text-foreground">Ally - Your AI Assistant</h3>
                     <p className="text-muted-foreground text-base">I'm here to help with your compliance needs</p>
                   </div>
                 </div>
