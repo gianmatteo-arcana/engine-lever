@@ -3,6 +3,8 @@ export interface LLMMessage {
   content: string;
 }
 
+export type LLMProvider = 'openai' | 'claude';
+
 // New interfaces for the updated protocol
 export interface Task {
   id: string;
