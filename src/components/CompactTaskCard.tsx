@@ -142,7 +142,7 @@ export const CompactTaskCard = ({ task, onClick, urgency, overlayIcon }: Compact
     return (
       <div 
         ref={intersectionRef}
-        className="animate-card-expand col-span-full origin-top-left" 
+        className="animate-card-expand col-span-full md:col-span-2 lg:col-span-3 origin-top-left" 
         style={{ 
           opacity: isCollapsing ? 0.8 : 1,
           transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
