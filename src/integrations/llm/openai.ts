@@ -22,8 +22,16 @@ export async function generateOpenAIResponse(requestEnvelope: RequestEnvelope): 
 
     // Validate ResponsePayload structure
     if (!data.message || !Array.isArray(data.actions)) {
+      console.error('=== INVALID RESPONSE PAYLOAD ===');
+      console.error('Expected: { message: string, actions: Action[] }');
+      console.error('Received:', JSON.stringify(data, null, 2));
       throw new Error('Invalid ResponsePayload structure received');
     }
+
+    console.log("=== VALID RESPONSE PAYLOAD RECEIVED ===");
+    console.log("Message:", data.message);
+    console.log("Actions:", data.actions);
+    console.log("Actions count:", data.actions.length);
 
     return data as ResponsePayload;
   } catch (error) {

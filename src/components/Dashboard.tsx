@@ -108,6 +108,14 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
       };
       
       const responsePayload = await generateResponse(requestEnvelope);
+      
+      console.log("=== AI RESPONSE ANALYSIS ===");
+      console.log("Full responsePayload:", JSON.stringify(responsePayload, null, 2));
+      console.log("Message:", responsePayload.message);
+      console.log("Actions array:", responsePayload.actions);
+      console.log("Actions length:", responsePayload.actions?.length || 0);
+      console.log("Actions type:", typeof responsePayload.actions);
+      
       const aiResponse: ChatMessage = {
         id: (Date.now() + 1).toString(),
         content: responsePayload.message,
@@ -115,6 +123,11 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
         timestamp: new Date(),
         actions: responsePayload.actions
       };
+      
+      console.log("=== CHAT MESSAGE CREATED ===");
+      console.log("AI response actions:", aiResponse.actions);
+      console.log("Actions will be rendered:", aiResponse.actions && aiResponse.actions.length > 0);
+      
       setChatMessages(prev => [...prev, aiResponse]);
     } catch (error) {
       console.error('=== DASHBOARD CHAT ERROR ===');

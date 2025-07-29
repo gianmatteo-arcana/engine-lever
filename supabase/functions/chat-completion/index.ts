@@ -112,8 +112,16 @@ serve(async (req) => {
     try {
       responsePayload = JSON.parse(generatedText);
       
+      console.log('=== PARSING AI RESPONSE ===');
+      console.log('Raw AI response:', generatedText);
+      console.log('Parsed payload:', JSON.stringify(responsePayload, null, 2));
+      
       // Validate required fields
       if (!responsePayload.message || !Array.isArray(responsePayload.actions)) {
+        console.error('=== VALIDATION FAILED ===');
+        console.error('Message exists:', !!responsePayload.message);
+        console.error('Actions is array:', Array.isArray(responsePayload.actions));
+        console.error('Actions value:', responsePayload.actions);
         throw new Error('Invalid ResponsePayload structure');
       }
       
@@ -122,8 +130,12 @@ serve(async (req) => {
         responsePayload.timestamp = new Date().toISOString();
       }
       
+      console.log('=== VALIDATION PASSED ===');
+      console.log('Actions count:', responsePayload.actions.length);
+      
     } catch (parseError) {
       console.error('Failed to parse ResponsePayload:', parseError);
+      console.error('Raw response that failed to parse:', generatedText);
       // Fallback response
       responsePayload = {
         message: generatedText || "I'm sorry, I couldn't process your request properly.",

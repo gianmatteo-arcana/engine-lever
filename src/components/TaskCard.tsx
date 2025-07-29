@@ -121,7 +121,12 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
       console.log("About to call generateResponse...");
       const responsePayload = await generateResponse(requestEnvelope);
       
-      console.log("✅ AI response received:", responsePayload);
+      console.log("=== TASKCARD AI RESPONSE ANALYSIS ===");
+      console.log("Full responsePayload:", JSON.stringify(responsePayload, null, 2));
+      console.log("Message:", responsePayload.message);
+      console.log("Actions array:", responsePayload.actions);
+      console.log("Actions length:", responsePayload.actions?.length || 0);
+      
       setChatMessages(prev => [...prev, { role: 'assistant', content: responsePayload.message }]);
       
     } catch (error) {
