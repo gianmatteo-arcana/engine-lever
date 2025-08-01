@@ -377,7 +377,7 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
   };
 
   // Handle LLM provider change
-  const handleLLMProviderChange = (provider: "openai" | "claude") => {
+  const handleLLMProviderChange = (provider: "openai" | "claude" | "claude-mcp") => {
     setLlmProvider(provider);
     setLLMProvider(provider);
   };
@@ -606,6 +606,12 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                           Claude
                         </div>
                       </SelectItem>
+                      <SelectItem value="claude-mcp" className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-purple-500">●</span>
+                          Claude MCP
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </>
@@ -714,6 +720,12 @@ export const Dashboard = ({ user, onSignOut }: DashboardProps) => {
                       <div className="flex items-center gap-2">
                         <span className="text-blue-500">●</span>
                         Claude
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="claude-mcp" className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-purple-500">●</span>
+                        Claude MCP
                       </div>
                     </SelectItem>
                   </SelectContent>
