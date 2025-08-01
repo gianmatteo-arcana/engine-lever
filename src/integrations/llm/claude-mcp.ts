@@ -8,6 +8,7 @@ export async function generateClaudeMCPResponse(
   
   try {
     console.log('🔗 Starting Claude MCP request...');
+    console.log('🔧 Session ID:', requestEnvelope.session_id);
     
     // Call the chat-completion edge function with claude-mcp provider
     const { data, error } = await supabase.functions.invoke('chat-completion', {
@@ -33,11 +34,40 @@ Example:
     });
 
     const duration = Date.now() - startTime;
+    
+    console.log(`⏱️ MCP request completed in ${duration}ms`);
 
     if (error) {
-      console.error('❌ Supabase function error:', error);
-      console.error('❌ MCP Server URL issue - check if endpoint path is correct');
-      console.error('❌ Common endpoints: /chat, /completion, /api/chat');
+      console.error('🚨 SUPABASE FUNCTION ERROR DETAILS:');
+      console.error('Error object:', error);
+      console.error('Error message:', error?.message);
+      console.error('Error details:', error?.details);
+      console.error('Error hint:', error?.hint);
+      console.error('Error code:', error?.code);
+      
+      // Check for common configuration issues
+      if (error?.message?.includes('fetch')) {
+        console.error('🚨 NETWORK/CONFIGURATION ISSUE DETECTED:');
+        console.error('This suggests the MCP server URL might be wrong or the server is down');
+        console.error('Check these in Supabase secrets:');
+        console.error('  - MCP_SERVER_URL: Should be full URL with correct endpoint (e.g., /chat)');
+        console.error('  - MCP_AUTH_TOKEN: Should be valid authentication token');
+      }
+      
+      if (error?.message?.includes('404')) {
+        console.error('🚨 404 ERROR - ENDPOINT NOT FOUND:');
+        console.error('Your MCP server URL likely needs a specific path:');
+        console.error('  - Try adding /chat to your URL');
+        console.error('  - Try adding /completion to your URL');
+        console.error('  - Try adding /api/chat to your URL');
+      }
+      
+      if (error?.message?.includes('401') || error?.message?.includes('403')) {
+        console.error('🚨 AUTHENTICATION ERROR:');
+        console.error('Check your MCP_AUTH_TOKEN in Supabase secrets');
+        console.error('Make sure the token is valid and has the right permissions');
+      }
+      
       throw error;
     }
 
