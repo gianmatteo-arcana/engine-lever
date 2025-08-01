@@ -178,9 +178,23 @@ export const TaskCard = ({ task, size, urgency, onClick, onAction, actionLabel, 
       console.error('Error stack:', error?.stack);
       console.error('Full error object:', error);
       
+      // Special handling for MCP errors
+      if (error?.message?.includes('claude-mcp')) {
+        console.error('🚨 MCP SERVER ERROR DETECTED:');
+        console.error('This is likely a connection issue with your MCP server');
+        console.error('Check the Edge Function logs for more details');
+        console.error('Common issues:');
+        console.error('  - Server not responding to GET or POST requests');
+        console.error('  - Authentication token expired');
+        console.error('  - Server endpoint not configured correctly');
+      }
+      
       // In dev mode, also throw to surface in dev console
       if (import.meta.env.DEV) {
-        console.error('🚨 DEV MODE: Throwing error to surface in DevTools');
+        console.error('🚨 DEV MODE: Enhanced error details');
+        console.error('Environment:', import.meta.env.MODE);
+        console.error('Provider:', getLLMProvider());
+        
         // Create a more informative error for dev mode
         const devError = new Error(`TaskCard Chat Error: ${error?.message || 'Unknown error'}`);
         devError.stack = error?.stack;
