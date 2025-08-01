@@ -172,20 +172,43 @@ serve(async (req) => {
       console.log(`=== CALLING CLAUDE MCP SERVER ===`);
       console.log('MCP Server URL:', mcpServerUrl);
       console.log('Auth token present:', !!mcpAuthToken);
+      console.log('Trying GET request first...');
       
-      response = await fetch(mcpServerUrl, {
-        method: 'POST',
+      // Try GET request first since your server responds to GET
+      const searchParams = new URLSearchParams({
+        prompt: assembledPrompt,
+        model: 'claude-3-haiku-20240307',
+        max_tokens: '1024',
+        temperature: '0.2'
+      });
+      
+      const getUrl = `${mcpServerUrl}?${searchParams.toString()}`;
+      
+      response = await fetch(getUrl, {
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${mcpAuthToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: assembledPrompt,
-          model: 'claude-3-haiku-20240307',
-          max_tokens: 1024,
-          temperature: 0.2
-        })
+          'Accept': 'application/json',
+        }
       });
+      
+      // If GET fails, try POST as fallback
+      if (!response.ok && response.status === 404) {
+        console.log('GET request failed, trying POST...');
+        response = await fetch(mcpServerUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${mcpAuthToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt: assembledPrompt,
+            model: 'claude-3-haiku-20240307',
+            max_tokens: 1024,
+            temperature: 0.2
+          })
+        });
+      }
     } else {
       if (!openAIApiKey) {
         throw new Error('OpenAI API key not configured in Supabase secrets');
