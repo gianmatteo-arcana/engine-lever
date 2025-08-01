@@ -1,6 +1,7 @@
 import { RequestEnvelope, ResponsePayload, LLMProvider } from './types';
 import { generateOpenAIResponse } from './openai';
 import { generateClaudeResponse } from './claude';
+import { generateClaudeMCPResponse } from './claude-mcp';
 
 let provider: LLMProvider = (import.meta.env.VITE_LLM_PROVIDER as LLMProvider | undefined) ?? 'openai';
 
@@ -20,6 +21,8 @@ export async function generateResponse(
   switch (activeProvider) {
     case 'claude':
       return generateClaudeResponse(requestEnvelope);
+    case 'claude-mcp':
+      return generateClaudeMCPResponse(requestEnvelope);
     case 'openai':
     default:
       return generateOpenAIResponse(requestEnvelope);

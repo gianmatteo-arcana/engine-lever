@@ -3,6 +3,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
+const mcpServerUrl = Deno.env.get('MCP_SERVER_URL');
+const mcpAuthToken = Deno.env.get('MCP_AUTH_TOKEN');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -61,8 +63,8 @@ serve(async (req) => {
       throw new Error('RequestEnvelope with user_message is required');
     }
 
-    const provider = (reqProvider ?? Deno.env.get('LLM_PROVIDER') ?? 'openai') as 'openai' | 'claude';
-    if (provider !== 'openai' && provider !== 'claude') {
+    const provider = (reqProvider ?? Deno.env.get('LLM_PROVIDER') ?? 'openai') as 'openai' | 'claude' | 'claude-mcp';
+    if (provider !== 'openai' && provider !== 'claude' && provider !== 'claude-mcp') {
       throw new Error(`Unsupported provider: ${provider}`);
     }
 
@@ -159,6 +161,31 @@ serve(async (req) => {
           messages: [{ role: 'user', content: assembledPrompt }]
         })
       });
+    } else if (provider === 'claude-mcp') {
+      if (!mcpServerUrl) {
+        throw new Error('MCP Server URL not configured in Supabase secrets');
+      }
+      if (!mcpAuthToken) {
+        throw new Error('MCP Auth Token not configured in Supabase secrets');
+      }
+      
+      console.log(`=== CALLING CLAUDE MCP SERVER ===`);
+      console.log('MCP Server URL:', mcpServerUrl);
+      console.log('Auth token present:', !!mcpAuthToken);
+      
+      response = await fetch(mcpServerUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${mcpAuthToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: assembledPrompt,
+          model: 'claude-3-haiku-20240307',
+          max_tokens: 1024,
+          temperature: 0.2
+        })
+      });
     } else {
       if (!openAIApiKey) {
         throw new Error('OpenAI API key not configured in Supabase secrets');
@@ -200,6 +227,9 @@ serve(async (req) => {
     let generatedText = '';
     if (provider === 'claude') {
       generatedText = data.content?.[0]?.text?.trim() ?? '';
+    } else if (provider === 'claude-mcp') {
+      // Handle MCP server response format
+      generatedText = data.response?.trim() ?? data.content?.trim() ?? '';
     } else {
       generatedText = data.choices?.[0]?.message?.content?.trim() ?? '';
     }

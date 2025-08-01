@@ -3,7 +3,7 @@ export interface LLMMessage {
   content: string;
 }
 
-export type LLMProvider = 'openai' | 'claude';
+export type LLMProvider = 'openai' | 'claude' | 'claude-mcp';
 
 // New interfaces for the updated protocol
 export interface Task {
