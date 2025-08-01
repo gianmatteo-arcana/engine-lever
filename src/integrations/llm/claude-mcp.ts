@@ -36,6 +36,8 @@ Example:
 
     if (error) {
       console.error('❌ Supabase function error:', error);
+      console.error('❌ MCP Server URL issue - check if endpoint path is correct');
+      console.error('❌ Common endpoints: /chat, /completion, /api/chat');
       throw error;
     }
 
@@ -84,6 +86,15 @@ Example:
       duration: duration + 'ms',
       requestId: requestEnvelope.session_id
     });
+
+    // Check if it's a 404 error suggesting endpoint issue
+    if (error.message && error.message.includes('404')) {
+      console.error('🚨 MCP Server 404 Error - Possible Solutions:');
+      console.error('   1. Check if your MCP server URL needs a specific path (e.g., /chat, /api/completion)');
+      console.error('   2. Verify your server accepts POST requests');
+      console.error('   3. Confirm the server is running and accessible');
+      console.error('   Current URL configured in MCP_SERVER_URL secret');
+    }
 
     // Re-throw the error to be handled by the caller
     throw error;
