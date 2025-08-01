@@ -18,6 +18,6 @@ jobs:
           fetch-depth: 0     # need full history for --mirror
       - name: Push mirror
         env:
-          MIRROR_URL: https://${{ secrets.MIRROR_PAT }}@github.com/Allygn/SmallBizAI.git
+          MIRROR_URL: https://${{ secrets.MIRROR_PAT }}@github.com/gianmattey-allyn/SmallBizAI.git
         run: |
           git push --mirror "$MIRROR_URL"
