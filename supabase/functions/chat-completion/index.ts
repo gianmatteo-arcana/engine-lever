@@ -1,11 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
-const mcpServerUrl = Deno.env.get('MCP_SERVER_URL');
-const mcpAuthToken = Deno.env.get('MCP_AUTH_TOKEN');
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -30,24 +25,409 @@ interface ResponsePayload {
   dev_notes?: string;
 }
 
-// Helper function to get formatted section or "NONE"
-function getFormattedSection(data: any, sectionName: string): string {
-  if (!data) return "NONE";
-  
-  if (typeof data === 'string') {
-    return data.trim() || "NONE";
+// Provider interface
+interface LLMProviderInterface {
+  generateResponse(
+    requestEnvelope: RequestEnvelope,
+    masterPrompt: string
+  ): Promise<ResponsePayload>;
+}
+
+// Base provider class with common functionality
+abstract class BaseLLMProvider implements LLMProviderInterface {
+  protected getFormattedSection(data: any, sectionName: string): string {
+    if (!data) return "NONE";
+    
+    if (typeof data === 'string') {
+      return data.trim() || "NONE";
+    }
+    
+    if (Array.isArray(data)) {
+      return data.length > 0 ? JSON.stringify(data, null, 2) : "NONE";
+    }
+    
+    if (typeof data === 'object') {
+      const keys = Object.keys(data);
+      return keys.length > 0 ? JSON.stringify(data, null, 2) : "NONE";
+    }
+    
+    return "NONE";
   }
-  
-  if (Array.isArray(data)) {
-    return data.length > 0 ? JSON.stringify(data, null, 2) : "NONE";
+
+  protected assemblePrompt(requestEnvelope: RequestEnvelope, masterPrompt: string): string {
+    const promptSections = [];
+    
+    // Follow the EXACT Prompt-Assembly Protocol
+    promptSections.push(`### SYSTEM_PROMPT`);
+    promptSections.push(masterPrompt || "NONE");
+    
+    promptSections.push(`### TASK_PROMPT`);
+    promptSections.push(this.getFormattedSection(requestEnvelope.task_prompt, "TASK_PROMPT"));
+    
+    promptSections.push(`### TASK`);
+    promptSections.push(this.getFormattedSection(requestEnvelope.task, "TASK"));
+    
+    promptSections.push(`### MEMORY_CONTEXT`);
+    promptSections.push(this.getFormattedSection(requestEnvelope.memory_context, "MEMORY_CONTEXT"));
+    
+    promptSections.push(`### BUSINESS_PROFILE`);
+    promptSections.push(this.getFormattedSection(requestEnvelope.business_profile, "BUSINESS_PROFILE"));
+    
+    promptSections.push(`### PSYCH_STATE`);
+    promptSections.push(this.getFormattedSection(requestEnvelope.psych_state, "PSYCH_STATE"));
+    
+    promptSections.push(`### USER_MESSAGE`);
+    promptSections.push(this.getFormattedSection(requestEnvelope.user_message, "USER_MESSAGE"));
+    
+    return promptSections.join('\n');
   }
-  
-  if (typeof data === 'object') {
-    const keys = Object.keys(data);
-    return keys.length > 0 ? JSON.stringify(data, null, 2) : "NONE";
+
+  protected logDevMode(requestEnvelope: RequestEnvelope, assembledPrompt: string): void {
+    if (requestEnvelope.env === 'dev') {
+      console.log('\n🔧 === DEV MODE: PROMPT ASSEMBLY PROTOCOL COMPLIANCE ===');
+      console.log('📋 Section order validation:');
+      console.log('1. ✅ SYSTEM_PROMPT');
+      console.log('2. ✅ TASK_PROMPT');
+      console.log('3. ✅ TASK');
+      console.log('4. ✅ MEMORY_CONTEXT');
+      console.log('5. ✅ BUSINESS_PROFILE');
+      console.log('6. ✅ PSYCH_STATE');
+      console.log('7. ✅ USER_MESSAGE');
+      
+      console.log('\n🎯 FULL ASSEMBLED PROMPT:');
+      console.log('==========================================');
+      console.log(assembledPrompt);
+      console.log('==========================================');
+      console.log('Total prompt length:', assembledPrompt.length);
+    }
   }
-  
-  return "NONE";
+
+  protected parseAndValidateResponse(
+    generatedText: string,
+    requestEnvelope: RequestEnvelope,
+    providerName: string
+  ): ResponsePayload {
+    const isDev = requestEnvelope.env === 'dev';
+
+    // Validate response format before parsing
+    if (!generatedText.trim().startsWith('{')) {
+      console.error('=== INVALID RESPONSE FORMAT ===');
+      console.error('Request ID:', requestEnvelope.session_id);
+      console.error('Response does not start with JSON - starts with:', generatedText.substring(0, 50));
+      
+      if (isDev) {
+        throw new Error(`LLM_PARSE_ERROR: ${providerName} returned prose instead of JSON in DEV mode`);
+      }
+      
+      // Fallback for production
+      return {
+        message: generatedText || "I'm sorry, I couldn't process your request properly.",
+        actions: [],
+        timestamp: new Date().toISOString(),
+        dev_notes: `Parse error: Non-JSON response from ${providerName}`
+      };
+    }
+
+    try {
+      const responsePayload = JSON.parse(generatedText);
+      
+      // Validate required fields
+      const hasValidMessage = responsePayload.message && typeof responsePayload.message === 'string';
+      const hasValidActions = Array.isArray(responsePayload.actions);
+      
+      if (!hasValidMessage || !hasValidActions) {
+        throw new Error('Invalid ResponsePayload structure');
+      }
+      
+      // Ensure timestamp is set
+      if (!responsePayload.timestamp) {
+        responsePayload.timestamp = new Date().toISOString();
+      }
+      
+      if (isDev) {
+        console.log('=== PARSED PAYLOAD STRUCTURE ===');
+        console.log('Message length:', responsePayload.message?.length || 0);
+        console.log('Actions count:', responsePayload.actions?.length || 0);
+      }
+      
+      return responsePayload;
+      
+    } catch (parseError) {
+      console.error('=== JSON PARSE ERROR ===');
+      console.error('Parse error:', parseError.message);
+      console.error('Request ID:', requestEnvelope.session_id);
+      
+      if (isDev) {
+        throw new Error(`LLM_JSON_PARSE_ERROR: Failed to parse ${providerName} response as JSON in DEV mode`);
+      }
+      
+      // Fallback response for production
+      return {
+        message: generatedText || "I'm sorry, I couldn't process your request properly.",
+        actions: [],
+        timestamp: new Date().toISOString(),
+        dev_notes: `Parse error: ${parseError.message}. Raw response length: ${generatedText.length}`
+      };
+    }
+  }
+
+  abstract generateResponse(
+    requestEnvelope: RequestEnvelope,
+    masterPrompt: string
+  ): Promise<ResponsePayload>;
+}
+
+// OpenAI Provider
+class OpenAIProvider extends BaseLLMProvider {
+  constructor(private apiKey: string) {
+    super();
+  }
+
+  async generateResponse(
+    requestEnvelope: RequestEnvelope,
+    masterPrompt: string
+  ): Promise<ResponsePayload> {
+    const assembledPrompt = this.assemblePrompt(requestEnvelope, masterPrompt);
+    this.logDevMode(requestEnvelope, assembledPrompt);
+
+    const llmStartTime = Date.now();
+    console.log('=== CALLING OPENAI API ===');
+    console.log('Request ID:', requestEnvelope.session_id);
+    console.log('Prompt length:', assembledPrompt.length);
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'user', content: assembledPrompt }
+        ],
+        temperature: 0.2,
+        response_format: { type: "json_object" }
+      }),
+    });
+
+    const llmDuration = Date.now() - llmStartTime;
+    console.log('=== OPENAI API RESPONSE ===');
+    console.log('Duration:', `${llmDuration}ms`);
+    console.log('Status:', response.status);
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('=== OPENAI API ERROR ===');
+      console.error('Status:', response.status);
+      console.error('Error data:', errorData);
+      throw new Error(`OpenAI request failed: ${response.status} - ${errorData}`);
+    }
+
+    const data = await response.json();
+    const generatedText = data.choices?.[0]?.message?.content?.trim() ?? '';
+
+    console.log('=== RAW OPENAI RESPONSE ===');
+    console.log('Response length:', generatedText.length);
+    console.log('Usage tokens:', data.usage);
+
+    if (requestEnvelope.env === 'dev') {
+      console.log('=== FULL RAW RESPONSE ===');
+      console.log(generatedText);
+      console.log('=== END RAW RESPONSE ===');
+    }
+
+    return this.parseAndValidateResponse(generatedText, requestEnvelope, 'OpenAI');
+  }
+}
+
+// Claude Provider
+class ClaudeProvider extends BaseLLMProvider {
+  constructor(private apiKey: string) {
+    super();
+  }
+
+  async generateResponse(
+    requestEnvelope: RequestEnvelope,
+    masterPrompt: string
+  ): Promise<ResponsePayload> {
+    const assembledPrompt = this.assemblePrompt(requestEnvelope, masterPrompt);
+    this.logDevMode(requestEnvelope, assembledPrompt);
+
+    const llmStartTime = Date.now();
+    console.log('=== CALLING CLAUDE API ===');
+    console.log('Request ID:', requestEnvelope.session_id);
+    console.log('Prompt length:', assembledPrompt.length);
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': `${this.apiKey}`,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'claude-3-haiku-20240307',
+        max_tokens: 1024,
+        temperature: 0.2,
+        messages: [{ role: 'user', content: assembledPrompt }]
+      })
+    });
+
+    const llmDuration = Date.now() - llmStartTime;
+    console.log('=== CLAUDE API RESPONSE ===');
+    console.log('Duration:', `${llmDuration}ms`);
+    console.log('Status:', response.status);
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('=== CLAUDE API ERROR ===');
+      console.error('Status:', response.status);
+      console.error('Error data:', errorData);
+      throw new Error(`Claude request failed: ${response.status} - ${errorData}`);
+    }
+
+    const data = await response.json();
+    const generatedText = data.content?.[0]?.text?.trim() ?? '';
+
+    console.log('=== RAW CLAUDE RESPONSE ===');
+    console.log('Response length:', generatedText.length);
+    console.log('Usage tokens:', data.usage);
+
+    if (requestEnvelope.env === 'dev') {
+      console.log('=== FULL RAW RESPONSE ===');
+      console.log(generatedText);
+      console.log('=== END RAW RESPONSE ===');
+    }
+
+    return this.parseAndValidateResponse(generatedText, requestEnvelope, 'Claude');
+  }
+}
+
+// Claude MCP Provider
+class ClaudeMCPProvider extends BaseLLMProvider {
+  constructor(
+    private mcpServerUrl: string,
+    private mcpAuthToken: string
+  ) {
+    super();
+  }
+
+  async generateResponse(
+    requestEnvelope: RequestEnvelope,
+    masterPrompt: string
+  ): Promise<ResponsePayload> {
+    const assembledPrompt = this.assemblePrompt(requestEnvelope, masterPrompt);
+    this.logDevMode(requestEnvelope, assembledPrompt);
+
+    const llmStartTime = Date.now();
+    console.log('=== CALLING CLAUDE MCP SERVER ===');
+    console.log('Request ID:', requestEnvelope.session_id);
+    console.log('MCP Server URL:', this.mcpServerUrl);
+    console.log('Auth token present:', !!this.mcpAuthToken);
+
+    // Try GET request first since your server responds to GET
+    const searchParams = new URLSearchParams({
+      prompt: assembledPrompt,
+      model: 'claude-3-haiku-20240307',
+      max_tokens: '1024',
+      temperature: '0.2'
+    });
+
+    const getUrl = `${this.mcpServerUrl}?${searchParams.toString()}`;
+
+    let response = await fetch(getUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.mcpAuthToken}`,
+        'Accept': 'application/json',
+      }
+    });
+
+    // If GET fails, try POST as fallback
+    if (!response.ok && response.status === 404) {
+      console.log('GET request failed, trying POST...');
+      response = await fetch(this.mcpServerUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.mcpAuthToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: assembledPrompt,
+          model: 'claude-3-haiku-20240307',
+          max_tokens: 1024,
+          temperature: 0.2
+        })
+      });
+    }
+
+    const llmDuration = Date.now() - llmStartTime;
+    console.log('=== CLAUDE MCP RESPONSE ===');
+    console.log('Duration:', `${llmDuration}ms`);
+    console.log('Status:', response.status);
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('=== CLAUDE MCP ERROR ===');
+      console.error('Status:', response.status);
+      console.error('Error data:', errorData);
+      throw new Error(`Claude MCP request failed: ${response.status} - ${errorData}`);
+    }
+
+    const data = await response.json();
+    // Handle MCP server response format
+    const generatedText = data.response?.trim() ?? data.content?.trim() ?? '';
+
+    console.log('=== RAW CLAUDE MCP RESPONSE ===');
+    console.log('Response length:', generatedText.length);
+
+    if (requestEnvelope.env === 'dev') {
+      console.log('=== FULL RAW RESPONSE ===');
+      console.log(generatedText);
+      console.log('=== END RAW RESPONSE ===');
+    }
+
+    return this.parseAndValidateResponse(generatedText, requestEnvelope, 'Claude-MCP');
+  }
+}
+
+// Provider Factory
+interface ProviderConfig {
+  openAIApiKey?: string;
+  anthropicApiKey?: string;
+  mcpServerUrl?: string;
+  mcpAuthToken?: string;
+}
+
+class LLMProviderFactory {
+  static create(provider: string, config: ProviderConfig): LLMProviderInterface {
+    switch (provider) {
+      case 'openai':
+        if (!config.openAIApiKey) {
+          throw new Error('OpenAI API key not configured in Supabase secrets');
+        }
+        return new OpenAIProvider(config.openAIApiKey);
+        
+      case 'claude':
+        if (!config.anthropicApiKey) {
+          throw new Error('Anthropic API key not configured in Supabase secrets');
+        }
+        return new ClaudeProvider(config.anthropicApiKey);
+        
+      case 'claude-mcp':
+        if (!config.mcpServerUrl) {
+          throw new Error('MCP Server URL not configured in Supabase secrets');
+        }
+        if (!config.mcpAuthToken) {
+          throw new Error('MCP Auth Token not configured in Supabase secrets');
+        }
+        return new ClaudeMCPProvider(config.mcpServerUrl, config.mcpAuthToken);
+        
+      default:
+        throw new Error(`Unsupported provider: ${provider}`);
+    }
+  }
 }
 
 serve(async (req) => {
@@ -68,327 +448,30 @@ serve(async (req) => {
       throw new Error(`Unsupported provider: ${provider}`);
     }
 
-    const isDev = requestEnvelope.env === 'dev';
-
-    // Assemble prompt according to EXACT Prompt-Assembly Protocol
-    const promptSections = [];
-    
-    // 1. SYSTEM_PROMPT (was MASTER_PROMPT)
-    promptSections.push(`### SYSTEM_PROMPT`);
-    promptSections.push(masterPrompt || "NONE");
-    
-    // 2. TASK_PROMPT
-    promptSections.push(`### TASK_PROMPT`);
-    promptSections.push(getFormattedSection(requestEnvelope.task_prompt, "TASK_PROMPT"));
-    
-    // 3. TASK (was TASK_CONTEXT)
-    promptSections.push(`### TASK`);
-    promptSections.push(getFormattedSection(requestEnvelope.task, "TASK"));
-    
-    // 4. MEMORY_CONTEXT
-    promptSections.push(`### MEMORY_CONTEXT`);
-    promptSections.push(getFormattedSection(requestEnvelope.memory_context, "MEMORY_CONTEXT"));
-    
-    // 5. BUSINESS_PROFILE
-    promptSections.push(`### BUSINESS_PROFILE`);
-    promptSections.push(getFormattedSection(requestEnvelope.business_profile, "BUSINESS_PROFILE"));
-    
-    // 6. PSYCH_STATE
-    promptSections.push(`### PSYCH_STATE`);
-    promptSections.push(getFormattedSection(requestEnvelope.psych_state, "PSYCH_STATE"));
-    
-    // 7. USER_MESSAGE
-    promptSections.push(`### USER_MESSAGE`);
-    promptSections.push(getFormattedSection(requestEnvelope.user_message, "USER_MESSAGE"));
-    
-    const assembledPrompt = promptSections.join('\n');
-
-    // Extensive DEV MODE logging
-    if (isDev) {
-      console.log('\n🔧 === DEV MODE: PROMPT ASSEMBLY PROTOCOL COMPLIANCE ===');
-      console.log('📋 Section order validation:');
-      console.log('1. ✅ SYSTEM_PROMPT');
-      console.log('2. ✅ TASK_PROMPT');
-      console.log('3. ✅ TASK');
-      console.log('4. ✅ MEMORY_CONTEXT');
-      console.log('5. ✅ BUSINESS_PROFILE');
-      console.log('6. ✅ PSYCH_STATE');
-      console.log('7. ✅ USER_MESSAGE');
-      
-      console.log('\n📝 Individual sections:');
-      console.log('SYSTEM_PROMPT length:', (masterPrompt || "NONE").length);
-      console.log('TASK_PROMPT:', requestEnvelope.task_prompt || "NONE");
-      console.log('TASK:', requestEnvelope.task ? JSON.stringify(requestEnvelope.task, null, 2) : "NONE");
-      console.log('MEMORY_CONTEXT:', requestEnvelope.memory_context || "NONE");
-      console.log('BUSINESS_PROFILE:', requestEnvelope.business_profile ? JSON.stringify(requestEnvelope.business_profile, null, 2) : "NONE");
-      console.log('PSYCH_STATE:', requestEnvelope.psych_state ? JSON.stringify(requestEnvelope.psych_state, null, 2) : "NONE");
-      console.log('USER_MESSAGE:', requestEnvelope.user_message || "NONE");
-      
-      console.log('\n🎯 FULL ASSEMBLED PROMPT:');
-      console.log('==========================================');
-      console.log(assembledPrompt);
-      console.log('==========================================');
-      console.log('Total prompt length:', assembledPrompt.length);
-    }
-
-    const llmStartTime = Date.now();
-    console.log(`=== CALLING ${provider.toUpperCase()} API ===`);
+    console.log(`=== ROUTING TO ${provider.toUpperCase()} PROVIDER ===`);
     console.log('Request ID:', requestEnvelope.session_id);
-    console.log('Prompt length:', assembledPrompt.length);
 
-    if (isDev) {
-      console.log(`=== FULL PROMPT BEING SENT TO ${provider.toUpperCase()} ===`);
-      console.log(assembledPrompt);
-      console.log('=== END PROMPT ===');
-    }
+    // Get environment variables
+    const config: ProviderConfig = {
+      openAIApiKey: Deno.env.get('OPENAI_API_KEY'),
+      anthropicApiKey: Deno.env.get('ANTHROPIC_API_KEY'),
+      mcpServerUrl: Deno.env.get('MCP_SERVER_URL'),
+      mcpAuthToken: Deno.env.get('MCP_AUTH_TOKEN')
+    };
 
-    let response: Response;
-    if (provider === 'claude') {
-      if (!anthropicApiKey) {
-        throw new Error('Anthropic API key not configured in Supabase secrets');
-      }
-      response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': `${anthropicApiKey}`,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'claude-3-haiku-20240307',
-          max_tokens: 1024,
-          temperature: 0.2,
-          messages: [{ role: 'user', content: assembledPrompt }]
-        })
-      });
-    } else if (provider === 'claude-mcp') {
-      if (!mcpServerUrl) {
-        throw new Error('MCP Server URL not configured in Supabase secrets');
-      }
-      if (!mcpAuthToken) {
-        throw new Error('MCP Auth Token not configured in Supabase secrets');
-      }
-      
-      console.log(`=== CALLING CLAUDE MCP SERVER ===`);
-      console.log('MCP Server URL:', mcpServerUrl);
-      console.log('Auth token present:', !!mcpAuthToken);
-      console.log('Trying GET request first...');
-      
-      // Try GET request first since your server responds to GET
-      const searchParams = new URLSearchParams({
-        prompt: assembledPrompt,
-        model: 'claude-3-haiku-20240307',
-        max_tokens: '1024',
-        temperature: '0.2'
-      });
-      
-      const getUrl = `${mcpServerUrl}?${searchParams.toString()}`;
-      
-      response = await fetch(getUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${mcpAuthToken}`,
-          'Accept': 'application/json',
-        }
-      });
-      
-      // If GET fails, try POST as fallback
-      if (!response.ok && response.status === 404) {
-        console.log('GET request failed, trying POST...');
-        response = await fetch(mcpServerUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${mcpAuthToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            prompt: assembledPrompt,
-            model: 'claude-3-haiku-20240307',
-            max_tokens: 1024,
-            temperature: 0.2
-          })
-        });
-      }
-    } else {
-      if (!openAIApiKey) {
-        throw new Error('OpenAI API key not configured in Supabase secrets');
-      }
-      response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'user', content: assembledPrompt }
-          ],
-          temperature: 0.2,
-          response_format: { type: "json_object" }
-        }),
-      });
-    }
+    // Create provider instance using factory
+    const providerInstance = LLMProviderFactory.create(provider, config);
 
-    const llmEndTime = Date.now();
-    const llmDuration = llmEndTime - llmStartTime;
+    // Generate response using the provider
+    const responsePayload = await providerInstance.generateResponse(requestEnvelope, masterPrompt);
 
-    console.log(`=== ${provider.toUpperCase()} API RESPONSE ===`);
-    console.log('Duration:', `${llmDuration}ms`);
-    console.log('Status:', response.status);
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error(`=== ${provider.toUpperCase()} API ERROR ===`);
-      console.error('Status:', response.status);
-      console.error('Error data:', errorData);
-      console.error('Request ID:', requestEnvelope.session_id);
-      throw new Error(`${provider} request failed: ${response.status} - ${errorData}`);
-    }
-
-    const data = await response.json();
-    let generatedText = '';
-    if (provider === 'claude') {
-      generatedText = data.content?.[0]?.text?.trim() ?? '';
-    } else if (provider === 'claude-mcp') {
-      // Handle MCP server response format
-      generatedText = data.response?.trim() ?? data.content?.trim() ?? '';
-    } else {
-      generatedText = data.choices?.[0]?.message?.content?.trim() ?? '';
-    }
-
-    console.log(`=== RAW ${provider.toUpperCase()} RESPONSE ===`);
-    console.log('Response length:', generatedText.length);
-    console.log('Usage tokens:', data.usage);
-    
-    if (isDev) {
-      console.log('=== FULL RAW RESPONSE ===');
-      console.log(generatedText);
-      console.log('=== END RAW RESPONSE ===');
-    }
-
-    // Validate response format before parsing
-    if (!generatedText.trim().startsWith('{')) {
-      console.error('=== INVALID RESPONSE FORMAT ===');
-      console.error('Request ID:', requestEnvelope.session_id);
-      console.error('Response does not start with JSON - starts with:', generatedText.substring(0, 50));
-      console.error('Raw response length:', generatedText.length);
-      
-      if (isDev) {
-        console.error('=== DEV MODE: HARD FAILURE FOR NON-JSON RESPONSE ===');
-        console.error('Full raw response:', generatedText);
-        return new Response(JSON.stringify({
-          error: 'LLM_PARSE_ERROR',
-          message: 'LLM returned prose instead of JSON in DEV mode',
-          details: {
-            responsePreview: generatedText.substring(0, 500),
-            responseLength: generatedText.length,
-            expectedFormat: 'JSON object starting with {',
-            actualStart: generatedText.substring(0, 50),
-            requestId: requestEnvelope.session_id,
-            provider: provider
-          }
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 422
-        });
-      }
-    }
-
-    // Parse and validate ResponsePayload
-    let responsePayload: ResponsePayload;
-    try {
-      console.log('=== PARSING JSON RESPONSE ===');
-      responsePayload = JSON.parse(generatedText);
-      
-      console.log('=== JSON PARSE SUCCESS ===');
-      console.log('Parsed keys:', Object.keys(responsePayload));
-      
-      if (isDev) {
-        console.log('=== PARSED PAYLOAD STRUCTURE ===');
-        console.log('Message type:', typeof responsePayload.message);
-        console.log('Message length:', responsePayload.message?.length || 0);
-        console.log('Actions type:', typeof responsePayload.actions);
-        console.log('Actions is array:', Array.isArray(responsePayload.actions));
-        console.log('Actions length:', responsePayload.actions?.length || 0);
-        console.log('Full parsed payload:', JSON.stringify(responsePayload, null, 2));
-      }
-      
-      // Validate required fields
-      const hasValidMessage = responsePayload.message && typeof responsePayload.message === 'string';
-      const hasValidActions = Array.isArray(responsePayload.actions);
-      
-      console.log('=== VALIDATION CHECK ===');
-      console.log('Valid message:', hasValidMessage);
-      console.log('Valid actions:', hasValidActions);
-      
-      if (!hasValidMessage || !hasValidActions) {
-        console.error('=== VALIDATION FAILED ===');
-        console.error('Message exists:', !!responsePayload.message);
-        console.error('Message type:', typeof responsePayload.message);
-        console.error('Actions exists:', !!responsePayload.actions);
-        console.error('Actions is array:', Array.isArray(responsePayload.actions));
-        console.error('Actions value:', responsePayload.actions);
-        throw new Error('Invalid ResponsePayload structure');
-      }
-      
-      // Ensure timestamp is set
-      if (!responsePayload.timestamp) {
-        responsePayload.timestamp = new Date().toISOString();
-      }
-      
-      console.log('=== VALIDATION PASSED ===');
-      console.log('Actions count:', responsePayload.actions.length);
-      
-      if (responsePayload.actions.length > 0) {
-        console.log('=== ACTIONS FOUND ===');
-        responsePayload.actions.forEach((action, index) => {
-          console.log(`Action ${index + 1}:`, {
-            label: action.label,
-            instruction: action.instruction?.substring(0, 50) + '...'
-          });
-        });
-      }
-      
-    } catch (parseError) {
-      console.error('=== JSON PARSE ERROR ===');
-      console.error('Parse error:', parseError.message);
-      console.error('Raw text length:', generatedText.length);
-      console.error('Raw text preview:', generatedText.substring(0, 200) + '...');
-      console.error('Request ID:', requestEnvelope.session_id);
-      
-      if (isDev) {
-        console.error('=== DEV MODE: HARD FAILURE FOR JSON PARSE ERROR ===');
-        console.error('Full raw response:', generatedText);
-        return new Response(JSON.stringify({
-          error: 'LLM_JSON_PARSE_ERROR',
-          message: 'Failed to parse LLM response as JSON in DEV mode',
-          details: {
-            parseError: parseError.message,
-            responsePreview: generatedText.substring(0, 500),
-            responseLength: generatedText.length,
-            requestId: requestEnvelope.session_id,
-            provider: provider,
-            troubleshooting: 'LLM returned invalid JSON format - check master prompt instructions'
-          }
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 422
-        });
-      }
-      
-      // Fallback response for production
-      responsePayload = {
-        message: generatedText || "I'm sorry, I couldn't process your request properly.",
-        actions: [],
-        timestamp: new Date().toISOString(),
-        dev_notes: `Parse error: ${parseError.message}. Raw response length: ${generatedText.length}`
-      };
-    }
+    console.log(`=== ${provider.toUpperCase()} PROVIDER COMPLETED ===`);
+    console.log('Actions count:', responsePayload.actions?.length || 0);
 
     return new Response(JSON.stringify(responsePayload), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
+
   } catch (error) {
     console.error('Error in chat-completion function:', error);
     return new Response(JSON.stringify({ 
