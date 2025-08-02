@@ -1,24 +1,30 @@
 name: Mirror to Allyn repo
 
-run: |
-  echo "Mirror URL is [${MIRROR_URL}]"
-
 on:
   push:
-    branches: [ "**" ]   # every branch, every commit
+    branches: [ "**" ]   # every branch on every commit
   schedule:
-    - cron: "0 4 * * *"  # optional nightly sync at 04:00 UTC
+    - cron: "0 4 * * *"  # nightly at 04:00 UTC
 
 permissions:
-  contents: read          # read source repo
+  contents: read        # read source repo only
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0     # need full history for --mirror
+          fetch-depth: 0   # need full history for --mirror
+
+      - name: Debug MIRROR_URL
+        env:
+          MIRROR_URL: https://${{ secrets.MIRROR_PAT }}@github.com/Allygn/SmallBizAI.git
+        run: |
+          echo "Mirror URL is [${MIRROR_URL}]"
+
       - name: Push mirror
         env:
           MIRROR_URL: https://${{ secrets.MIRROR_PAT }}@github.com/Allygn/SmallBizAI.git
