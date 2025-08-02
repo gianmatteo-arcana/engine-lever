@@ -2,12 +2,12 @@ name: Mirror to Allyn repo
 
 on:
   push:
-    branches: [ "**" ]   # every branch on every commit
+    branches: [ "**" ]
   schedule:
-    - cron: "0 4 * * *"  # nightly at 04:00 UTC
+    - cron: "0 4 * * *"
 
 permissions:
-  contents: read        # read source repo only
+  contents: read
 
 jobs:
   mirror:
@@ -17,16 +17,10 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # need full history for --mirror
-
-      - name: Debug MIRROR_URL
-        env:
-          MIRROR_URL: https://${{ secrets.MIRROR_PAT }}@github.com/Allygn/SmallBizAI.git
-        run: |
-          echo "Mirror URL is [${MIRROR_URL}]"
+          fetch-depth: 0
+          persist-credentials: false    # ← prevents GITHUB_TOKEN from being injected
 
       - name: Push mirror
-        env:
-          MIRROR_URL: https://${{ secrets.MIRROR_PAT }}@github.com/Allygn/SmallBizAI.git
         run: |
-          git push --mirror "$MIRROR_URL"
+          git push --mirror \
+            https://${{ github.actor }}:${{ secrets.MIRROR_PAT }}@github.com/Allygn/SmallBizAI.git
