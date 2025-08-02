@@ -25,7 +25,26 @@ export async function generateClaudeResponse(requestEnvelope: RequestEnvelope): 
     if (error) {
       console.error('=== SUPABASE FUNCTION ERROR ===', requestId);
       console.error('Error details:', error);
+      console.error('Error message:', error?.message);
+      console.error('Error code:', error?.code);
+      console.error('Error status:', error?.status);
       console.error('Request duration:', `${duration.toFixed(2)}ms`);
+      
+      // Check for specific error details in the context
+      if (error?.context?.body) {
+        console.error('Error body from function:', error.context.body);
+      }
+      
+      // Check for common issues with 422 status
+      if (error?.message?.includes('422') || error?.status === 422) {
+        console.error('🚨 422 VALIDATION ERROR DETECTED:');
+        console.error('This suggests the request payload validation failed in the edge function');
+        console.error('Common causes:');
+        console.error('  - Missing required fields in RequestEnvelope');
+        console.error('  - Invalid data types or format');
+        console.error('  - API provider key issues');
+      }
+      
       throw new Error(`Chat completion failed: ${error.message}`);
     }
 
