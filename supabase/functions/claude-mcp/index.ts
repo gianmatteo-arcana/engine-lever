@@ -27,20 +27,62 @@ serve(async (req) => {
     const mcpApiKey = Deno.env.get('MCP_API_KEY');
     const mcpUrl = Deno.env.get('MCP_URL') || 'https://claude-mcp-sba-ydzieksc5q-uc.a.run.app';
     
+    console.log('🔧 Environment check:');
+    console.log('  - MCP_API_KEY present:', !!mcpApiKey);
+    console.log('  - MCP_URL:', mcpUrl);
+    console.log('  - MCP_AUTH_TOKEN present:', !!Deno.env.get('MCP_AUTH_TOKEN'));
+    
     if (!mcpApiKey) {
       console.error('❌ MCP_API_KEY not configured');
-      throw new Error('MCP_API_KEY not configured in Supabase secrets');
+      return new Response(
+        JSON.stringify({ 
+          error: 'MCP_API_KEY not configured in Supabase secrets',
+          hint: 'Please add MCP_API_KEY to your Supabase function secrets'
+        }), 
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
-    console.log('🔑 MCP API Key present:', !!mcpApiKey);
-    console.log('🌐 MCP URL:', mcpUrl);
-
-    const mcpRequest = await req.json();
+    let mcpRequest;
+    try {
+      mcpRequest = await req.json();
+    } catch (parseError) {
+      console.error('❌ Invalid JSON in request:', parseError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid JSON in request body',
+          details: parseError.message
+        }), 
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+    
     console.log('📨 MCP Request:', JSON.stringify(mcpRequest, null, 2));
 
     // Get Google token for authorization
-    const googleToken = await getGoogleToken();
-    console.log('🔐 Google Token present:', !!googleToken);
+    let googleToken;
+    try {
+      googleToken = await getGoogleToken();
+      console.log('🔐 Google Token present:', !!googleToken);
+    } catch (tokenError) {
+      console.error('❌ Failed to get Google token:', tokenError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Authentication failed: ' + tokenError.message,
+          hint: 'Please ensure MCP_AUTH_TOKEN is configured in Supabase secrets'
+        }), 
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
 
     const response = await fetch(`${mcpUrl}/mcp`, {
       method: 'POST',

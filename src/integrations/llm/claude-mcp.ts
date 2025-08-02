@@ -52,15 +52,25 @@ Example Response:
       console.error('Error object:', error);
       console.error('Error message:', error?.message);
       
-      // Check for common MCP issues
-      if (error?.message?.includes('MCP_API_KEY')) {
-        console.error('🚨 MCP API KEY MISSING:');
-        console.error('Please ensure MCP_API_KEY is configured in Supabase secrets');
-      }
-      
-      if (error?.message?.includes('MCP_AUTH_TOKEN')) {
-        console.error('🚨 MCP AUTH TOKEN MISSING:');
-        console.error('Please ensure MCP_AUTH_TOKEN is configured in Supabase secrets');
+      // Check for specific error details in the response
+      if (error?.context?.body) {
+        const errorBody = error.context.body;
+        console.error('Error body from function:', errorBody);
+        
+        if (errorBody.error?.includes('MCP_API_KEY')) {
+          console.error('🚨 MCP API KEY MISSING OR INVALID:');
+          console.error('Please ensure MCP_API_KEY is configured in Supabase secrets');
+          console.error('Expected format: mcp_[64-character-hex-string]');
+        }
+        
+        if (errorBody.error?.includes('MCP_AUTH_TOKEN')) {
+          console.error('🚨 MCP AUTH TOKEN MISSING OR INVALID:');
+          console.error('Please ensure MCP_AUTH_TOKEN is configured in Supabase secrets');
+          console.error('This should be your Google OAuth JWT token');
+        }
+        
+        // Throw a more specific error
+        throw new Error(errorBody.error || error.message);
       }
       
       throw error;
