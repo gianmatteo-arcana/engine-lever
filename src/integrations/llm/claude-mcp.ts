@@ -14,26 +14,19 @@ export async function generateClaudeMCPResponse(
     console.log('🔗 Starting Claude MCP request...');
     console.log('🔧 Session ID:', requestEnvelope.session_id);
     
-    // Call the new claude-mcp proxy edge function
-    const { data, error } = await supabase.functions.invoke('claude-mcp', {
+    // Call the chat-completion edge function with claude-mcp provider
+    const { data, error } = await supabase.functions.invoke('chat-completion', {
       body: {
-        jsonrpc: "2.0",
-        method: "tools/call",
-        params: {
-          name: "claude_query",
-          arguments: {
-            prompt: `You are Ally, an AI assistant for small business owners. You help with compliance, administrative tasks, and business operations. Always respond with valid JSON in the exact format specified.
+        requestEnvelope,
+        provider: 'claude-mcp',
+        masterPrompt: `You are Ally, an AI assistant for small business owners. You help with compliance, administrative tasks, and business operations. Always respond with valid JSON in the exact format specified.
 
 Your response must be a JSON object with these fields:
 - message: A helpful, conversational response to the user
 - actions: An array of action objects with 'label' and 'instruction' fields
 - timestamp: Current ISO timestamp
 
-User Message: ${requestEnvelope.user_message}
-Business Profile: ${JSON.stringify(requestEnvelope.business_profile)}
-Task Context: ${JSON.stringify(requestEnvelope.task)}
-
-Example Response:
+Example:
 {
   "message": "I can help you with that task.",
   "actions": [
@@ -41,9 +34,6 @@ Example Response:
   ],
   "timestamp": "${new Date().toISOString()}"
 }`
-          }
-        },
-        id: requestEnvelope.session_id || "1"
       }
     });
 
@@ -97,56 +87,25 @@ Example Response:
     }
 
     if (!data) {
-      console.error('❌ No data returned from claude-mcp proxy');
-      throw new Error('No response data received from MCP proxy');
+      console.error('❌ No data returned from chat-completion function');
+      throw new Error('No response data received from chat-completion');
     }
 
-    // Parse the MCP response
-    let mcpResponse;
-    try {
-      if (typeof data === 'string') {
-        mcpResponse = JSON.parse(data);
-      } else {
-        mcpResponse = data;
-      }
-    } catch (parseError) {
-      console.error('❌ Failed to parse MCP response:', parseError);
-      console.error('Raw response:', data);
-      throw new Error('Invalid JSON response from MCP server');
-    }
-
-    // Extract the actual response from MCP format
-    let responseData;
-    if (mcpResponse.result && mcpResponse.result.content) {
-      // Handle MCP tool response format
-      const content = mcpResponse.result.content;
-      if (Array.isArray(content) && content[0]?.text) {
-        try {
-          responseData = JSON.parse(content[0].text);
-        } catch (e) {
-          responseData = { message: content[0].text, actions: [], timestamp: new Date().toISOString() };
-        }
-      } else {
-        responseData = { message: content, actions: [], timestamp: new Date().toISOString() };
-      }
-    } else if (mcpResponse.message || mcpResponse.actions) {
-      // Direct response format
-      responseData = mcpResponse;
-    } else {
-      console.error('❌ Unexpected MCP response format:', mcpResponse);
-      throw new Error('Unexpected response format from MCP server');
+    // Validate the response structure (chat-completion returns already parsed ResponsePayload)
+    if (!data.message || !Array.isArray(data.actions)) {
+      console.error('❌ Invalid response structure:', data);
+      throw new Error('Invalid response structure from chat-completion function');
     }
 
     console.log(`✅ Claude MCP response received (${duration}ms)`);
-    console.log('Actions count:', responseData.actions?.length || 0);
+    console.log('Actions count:', data.actions?.length || 0);
 
     // Log development information if in dev mode
     if (requestEnvelope.env === 'dev') {
       console.log('🔧 DEV MODE: Claude MCP Response Details');
-      console.log('Response message length:', responseData.message?.length || 0);
-      console.log('Actions:', responseData.actions);
+      console.log('Response message length:', data.message?.length || 0);
+      console.log('Actions:', data.actions);
       console.log('Duration:', duration + 'ms');
-      console.log('Raw MCP Response:', mcpResponse);
       
       // Log to DevConsole in DEV MODE
       if ((window as any).devConsoleLog) {
@@ -159,17 +118,17 @@ Example Response:
         (window as any).devConsoleLog({
           type: 'info',
           message: `[DEV] Claude MCP Response - Session: ${requestId}`,
-          data: responseData
+          data: data
         });
       }
     }
 
     return {
-      message: responseData.message,
-      task_id: responseData.task_id,
-      actions: responseData.actions || [],
-      timestamp: responseData.timestamp || new Date().toISOString(),
-      dev_notes: responseData.dev_notes
+      message: data.message,
+      task_id: data.task_id,
+      actions: data.actions || [],
+      timestamp: data.timestamp || new Date().toISOString(),
+      dev_notes: data.dev_notes
     };
 
   } catch (error) {
