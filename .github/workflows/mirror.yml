@@ -1,5 +1,8 @@
 name: Mirror to Allyn repo
 
+run: |
+  echo "Mirror URL is [${MIRROR_URL}]"
+
 on:
   push:
     branches: [ "**" ]   # every branch, every commit
