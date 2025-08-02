@@ -437,9 +437,22 @@ serve(async (req) => {
   }
 
   try {
-    const { requestEnvelope, provider: reqProvider, masterPrompt } = await req.json();
+    console.log('=== CHAT-COMPLETION FUNCTION START ===');
+    
+    let requestBody;
+    try {
+      requestBody = await req.json();
+      console.log('✅ Request JSON parsed successfully');
+      console.log('Request keys:', Object.keys(requestBody));
+    } catch (parseError) {
+      console.error('❌ JSON parse error:', parseError);
+      throw new Error(`Invalid JSON in request body: ${parseError.message}`);
+    }
+
+    const { requestEnvelope, provider: reqProvider, masterPrompt } = requestBody;
 
     if (!requestEnvelope || !requestEnvelope.user_message) {
+      console.error('❌ Invalid requestEnvelope:', { requestEnvelope, hasUserMessage: !!requestEnvelope?.user_message });
       throw new Error('RequestEnvelope with user_message is required');
     }
 
@@ -450,6 +463,7 @@ serve(async (req) => {
 
     console.log(`=== ROUTING TO ${provider.toUpperCase()} PROVIDER ===`);
     console.log('Request ID:', requestEnvelope.session_id);
+    console.log('✅ Initial validation passed');
 
     // Get environment variables
     const config: ProviderConfig = {
@@ -459,14 +473,68 @@ serve(async (req) => {
       mcpAuthToken: Deno.env.get('MCP_AUTH_TOKEN')
     };
 
+    console.log('🔧 === ENVIRONMENT CONFIGURATION CHECK ===');
+    console.log('  - OpenAI API Key present:', !!config.openAIApiKey);
+    console.log('  - Anthropic API Key present:', !!config.anthropicApiKey);
+    console.log('  - MCP Server URL present:', !!config.mcpServerUrl);
+    console.log('  - MCP Auth Token present:', !!config.mcpAuthToken);
+    
+    // Specific checks for the selected provider
+    if (provider === 'claude-mcp') {
+      console.log('\n🚨 CLAUDE-MCP PROVIDER REQUIREMENTS:');
+      if (!config.mcpServerUrl) {
+        console.error('❌ CRITICAL ERROR: MCP_SERVER_URL environment variable is MISSING!');
+        console.error('   Required for claude-mcp provider');
+        console.error('   Please set MCP_SERVER_URL in Supabase function secrets');
+      } else {
+        console.log('✅ MCP Server URL configured:', config.mcpServerUrl);
+      }
+      
+      if (!config.mcpAuthToken) {
+        console.error('❌ CRITICAL ERROR: MCP_AUTH_TOKEN environment variable is MISSING!');
+        console.error('   Required for claude-mcp provider authentication');
+        console.error('   Please set MCP_AUTH_TOKEN in Supabase function secrets');
+      } else {
+        console.log('✅ MCP Auth Token configured (length:', config.mcpAuthToken.length, 'chars)');
+      }
+    } else if (provider === 'claude') {
+      if (!config.anthropicApiKey) {
+        console.error('❌ CRITICAL ERROR: ANTHROPIC_API_KEY environment variable is MISSING!');
+        console.error('   Required for claude provider');
+        console.error('   Please set ANTHROPIC_API_KEY in Supabase function secrets');
+      }
+    } else if (provider === 'openai') {
+      if (!config.openAIApiKey) {
+        console.error('❌ CRITICAL ERROR: OPENAI_API_KEY environment variable is MISSING!');
+        console.error('   Required for openai provider');
+        console.error('   Please set OPENAI_API_KEY in Supabase function secrets');
+      }
+    }
+
     // Create provider instance using factory
-    const providerInstance = LLMProviderFactory.create(provider, config);
+    console.log('\n🏭 === CREATING PROVIDER INSTANCE ===');
+    console.log('Provider type:', provider);
+    let providerInstance;
+    try {
+      providerInstance = LLMProviderFactory.create(provider, config);
+      console.log('✅ Provider instance created successfully');
+    } catch (factoryError) {
+      console.error('❌ FACTORY ERROR - Failed to create provider instance:');
+      console.error('Error:', factoryError.message);
+      console.error('Stack:', factoryError.stack);
+      throw factoryError;
+    }
 
     // Generate response using the provider
+    console.log('\n🚀 === CALLING PROVIDER GENERATE RESPONSE ===');
+    console.log('Request envelope user message preview:', requestEnvelope.user_message?.substring(0, 100) + '...');
+    console.log('Master prompt length:', masterPrompt?.length || 0);
     const responsePayload = await providerInstance.generateResponse(requestEnvelope, masterPrompt);
+    console.log('✅ Provider response received');
 
     console.log(`=== ${provider.toUpperCase()} PROVIDER COMPLETED ===`);
     console.log('Actions count:', responsePayload.actions?.length || 0);
+    console.log('✅ Returning successful response');
 
     return new Response(JSON.stringify(responsePayload), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
