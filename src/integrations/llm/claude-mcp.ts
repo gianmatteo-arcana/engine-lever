@@ -4,9 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 export async function generateClaudeMCPResponse(
   requestEnvelope: RequestEnvelope
 ): Promise<ResponsePayload> {
-  const startTime = Date.now();
+  const requestId = requestEnvelope.session_id || 'unknown';
+  const startTime = performance.now();
   
   try {
+    console.log("=== CLAUDE MCP CLIENT REQUEST ===", requestId);
+    console.log("Request envelope keys:", Object.keys(requestEnvelope));
+    console.log("Environment mode:", requestEnvelope.env);
     console.log('🔗 Starting Claude MCP request...');
     console.log('🔧 Session ID:', requestEnvelope.session_id);
     
@@ -48,9 +52,25 @@ Example Response:
     console.log(`⏱️ MCP request completed in ${duration}ms`);
 
     if (error) {
-      console.error('🚨 CLAUDE MCP PROXY ERROR:');
-      console.error('Error object:', error);
+      console.error('=== CLAUDE MCP PROXY ERROR ===', requestId);
+      console.error('Error details:', error);
       console.error('Error message:', error?.message);
+      console.error('Error code:', error?.code);
+      console.error('Error status:', error?.status);
+      console.error('Request duration:', `${(performance.now() - startTime).toFixed(2)}ms`);
+      
+      // Log to DevConsole for high visibility
+      if ((window as any).devConsoleLog) {
+        (window as any).devConsoleLog({
+          type: 'error',
+          message: `[CRITICAL] Claude MCP Error: ${error.message}`,
+          data: {
+            error: error,
+            requestId: requestId,
+            duration: `${(performance.now() - startTime).toFixed(2)}ms`
+          }
+        });
+      }
       
       // Check for specific error details in the response
       if (error?.context?.body) {
@@ -127,6 +147,21 @@ Example Response:
       console.log('Actions:', responseData.actions);
       console.log('Duration:', duration + 'ms');
       console.log('Raw MCP Response:', mcpResponse);
+      
+      // Log to DevConsole in DEV MODE
+      if ((window as any).devConsoleLog) {
+        (window as any).devConsoleLog({
+          type: 'info',
+          message: `[DEV] Claude MCP Request - Session: ${requestId}`,
+          data: requestEnvelope
+        });
+
+        (window as any).devConsoleLog({
+          type: 'info',
+          message: `[DEV] Claude MCP Response - Session: ${requestId}`,
+          data: responseData
+        });
+      }
     }
 
     return {
@@ -138,19 +173,33 @@ Example Response:
     };
 
   } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ Claude MCP error (${duration}ms):`, error);
+    const endTime = performance.now();
+    const duration = endTime - startTime;
     
-    // Log detailed error information
-    console.error('Error details:', {
-      type: error.constructor.name,
-      message: error.message,
-      duration: duration + 'ms',
-      requestId: requestEnvelope.session_id
-    });
+    console.error('=== CLAUDE MCP INTEGRATION ERROR ===', requestId);
+    console.error('Error duration:', `${duration.toFixed(2)}ms`);
+    console.error('Error type:', (error as any).constructor.name);
+    console.error('Error message:', (error as any).message);
+    console.error('Full error:', error);
+    console.error('Error stack:', (error as any).stack);
+    console.error('Full error object:', error);
+    
+    // Log to DevConsole for high visibility
+    if ((window as any).devConsoleLog) {
+      (window as any).devConsoleLog({
+        type: 'error',
+        message: `[CRITICAL] Claude MCP Integration Failed: ${(error as any).message}`,
+        data: {
+          error: error,
+          requestId: requestId,
+          duration: `${duration.toFixed(2)}ms`,
+          provider: 'claude-mcp'
+        }
+      });
+    }
 
     // Check if it's a 404 error suggesting endpoint issue
-    if (error.message && error.message.includes('404')) {
+    if ((error as any).message && (error as any).message.includes('404')) {
       console.error('🚨 MCP Server 404 Error - Possible Solutions:');
       console.error('   1. Check if your MCP server URL needs a specific path (e.g., /chat, /api/completion)');
       console.error('   2. Verify your server accepts POST requests');
