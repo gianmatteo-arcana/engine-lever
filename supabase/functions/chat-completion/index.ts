@@ -308,7 +308,8 @@ class ClaudeProvider extends BaseLLMProvider {
 class ClaudeMCPProvider extends BaseLLMProvider {
   constructor(
     private mcpServerUrl: string,
-    private mcpAuthToken: string
+    private mcpAuthToken: string,
+    private mcpApiKey: string
   ) {
     super();
   }
@@ -340,6 +341,7 @@ class ClaudeMCPProvider extends BaseLLMProvider {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${this.mcpAuthToken}`,
+        'x-mcp-key': this.mcpApiKey,
         'Accept': 'application/json',
       }
     });
@@ -351,6 +353,7 @@ class ClaudeMCPProvider extends BaseLLMProvider {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.mcpAuthToken}`,
+          'x-mcp-key': this.mcpApiKey,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -398,6 +401,7 @@ interface ProviderConfig {
   anthropicApiKey?: string;
   mcpServerUrl?: string;
   mcpAuthToken?: string;
+  mcpApiKey?: string;
 }
 
 class LLMProviderFactory {
@@ -422,7 +426,10 @@ class LLMProviderFactory {
         if (!config.mcpAuthToken) {
           throw new Error('MCP Auth Token not configured in Supabase secrets');
         }
-        return new ClaudeMCPProvider(config.mcpServerUrl, config.mcpAuthToken);
+        if (!config.mcpApiKey) {
+          throw new Error('MCP API Key not configured in Supabase secrets');
+        }
+        return new ClaudeMCPProvider(config.mcpServerUrl, config.mcpAuthToken, config.mcpApiKey);
         
       default:
         throw new Error(`Unsupported provider: ${provider}`);
@@ -470,7 +477,8 @@ serve(async (req) => {
       openAIApiKey: Deno.env.get('OPENAI_API_KEY'),
       anthropicApiKey: Deno.env.get('ANTHROPIC_API_KEY'),
       mcpServerUrl: Deno.env.get('MCP_SERVER_URL'),
-      mcpAuthToken: Deno.env.get('MCP_AUTH_TOKEN')
+      mcpAuthToken: Deno.env.get('MCP_AUTH_TOKEN'),
+      mcpApiKey: Deno.env.get('MCP_API_KEY')
     };
 
     console.log('🔧 === ENVIRONMENT CONFIGURATION CHECK ===');
@@ -478,6 +486,7 @@ serve(async (req) => {
     console.log('  - Anthropic API Key present:', !!config.anthropicApiKey);
     console.log('  - MCP Server URL present:', !!config.mcpServerUrl);
     console.log('  - MCP Auth Token present:', !!config.mcpAuthToken);
+    console.log('  - MCP API Key present:', !!config.mcpApiKey);
     
     // Specific checks for the selected provider
     if (provider === 'claude-mcp') {
@@ -492,10 +501,18 @@ serve(async (req) => {
       
       if (!config.mcpAuthToken) {
         console.error('❌ CRITICAL ERROR: MCP_AUTH_TOKEN environment variable is MISSING!');
-        console.error('   Required for claude-mcp provider authentication');
+        console.error('   Required for claude-mcp provider authentication (Authorization header)');
         console.error('   Please set MCP_AUTH_TOKEN in Supabase function secrets');
       } else {
         console.log('✅ MCP Auth Token configured (length:', config.mcpAuthToken.length, 'chars)');
+      }
+      
+      if (!config.mcpApiKey) {
+        console.error('❌ CRITICAL ERROR: MCP_API_KEY environment variable is MISSING!');
+        console.error('   Required for claude-mcp provider authentication (x-mcp-key header)');
+        console.error('   Please set MCP_API_KEY in Supabase function secrets');
+      } else {
+        console.log('✅ MCP API Key configured (length:', config.mcpApiKey.length, 'chars)');
       }
     } else if (provider === 'claude') {
       if (!config.anthropicApiKey) {
