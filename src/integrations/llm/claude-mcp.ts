@@ -48,71 +48,83 @@ Example Response:
     console.log(`⏱️ MCP request completed in ${duration}ms`);
 
     if (error) {
-      console.error('🚨 SUPABASE FUNCTION ERROR DETAILS:');
+      console.error('🚨 CLAUDE MCP PROXY ERROR:');
       console.error('Error object:', error);
       console.error('Error message:', error?.message);
-      console.error('Error details:', error?.details);
-      console.error('Error hint:', error?.hint);
-      console.error('Error code:', error?.code);
       
-      // Check for common configuration issues
-      if (error?.message?.includes('fetch')) {
-        console.error('🚨 NETWORK/CONFIGURATION ISSUE DETECTED:');
-        console.error('This suggests the MCP server URL might be wrong or the server is down');
-        console.error('Check these in Supabase secrets:');
-        console.error('  - MCP_SERVER_URL: Should be full URL with correct endpoint (e.g., /chat)');
-        console.error('  - MCP_AUTH_TOKEN: Should be valid authentication token');
+      // Check for common MCP issues
+      if (error?.message?.includes('MCP_API_KEY')) {
+        console.error('🚨 MCP API KEY MISSING:');
+        console.error('Please ensure MCP_API_KEY is configured in Supabase secrets');
       }
       
-      if (error?.message?.includes('404')) {
-        console.error('🚨 404 ERROR - ENDPOINT NOT FOUND:');
-        console.error('Your MCP server URL likely needs a specific path:');
-        console.error('  - Try adding /chat to your URL');
-        console.error('  - Try adding /completion to your URL');
-        console.error('  - Try adding /api/chat to your URL');
-      }
-      
-      if (error?.message?.includes('401') || error?.message?.includes('403')) {
-        console.error('🚨 AUTHENTICATION ERROR:');
-        console.error('Check your MCP_AUTH_TOKEN in Supabase secrets');
-        console.error('Make sure the token is valid and has the right permissions');
+      if (error?.message?.includes('MCP_AUTH_TOKEN')) {
+        console.error('🚨 MCP AUTH TOKEN MISSING:');
+        console.error('Please ensure MCP_AUTH_TOKEN is configured in Supabase secrets');
       }
       
       throw error;
     }
 
     if (!data) {
-      console.error('❌ No data returned from chat-completion function');
-      throw new Error('No response data received from MCP server');
+      console.error('❌ No data returned from claude-mcp proxy');
+      throw new Error('No response data received from MCP proxy');
     }
 
-    // Validate the response structure
-    if (!data.message || !Array.isArray(data.actions)) {
-      console.error('❌ Invalid response structure:', data);
-      throw new Error('Invalid response structure from MCP server');
+    // Parse the MCP response
+    let mcpResponse;
+    try {
+      if (typeof data === 'string') {
+        mcpResponse = JSON.parse(data);
+      } else {
+        mcpResponse = data;
+      }
+    } catch (parseError) {
+      console.error('❌ Failed to parse MCP response:', parseError);
+      console.error('Raw response:', data);
+      throw new Error('Invalid JSON response from MCP server');
+    }
+
+    // Extract the actual response from MCP format
+    let responseData;
+    if (mcpResponse.result && mcpResponse.result.content) {
+      // Handle MCP tool response format
+      const content = mcpResponse.result.content;
+      if (Array.isArray(content) && content[0]?.text) {
+        try {
+          responseData = JSON.parse(content[0].text);
+        } catch (e) {
+          responseData = { message: content[0].text, actions: [], timestamp: new Date().toISOString() };
+        }
+      } else {
+        responseData = { message: content, actions: [], timestamp: new Date().toISOString() };
+      }
+    } else if (mcpResponse.message || mcpResponse.actions) {
+      // Direct response format
+      responseData = mcpResponse;
+    } else {
+      console.error('❌ Unexpected MCP response format:', mcpResponse);
+      throw new Error('Unexpected response format from MCP server');
     }
 
     console.log(`✅ Claude MCP response received (${duration}ms)`);
-    console.log('Actions count:', data.actions?.length || 0);
+    console.log('Actions count:', responseData.actions?.length || 0);
 
     // Log development information if in dev mode
     if (requestEnvelope.env === 'dev') {
       console.log('🔧 DEV MODE: Claude MCP Response Details');
-      console.log('Response message length:', data.message?.length || 0);
-      console.log('Actions:', data.actions);
+      console.log('Response message length:', responseData.message?.length || 0);
+      console.log('Actions:', responseData.actions);
       console.log('Duration:', duration + 'ms');
-      
-      if (data.dev_notes) {
-        console.log('Dev notes:', data.dev_notes);
-      }
+      console.log('Raw MCP Response:', mcpResponse);
     }
 
     return {
-      message: data.message,
-      task_id: data.task_id,
-      actions: data.actions || [],
-      timestamp: data.timestamp || new Date().toISOString(),
-      dev_notes: data.dev_notes
+      message: responseData.message,
+      task_id: responseData.task_id,
+      actions: responseData.actions || [],
+      timestamp: responseData.timestamp || new Date().toISOString(),
+      dev_notes: responseData.dev_notes
     };
 
   } catch (error) {
