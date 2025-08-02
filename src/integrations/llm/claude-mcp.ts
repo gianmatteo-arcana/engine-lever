@@ -10,19 +10,26 @@ export async function generateClaudeMCPResponse(
     console.log('🔗 Starting Claude MCP request...');
     console.log('🔧 Session ID:', requestEnvelope.session_id);
     
-    // Call the chat-completion edge function with claude-mcp provider
-    const { data, error } = await supabase.functions.invoke('chat-completion', {
+    // Call the new claude-mcp proxy edge function
+    const { data, error } = await supabase.functions.invoke('claude-mcp', {
       body: {
-        requestEnvelope,
-        provider: 'claude-mcp',
-        masterPrompt: `You are Ally, an AI assistant for small business owners. You help with compliance, administrative tasks, and business operations. Always respond with valid JSON in the exact format specified.
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: "claude_query",
+          arguments: {
+            prompt: `You are Ally, an AI assistant for small business owners. You help with compliance, administrative tasks, and business operations. Always respond with valid JSON in the exact format specified.
 
 Your response must be a JSON object with these fields:
 - message: A helpful, conversational response to the user
 - actions: An array of action objects with 'label' and 'instruction' fields
 - timestamp: Current ISO timestamp
 
-Example:
+User Message: ${requestEnvelope.user_message}
+Business Profile: ${JSON.stringify(requestEnvelope.business_profile)}
+Task Context: ${JSON.stringify(requestEnvelope.task)}
+
+Example Response:
 {
   "message": "I can help you with that task.",
   "actions": [
@@ -30,6 +37,9 @@ Example:
   ],
   "timestamp": "${new Date().toISOString()}"
 }`
+          }
+        },
+        id: requestEnvelope.session_id || "1"
       }
     });
 
