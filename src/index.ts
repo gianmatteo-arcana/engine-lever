@@ -23,7 +23,8 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   'https://raenkewzlvrdqufwxjpl.supabase.co',
-  'https://lovable.dev'
+  'https://lovable.dev',
+  'https://c8eb2d86-d79d-470d-b29c-7a82d220346b.lovableproject.com'
 ];
 
 // Security middleware
@@ -37,9 +38,10 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or Postman)
     if (!origin) return callback(null, true);
     
-    // Check if origin is in allowed list or is a Lovable subdomain
+    // Check if origin is in allowed list or is a Lovable subdomain/project
     if (allowedOrigins.includes(origin) || 
         origin.endsWith('.lovable.dev') ||
+        origin.endsWith('.lovableproject.com') ||
         origin === process.env.FRONTEND_URL) {
       callback(null, true);
     } else {
