@@ -38,6 +38,9 @@ describe('DatabaseService', () => {
       const mockTask = {
         id: 'task-123',
         user_id: 'user-123',
+        title: 'Test SOI Filing',
+        description: 'Test SOI filing task',
+        task_type: 'soi-filing',
         business_id: 'biz-123',
         template_id: 'soi-filing',
         status: 'pending' as const,
@@ -54,6 +57,9 @@ describe('DatabaseService', () => {
 
       const task = await dbService.createTask({
         user_id: 'user-123',
+        title: 'Test SOI Filing',
+        description: 'Test SOI filing task',
+        task_type: 'soi-filing',
         business_id: 'biz-123',
         template_id: 'soi-filing',
         status: 'pending',
@@ -441,6 +447,9 @@ describe('DatabaseService', () => {
 
       expect(record).toEqual({
         user_id: 'user-123',
+        title: 'soi-filing Task',
+        description: 'Automated task for soi-filing',
+        task_type: 'soi-filing',
         business_id: 'biz-123',
         template_id: 'soi-filing',
         status: 'pending',

@@ -43,6 +43,8 @@ export const TaskContextSchema = z.object({
   userId: z.string(),
   businessId: z.string(),
   templateId: z.string().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
   priority: z.nativeEnum(TaskPriority),
   deadline: z.date().optional(),
   metadata: z.record(z.any()).default({}),

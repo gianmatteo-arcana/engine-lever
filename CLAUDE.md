@@ -85,10 +85,13 @@ User Request → Master Orchestrator Agent → Specialist Agents → MCP Tools �
 ### 1. Schema Changes MUST Follow The Sacred 5-Step Cycle:
 
 1. **Create migration** in FRONTEND repo (`biz-buddy-ally-now/supabase/migrations/`)
-2. **Apply & verify** migration in Supabase Dashboard
-3. **Write unit tests** in BACKEND repo
-4. **Test locally** (both mocked and real DB)
-5. **Commit tests** to backend repo
+2. **Add to registry** in `biz-buddy-ally-now/src/data/migration-registry.json`
+3. **Apply via Lovable Migration Runner UI** (DEV mode only - NEVER manually!)
+4. **Write unit tests** in BACKEND repo
+5. **Test locally** (both mocked and real DB)
+6. **Commit tests** to backend repo
+
+**🚨 CRITICAL**: Always use the Lovable Migration Runner UI in development mode to apply migrations. Manual application via Supabase Dashboard should NEVER be suggested or used unless the Migration Runner is completely unavailable.
 
 **See [DEVELOPMENT_WORKFLOW.md](./DEVELOPMENT_WORKFLOW.md) for the complete process!**
 

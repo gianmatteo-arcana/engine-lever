@@ -49,17 +49,18 @@ git push origin main
 
 **🔐 SECURITY**: Only apply migrations through approved secure channels!
 
-#### Option A: Lovable Migration Runner (Recommended)
+#### 🎯 PRIMARY METHOD: Lovable Migration Runner (ALWAYS USE THIS)
 **Development Environment Only**
-1. Open Lovable development environment
-2. Navigate to Database section in dashboard
-3. Migration Runner will show pending migrations
-4. Review SQL content carefully for security
-5. Click "Apply Backend Schema Migration"
-6. Verify success in migration history
+1. Open Lovable development environment at https://lovable.dev/projects/c8eb2d86-d79d-470d-b29c-7a82d220346b
+2. The Migration Runner component will automatically detect pending migrations
+3. Review SQL content carefully for security
+4. Click "Apply Migration" for the pending migration
+5. Verify success in migration history
 
-#### Option B: Supabase Dashboard (Fallback)
-**⚠️ Use only if Migration Runner unavailable**
+**⚠️ IMPORTANT**: This is the ONLY approved method for applying migrations in development. The Migration Runner UI is specifically designed for this purpose and includes all necessary security controls.
+
+#### ❌ DEPRECATED: Manual Methods
+**DO NOT USE THESE** unless the Migration Runner is completely unavailable:
 1. Go to: https://supabase.com/dashboard/project/raenkewzlvrdqufwxjpl/sql/new
 2. Copy your migration SQL
 3. Paste and click "Run"

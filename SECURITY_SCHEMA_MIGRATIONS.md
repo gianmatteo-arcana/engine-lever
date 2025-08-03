@@ -29,17 +29,18 @@ This document outlines the security procedures for managing database schema chan
 
 ### Phase 2: Manual Review & Approval
 ```
-1. Developer reviews each migration's SQL content
-2. Manual approval required for each migration
-3. Batch or individual application supported
+1. Developer reviews each migration's SQL content IN LOVABLE UI
+2. Manual approval required for each migration IN LOVABLE UI
+3. Batch or individual application supported IN LOVABLE UI
 4. Pre-execution validation prevents re-application
 ```
 
 **🛡️ Security Controls:**
 - **No automatic migration execution** - all changes require human approval
-- **SQL content visible** before execution for review
+- **SQL content visible** before execution for review in Lovable UI
 - **Migration history tracking** prevents accidental re-runs
 - **User authentication required** to access migration tools
+- **🚨 NEVER suggest manual SQL execution** - always use Lovable Migration Runner UI
 
 ### Phase 3: Secure Execution
 ```

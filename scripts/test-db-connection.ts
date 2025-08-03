@@ -28,10 +28,27 @@ async function testConnection() {
     dbService.initialize();
     console.log('✅ Database service initialized\n');
     
+    // Get a real user ID from profiles table
+    console.log('🔍 Getting real user ID...');
+    const { data: profiles } = await dbService.getClient()
+      .from('profiles')
+      .select('user_id')
+      .limit(1)
+      .single();
+    
+    if (!profiles) {
+      throw new Error('No user profiles found. Please create a user first.');
+    }
+    
+    console.log('✅ Using user ID:', profiles.user_id);
+
     // Test 1: Create a test task
     console.log('📝 Creating test task...');
     const testTask = await dbService.createTask({
-      user_id: '550e8400-e29b-41d4-a716-446655440000', // Test UUID
+      user_id: profiles.user_id,
+      title: 'Test Database Connection',
+      description: 'Testing database connectivity and task creation',
+      task_type: 'test',
       business_id: 'test-business-' + Date.now(),
       template_id: 'test-template',
       status: 'pending',
@@ -45,10 +62,10 @@ async function testConnection() {
     const retrievedTask = await dbService.getTask(testTask.id);
     console.log('✅ Task retrieved:', retrievedTask?.id === testTask.id ? 'Success' : 'Failed');
     
-    // Test 3: Update task status
+    // Test 3: Update task status (using backend status, will be mapped to frontend)
     console.log('\n🔄 Updating task status...');
     const updatedTask = await dbService.updateTask(testTask.id, {
-      status: 'active'
+      status: 'active' as any // Backend status will be mapped to 'in_progress'
     });
     console.log('✅ Task updated:', updatedTask.status);
     

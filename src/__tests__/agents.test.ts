@@ -41,94 +41,110 @@ describe('AgentManager', () => {
       await AgentManager.initialize();
     });
 
-    it('should create a new agent', async () => {
-      const config = { capabilities: ['business_analysis'] };
-      const agentId = await AgentManager.createAgent(config);
-      
-      expect(agentId).toBeDefined();
-      expect(agentId).toMatch(/^agent_\d+$/);
-      expect(AgentManager.getAgentCount()).toBe(1);
+    it('should initialize all role-based agents', async () => {
+      expect(AgentManager.getAgentCount()).toBe(7); // All role-based agents
     });
 
-    it('should retrieve agent by ID', async () => {
-      const config = { capabilities: ['document_processing'] };
-      const agentId = await AgentManager.createAgent(config);
-      
-      const agent = AgentManager.getAgent(agentId);
-      expect(agent).toBeDefined();
-      expect(agent.id).toBe(agentId);
-      expect(agent.capabilities).toEqual(['document_processing']);
+    it('should get agent status by role', async () => {
+      const status = AgentManager.getAgentStatus('orchestrator' as any);
+      expect(status).toBeDefined();
+      expect(status.role).toBe('orchestrator');
+      expect(status.status).toBeDefined();
     });
 
-    it('should return all agents', async () => {
-      // Ensure clean state within this test
-      await AgentManager.stop();
-      await AgentManager.initialize();
-      
-      const config1 = { capabilities: ['business_analysis'] };
-      const config2 = { capabilities: ['document_processing'] };
-      
-      await AgentManager.createAgent(config1);
-      await AgentManager.createAgent(config2);
-      
-      const agents = AgentManager.getAllAgents();
-      expect(agents).toHaveLength(2);
-      expect(AgentManager.getAgentCount()).toBe(2);
+    it('should get all agents status', async () => {
+      const statuses = AgentManager.getAllAgentsStatus();
+      expect(statuses).toHaveLength(7); // All role-based agents
+      expect(statuses[0]).toHaveProperty('role');
+      expect(statuses[0]).toHaveProperty('status');
+      expect(statuses[0]).toHaveProperty('metrics');
     });
 
-    it('should stop individual agent', async () => {
-      const config = { capabilities: ['compliance_check'] };
-      const agentId = await AgentManager.createAgent(config);
-      
-      expect(AgentManager.getAgentCount()).toBe(1);
-      
-      await AgentManager.stopAgent(agentId);
-      expect(AgentManager.getAgentCount()).toBe(0);
-      expect(AgentManager.getAgent(agentId)).toBeUndefined();
-    });
-
-    it('should assign task to agent', async () => {
-      const config = { capabilities: ['business_analysis'] };
-      const agentId = await AgentManager.createAgent(config);
-      
-      const task = {
-        type: 'business_analysis',
-        data: { company: 'Test Corp' }
+    it('should create tasks', async () => {
+      const taskRequest = {
+        userId: 'user-123',
+        businessId: 'biz-456', 
+        templateId: 'soi-filing',
+        priority: 'high',
+        metadata: { type: 'test' }
       };
       
-      await expect(AgentManager.assignTask(agentId, task)).resolves.not.toThrow();
-    });
-  });
-
-  describe('health check', () => {
-    it('should return false when not initialized', () => {
-      expect(AgentManager.isHealthy()).toBe(false);
+      const taskId = await AgentManager.createTask(taskRequest);
+      expect(taskId).toBeDefined();
+      expect(taskId).toMatch(/^task-\d+/);
     });
 
-    it('should return true when initialized', async () => {
-      await AgentManager.initialize();
+    it('should get task status', async () => {
+      const taskRequest = {
+        userId: 'user-123',
+        businessId: 'biz-456',
+        templateId: 'soi-filing'
+      };
+      
+      const taskId = await AgentManager.createTask(taskRequest);
+      const status = AgentManager.getTaskStatus(taskId);
+      
+      expect(status).toBeDefined();
+      expect(status.taskId).toBe(taskId);
+      expect(status.status).toBeDefined();
+    });
+
+    it('should report healthy when initialized', async () => {
       expect(AgentManager.isHealthy()).toBe(true);
     });
+
+    it('should report unhealthy when not initialized', async () => {
+      await AgentManager.stop();
+      expect(AgentManager.isHealthy()).toBe(false);
+    });
   });
 
-  describe('agent count', () => {
-    it('should return 0 when no agents exist', () => {
-      expect(AgentManager.getAgentCount()).toBe(0);
+  describe('task lifecycle', () => {
+    beforeEach(async () => {
+      await AgentManager.initialize();
     });
 
-    it('should return correct count after creating agents', async () => {
-      // Ensure clean state for this test
+    it('should handle task creation with minimal config', async () => {
+      const taskRequest = {
+        userId: 'user-123',
+        businessId: 'biz-456',
+        templateId: 'soi-filing'
+      };
+      
+      const taskId = await AgentManager.createTask(taskRequest);
+      expect(taskId).toBeDefined();
+      expect(typeof taskId).toBe('string');
+    });
+
+    it('should handle task creation with full config', async () => {
+      const taskRequest = {
+        userId: 'user-123',
+        businessId: 'biz-456',
+        templateId: 'soi-filing',
+        priority: 'critical',
+        deadline: new Date(Date.now() + 86400000).toISOString(), // 24 hours from now
+        metadata: {
+          type: 'test',
+          source: 'unit-test',
+          version: '1.0.0'
+        }
+      };
+      
+      const taskId = await AgentManager.createTask(taskRequest);
+      expect(taskId).toBeDefined();
+      expect(taskId).toMatch(/^task-\d+/);
+    });
+
+    it('should throw error when creating task without initialization', async () => {
       await AgentManager.stop();
-      await AgentManager.initialize();
       
-      // Verify starting from 0
-      expect(AgentManager.getAgentCount()).toBe(0);
+      const taskRequest = {
+        userId: 'user-123',
+        businessId: 'biz-456',
+        templateId: 'soi-filing'
+      };
       
-      await AgentManager.createAgent({ capabilities: [] });
-      expect(AgentManager.getAgentCount()).toBe(1);
-      
-      await AgentManager.createAgent({ capabilities: [] });
-      expect(AgentManager.getAgentCount()).toBe(2);
+      await expect(AgentManager.createTask(taskRequest)).rejects.toThrow('AgentManager not initialized');
     });
   });
 });

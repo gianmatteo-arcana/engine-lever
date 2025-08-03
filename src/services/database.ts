@@ -6,9 +6,12 @@ import { TaskContext, TaskPriority, AgentRole, AgentMessage } from '../agents/ba
 export interface TaskRecord {
   id: string;
   user_id: string;
+  title: string;
+  description?: string;
+  task_type: string;
   business_id: string;
   template_id: string;
-  status: 'pending' | 'active' | 'paused' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'in_progress' | 'completed'; // Frontend-compatible statuses
   priority: 'critical' | 'high' | 'medium' | 'low';
   deadline?: string;
   metadata: Record<string, any>;
@@ -164,9 +167,15 @@ export class DatabaseService {
   }
 
   async updateTask(taskId: string, updates: Partial<TaskRecord>): Promise<TaskRecord> {
+    // Map any backend status to frontend-compatible status
+    const mappedUpdates = { ...updates };
+    if (updates.status) {
+      mappedUpdates.status = this.mapStatusToFrontend(updates.status);
+    }
+
     const { data, error } = await this.getClient()
       .from('tasks')
-      .update(updates)
+      .update(mappedUpdates)
       .eq('id', taskId)
       .select()
       .single();
@@ -183,12 +192,13 @@ export class DatabaseService {
     let query = this.getClient()
       .from('tasks')
       .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .eq('user_id', userId);
 
     if (status) {
       query = query.eq('status', status);
     }
+
+    query = query.order('created_at', { ascending: false });
 
     const { data, error } = await query;
 
@@ -399,13 +409,13 @@ export class DatabaseService {
     let query = this.getClient()
       .from('workflow_states')
       .select('*')
-      .eq('task_id', taskId)
-      .order('created_at', { ascending: false })
-      .limit(1);
+      .eq('task_id', taskId);
 
     if (stepId) {
       query = query.eq('step_id', stepId);
     }
+
+    query = query.order('created_at', { ascending: false }).limit(1);
 
     const { data, error } = await query;
 
@@ -461,13 +471,39 @@ export class DatabaseService {
     return mapping[priority];
   }
 
+  // Map backend status types to frontend-compatible statuses
+  private mapStatusToFrontend(backendStatus: string): 'pending' | 'in_progress' | 'completed' {
+    const mapping: Record<string, 'pending' | 'in_progress' | 'completed'> = {
+      'pending': 'pending',
+      'active': 'in_progress',
+      'paused': 'in_progress', // Paused tasks are still "in progress"
+      'completed': 'completed',
+      'failed': 'completed', // Failed tasks are considered "completed" for frontend
+      'cancelled': 'completed' // Cancelled tasks are considered "completed" for frontend
+    };
+    return mapping[backendStatus] || 'pending';
+  }
+
+  // Map frontend status back to backend status (for reads)
+  private mapStatusFromFrontend(frontendStatus: 'pending' | 'in_progress' | 'completed'): string[] {
+    const mapping: Record<string, string[]> = {
+      'pending': ['pending'],
+      'in_progress': ['active', 'paused'],
+      'completed': ['completed', 'failed', 'cancelled']
+    };
+    return mapping[frontendStatus] || ['pending'];
+  }
+
   // Convert TaskContext to database format
   convertTaskContextToRecord(context: TaskContext, userId: string): Omit<TaskRecord, 'id' | 'created_at' | 'updated_at'> {
     return {
       user_id: userId,
+      title: context.title || `${context.templateId} Task`,
+      description: context.description || `Automated task for ${context.templateId}`,
+      task_type: context.templateId || 'general',
       business_id: context.businessId,
       template_id: context.templateId || '',
-      status: 'pending',
+      status: this.mapStatusToFrontend('pending'),
       priority: this.convertPriority(context.priority),
       deadline: context.deadline?.toISOString(),
       metadata: context.metadata,
@@ -491,6 +527,44 @@ export class DatabaseService {
   // For testing - reset the client
   reset(): void {
     this.client = null;
+  }
+
+  // Testing helper to get user profiles
+  async getTestUserProfile(): Promise<{ user_id: string } | null> {
+    const { data } = await this.getClient()
+      .from('profiles')
+      .select('user_id')
+      .limit(1)
+      .single();
+    
+    return data;
+  }
+
+  // Testing helper to delete test data
+  async deleteTestData(taskIds: string[], executionIds: string[] = []): Promise<void> {
+    // Clean up executions first (foreign key dependency)
+    for (const executionId of executionIds) {
+      try {
+        await this.getClient()
+          .from('task_executions')
+          .delete()
+          .eq('execution_id', executionId);
+      } catch (error) {
+        console.warn(`Failed to clean up execution ${executionId}:`, error);
+      }
+    }
+    
+    // Clean up tasks
+    for (const taskId of taskIds) {
+      try {
+        await this.getClient()
+          .from('tasks')
+          .delete()
+          .eq('id', taskId);
+      } catch (error) {
+        console.warn(`Failed to clean up task ${taskId}:`, error);
+      }
+    }
   }
 }
 
