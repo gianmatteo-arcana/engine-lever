@@ -326,44 +326,32 @@ class ClaudeMCPProvider extends BaseLLMProvider {
     console.log('Request ID:', requestEnvelope.session_id);
     console.log('MCP Server URL:', this.mcpServerUrl);
     console.log('Auth token present:', !!this.mcpAuthToken);
+    console.log('MCP API key present:', !!this.mcpApiKey);
 
-    // Try GET request first since your server responds to GET
-    const searchParams = new URLSearchParams({
-      prompt: assembledPrompt,
-      model: 'claude-3-haiku-20240307',
-      max_tokens: '1024',
-      temperature: '0.2'
-    });
+    // Use POST to /mcp endpoint (matching original working function)
+    const mcpRequest = {
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "claude_query",
+        arguments: {
+          prompt: assembledPrompt
+        }
+      },
+      id: requestEnvelope.session_id || "1"
+    };
 
-    const getUrl = `${this.mcpServerUrl}?${searchParams.toString()}`;
+    console.log('📨 MCP Request:', JSON.stringify(mcpRequest, null, 2));
 
-    let response = await fetch(getUrl, {
-      method: 'GET',
+    const response = await fetch(`${this.mcpServerUrl}/mcp`, {
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.mcpAuthToken}`,
         'x-mcp-key': this.mcpApiKey,
-        'Accept': 'application/json',
-      }
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(mcpRequest)
     });
-
-    // If GET fails, try POST as fallback
-    if (!response.ok && response.status === 404) {
-      console.log('GET request failed, trying POST...');
-      response = await fetch(this.mcpServerUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.mcpAuthToken}`,
-          'x-mcp-key': this.mcpApiKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: assembledPrompt,
-          model: 'claude-3-haiku-20240307',
-          max_tokens: 1024,
-          temperature: 0.2
-        })
-      });
-    }
 
     const llmDuration = Date.now() - llmStartTime;
     console.log('=== CLAUDE MCP RESPONSE ===');
@@ -379,15 +367,31 @@ class ClaudeMCPProvider extends BaseLLMProvider {
     }
 
     const data = await response.json();
-    // Handle MCP server response format
-    const generatedText = data.response?.trim() ?? data.content?.trim() ?? '';
+    console.log('📡 MCP Server Response:', JSON.stringify(data, null, 2));
+
+    // Handle MCP JSON-RPC response format
+    let generatedText = '';
+    if (data.result && data.result.content) {
+      // Handle MCP tool response format
+      const content = data.result.content;
+      if (Array.isArray(content) && content[0]?.text) {
+        generatedText = content[0].text.trim();
+      } else if (typeof content === 'string') {
+        generatedText = content.trim();
+      }
+    } else if (data.response) {
+      generatedText = data.response.trim();
+    } else if (data.content) {
+      generatedText = data.content.trim();
+    }
 
     console.log('=== RAW CLAUDE MCP RESPONSE ===');
     console.log('Response length:', generatedText.length);
 
     if (requestEnvelope.env === 'dev') {
       console.log('=== FULL RAW RESPONSE ===');
-      console.log(generatedText);
+      console.log('MCP Data:', data);
+      console.log('Generated Text:', generatedText);
       console.log('=== END RAW RESPONSE ===');
     }
 
