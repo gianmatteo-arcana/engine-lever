@@ -1,8 +1,14 @@
-[phases.build]
+[providers]
+node = "18"
+
+[phases.setup]
 providers = ["node"]
+
+[phases.build]
+cmds = ["npm ci", "npm run build"]
+
+[phases.start]
+cmd = "npm start"
 
 [variables]
 NODE_VERSION = "18"
-
-[start]
-cmd = "npm start"
