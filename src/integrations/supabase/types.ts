@@ -14,6 +14,131 @@ export type Database = {
   }
   public: {
     Tables: {
+      background_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          job_type: string
+          max_retries: number
+          payload: Json | null
+          priority: number
+          result: Json | null
+          retry_count: number
+          scheduled_at: string | null
+          started_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_type: string
+          max_retries?: number
+          payload?: Json | null
+          priority?: number
+          result?: Json | null
+          retry_count?: number
+          scheduled_at?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_type?: string
+          max_retries?: number
+          payload?: Json | null
+          priority?: number
+          result?: Json | null
+          retry_count?: number
+          scheduled_at?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      job_queues: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          max_concurrent_jobs: number
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          max_concurrent_jobs?: number
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          max_concurrent_jobs?: number
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      job_results: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          id: string
+          job_id: string
+          step_error: string | null
+          step_name: string
+          step_result: Json | null
+          step_status: string
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          job_id: string
+          step_error?: string | null
+          step_name: string
+          step_result?: Json | null
+          step_status: string
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          job_id?: string
+          step_error?: string | null
+          step_name?: string
+          step_result?: Json | null
+          step_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_results_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "background_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -112,7 +237,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      enqueue_background_job: {
+        Args: {
+          p_user_id: string
+          p_job_type: string
+          p_payload?: Json
+          p_priority?: number
+          p_scheduled_at?: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
