@@ -194,6 +194,11 @@ git push origin main
 - Audit logging for compliance
 - Encrypted credential storage for government portals
 
+**📋 Security Documentation:**
+- [SECURITY.md](./SECURITY.md) - General security guidelines and architecture
+- [SECURITY_SCHEMA_MIGRATIONS.md](./SECURITY_SCHEMA_MIGRATIONS.md) - Migration security protocols
+- [Frontend Security Implementation](../biz-buddy-ally-now/SECURITY_IMPLEMENTATION.md) - Latest security fixes and enhancements
+
 ## 📊 Performance Targets
 - Task creation: < 500ms
 - Status updates: < 200ms  

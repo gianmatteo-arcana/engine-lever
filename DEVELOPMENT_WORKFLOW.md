@@ -4,6 +4,8 @@
 
 **IMPORTANT**: This workflow MUST be followed for ANY database schema changes. No exceptions!
 
+**🔐 SECURITY FIRST**: All schema changes must follow the [Schema Migration Security Protocol](./SECURITY_SCHEMA_MIGRATIONS.md)
+
 ```mermaid
 graph TD
     A[1. Schema Change Needed] --> B[2. Create Migration in FRONTEND Repo]
@@ -43,21 +45,33 @@ git commit -m "feat: add migration for [feature name]"
 git push origin main
 ```
 
-### 🚀 Step 2: Apply the Migration
+### 🚀 Step 2: Apply the Migration (Lovable Migration Runner)
 
-**CRITICAL**: Migrations are NOT auto-applied! You must manually apply them.
+**🔐 SECURITY**: Only apply migrations through approved secure channels!
 
-#### Option A: Supabase Dashboard (Easiest)
+#### Option A: Lovable Migration Runner (Recommended)
+**Development Environment Only**
+1. Open Lovable development environment
+2. Navigate to Database section in dashboard
+3. Migration Runner will show pending migrations
+4. Review SQL content carefully for security
+5. Click "Apply Backend Schema Migration"
+6. Verify success in migration history
+
+#### Option B: Supabase Dashboard (Fallback)
+**⚠️ Use only if Migration Runner unavailable**
 1. Go to: https://supabase.com/dashboard/project/raenkewzlvrdqufwxjpl/sql/new
 2. Copy your migration SQL
 3. Paste and click "Run"
 4. Check for errors in the output
 
-#### Option B: Supabase CLI
+#### Option C: Supabase CLI (Local Development)
 ```bash
 cd /path/to/biz-buddy-ally-now
 supabase db push
 ```
+
+**🚨 NEVER**: Apply migrations directly in production environment
 
 ### ✅ Step 3: Verify Migration Applied
 
