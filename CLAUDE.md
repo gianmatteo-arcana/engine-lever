@@ -1,95 +1,250 @@
-# Biz Buddy Backend - Claude Code Workflow Guide
+# SmallBizAlly Backend - Claude Code Workflow Guide
 
-## Architecture Overview
-This is a Node.js backend service with A2A (Agent-to-Agent) and MCP (Model Context Protocol) support, designed for:
-- UI (React) → Supabase Edge Functions → Railway (Agents/MCP) → External APIs
+## 🎯 Product Vision
+SmallBizAlly is an agentic AI platform that automates business compliance through specialized AI agents, task templates, and MCP (Model Context Protocol) tool orchestration.
 
-## Development Workflow - MANDATORY PROCESS
+## 🏗️ Architecture Overview
+
+### Core Architecture Flow
+```
+User Request → Master Orchestrator Agent → Specialist Agents → MCP Tools → Government Portals
+                     ↓                           ↓                ↓              ↓
+               Task Templates              A2A Protocol      Tool Registry   API Integration
+```
+
+### System Components
+1. **Agent Layer**: Specialized AI agents with distinct personas and competencies
+2. **Task Template System**: YAML-defined workflows for compliance features
+3. **MCP Server Layer**: Tool orchestration and context management
+4. **A2A Protocol**: Inter-agent communication and task delegation
+
+## 📋 Current Implementation Status
+
+### ✅ E2E Connection Established
+- Frontend (Lovable) ↔️ Backend (Railway) connection working
+- CORS configured for production domains
+- Health check endpoints operational
+
+### 🚧 MVP Feature: CA Statement of Information (P0)
+**Status**: In Development
+- **Workflow**: User → Legal Compliance Agent → Data Collection → Payment → Submission
+- **Required MCP Tools**: CA_SOS_Portal, QuickBooks, Plaid, Document Generation
+- **Implementation Priority**: FIRST
+
+### 📝 Other MVP Features (To Be Implemented)
+```yaml
+# TODO: These features are stubbed but not yet implemented
+- SF Business Registration Renewal (P0)
+- Form 571-L Property Tax Statement (P0)  
+- General Liability Insurance Renewal (P0)
+- Form 1099-NEC Preparation (P0)
+```
+
+## 🤖 Agent Personas & Responsibilities
+
+### 1. Master Orchestrator Agent
+**Persona**: Executive Assistant with Strategic Planning
+**Competence**: Task decomposition, delegation, workflow coordination
+**Implementation**: `src/agents/orchestrator.ts`
+
+### 2. Legal Compliance Agent  
+**Persona**: Paralegal with Regulatory Expertise
+**Competence**: Document interpretation, form completion, deadline tracking
+**Implementation**: `src/agents/legal-compliance.ts`
+
+### 3. Data Collection Agent
+**Persona**: Business Analyst with Integration Expertise  
+**Competence**: Multi-source data gathering, validation, transformation
+**Implementation**: `src/agents/data-collection.ts`
+
+### 4. Payment Agent
+**Persona**: Financial Operations Specialist
+**Competence**: Payment processing, fund verification, transaction management
+**Implementation**: `src/agents/payment.ts`
+
+### 5. Agency Interaction Agent
+**Persona**: Government Liaison Specialist
+**Competence**: Portal navigation, form submission, status monitoring
+**Implementation**: `src/agents/agency-interaction.ts`
+
+### 6. Monitoring & Verification Agent
+**Persona**: Quality Assurance Specialist
+**Competence**: Task verification, audit trails, deadline tracking
+**Implementation**: `src/agents/monitoring.ts`
+
+### 7. Customer Communication Agent
+**Persona**: Customer Service Representative
+**Competence**: User notifications, approval workflows, status updates
+**Implementation**: `src/agents/communication.ts`
+
+## 📂 Project Structure
+```
+src/
+├── agents/               # Agent implementations
+│   ├── base/           # Base agent classes and interfaces
+│   ├── orchestrator.ts # Master orchestrator agent
+│   ├── legal-compliance.ts
+│   ├── data-collection.ts
+│   ├── payment.ts
+│   ├── agency-interaction.ts
+│   ├── monitoring.ts
+│   └── communication.ts
+├── templates/           # Task template system
+│   ├── parser.ts       # YAML template parser
+│   ├── executor.ts     # Template execution engine
+│   └── tasks/          # Task template definitions
+│       ├── soi-filing.yaml
+│       └── [other-tasks].yaml
+├── mcp-tools/          # MCP tool implementations
+│   ├── ca-sos/        # CA Secretary of State tools
+│   ├── quickbooks/    # QuickBooks integration
+│   ├── plaid/         # Banking integration
+│   └── document/      # Document generation
+├── protocols/          # Communication protocols
+│   ├── a2a.ts         # Agent-to-agent protocol
+│   └── mcp.ts         # MCP server protocol
+└── workflows/          # Business workflows
+    ├── soi/           # Statement of Information workflow
+    └── [others]/      # Other compliance workflows
+```
+
+## 🔧 Development Workflow
 
 ### Before Making ANY Code Changes
-1. **Always read this CLAUDE.md file first** to understand the established patterns
-2. **Measure test execution time** if you suspect it has grown: `time npm test`
-3. **Current test suite takes ~1.7 seconds** - this is acceptable for development workflow
+1. **Read this CLAUDE.md** to understand the architecture
+2. **Check test coverage**: `npm test`
+3. **Review the PRD** for feature requirements
 
 ### Standard Development Cycle
 ```bash
-# 1. Suggest patch (discuss with user first)
-# 2. Implement changes locally
-# 3. Run targeted tests during development
-npm test -- --testPathPattern=<module>.test.ts
+# 1. Create feature branch
+git checkout -b feature/agent-name
 
-# 4. Run full test suite before commit
+# 2. Implement with TDD
+npm test -- --watch agents/your-agent.test.ts
+
+# 3. Run full test suite
 npm test
 
-# 5. If all tests pass, commit and push
-git add .
-git commit -m "description"
+# 4. Commit with conventional commits
+git commit -m "feat(agents): implement legal compliance agent"
+
+# 5. Push and deploy
 git push origin main
-
-# 6. Railway auto-deploys from main branch
 ```
 
-### Test Strategy
-- **Pre-commit Hook**: Runs lint + full test suite + build (via Husky)
-- **Development**: Use targeted tests for specific modules during iteration
-- **Deployment Gate**: All 97 tests must pass before push to main
-- **Railway Deployment**: Automatic on successful push to main
+### Testing Strategy
+- **Unit Tests**: Each agent tested in isolation
+- **Integration Tests**: Agent communication and MCP tool integration
+- **E2E Tests**: Complete workflow testing (SOI filing end-to-end)
+- **Coverage Target**: Maintain >90% coverage
 
-### Code Quality Standards
-- **ESLint**: Must pass before commit
-- **Test Coverage**: 97 tests across 5 modules (agents, mcp-server, queues, api, tools)
-- **TypeScript**: Strict compilation required
-- **No Regressions**: Pre-commit hooks prevent broken deployments
+## 🚀 Implementation Roadmap
 
-## Module Structure
-```
-src/
-├── agents/        # A2A agent implementations (AgentManager)
-├── mcp-server/    # MCP toolchain server (MCPServer)
-├── queues/        # Background job processing (QueueManager)
-├── api/           # HTTP endpoints for Supabase integration
-├── tools/         # Custom MCP tools (business, document, compliance)
-├── utils/         # Shared utilities (logger, etc.)
-└── __tests__/     # Comprehensive test suite
-```
+### Phase 1: SOI Feature (Current)
+1. ✅ E2E infrastructure setup
+2. 🚧 Agent framework implementation
+3. 🚧 Task template system
+4. 🚧 CA SOS MCP tools
+5. 🚧 SOI workflow implementation
+6. 🚧 Frontend UI for SOI
 
-## Key Dependencies
-- **a2a-js**: v0.2.0 (Agent-to-Agent protocol)
-- **Bull**: Redis-backed job queues
+### Phase 2: Additional MVP Features
+- [ ] SF Business Registration
+- [ ] Form 571-L Property Tax
+- [ ] GL Insurance Renewal
+- [ ] Form 1099-NEC
+
+### Phase 3: Advanced Features
+- [ ] Multi-agent orchestration
+- [ ] Advanced MCP tool registry
+- [ ] Audit trail system
+- [ ] Compliance analytics
+
+## 🔐 Security Considerations
+- API authentication via JWT tokens (TODO)
+- Rate limiting on all endpoints (TODO)
+- Input validation with Zod schemas
+- Audit logging for compliance
+- Encrypted credential storage for government portals
+
+## 📊 Performance Targets
+- Task creation: < 500ms
+- Status updates: < 200ms  
+- Document processing: < 10s
+- Government portal interaction: < 30s
+
+## 🛠️ Key Dependencies
+- **a2a-js**: Agent-to-agent protocol (v0.2.0)
+- **Bull**: Task queue management
 - **Express**: HTTP server
-- **Jest**: Testing framework
-- **Winston**: Logging
-- **Husky**: Pre-commit hooks
+- **Zod**: Schema validation
+- **YAML**: Task template parsing
 
-## Testing Philosophy
-- **Unit Tests**: Test individual modules in isolation
-- **Integration Tests**: Test API endpoints with supertest  
-- **State Isolation**: Each test starts with clean state
-- **Error Scenarios**: Test both success and failure paths
-- **Performance**: Keep test suite under 3 seconds for developer productivity
+## 📝 TODO Items for Product Designer Iteration
 
-## Deployment Pipeline
+### Statement of Information Workflow
+```typescript
+// TODO: Product Designer - Define exact field mappings for SOI form
+// TODO: Product Designer - Specify approval workflow requirements
+// TODO: Product Designer - Define error handling for failed submissions
+```
+
+### Payment Processing
+```typescript
+// TODO: Product Designer - Specify payment method priority order
+// TODO: Product Designer - Define payment failure recovery workflow
+```
+
+### User Communications
+```typescript
+// TODO: Product Designer - Define notification templates
+// TODO: Product Designer - Specify escalation thresholds
+```
+
+## 🚦 Quick Commands
+
+```bash
+# Start development server
+npm run dev
+
+# Run tests
+npm test
+
+# Run specific agent tests
+npm test -- agents/legal-compliance.test.ts
+
+# Check test coverage
+npm run test:coverage
+
+# Lint code
+npm run lint
+
+# Build for production
+npm run build
+
+# Deploy to Railway
+git push origin main  # Auto-deploys
+```
+
+## 🔄 Deployment Pipeline
 1. **Local Development**: `npm run dev`
-2. **Testing**: `npm test` (must pass 97/97 tests)
-3. **Linting**: `npm run lint` (ESLint validation)
-4. **Build**: `npm run build` (TypeScript compilation)
-5. **Commit**: Husky pre-commit hook runs steps 2-4
-6. **Push**: `git push origin main`
-7. **Deploy**: Railway auto-deploys on successful push
+2. **Testing**: `npm test` (must pass all tests)
+3. **Linting**: `npm run lint`
+4. **Build**: `npm run build`
+5. **Deploy**: Railway auto-deploys on push to main
 
-## Critical Reminders for Claude Code Instances
-1. **NEVER commit code without running tests first**
-2. **ALWAYS maintain the 97-test coverage standard**
-3. **READ this CLAUDE.md file at the start of every session**
-4. **Ask user for approval before major architectural changes**
-5. **Keep test execution time under 3 seconds for productivity**
-6. **Use TodoWrite tool for multi-step tasks to track progress**
+## 📚 Resources
+- [PRD Document]: Complete product requirements
+- [A2A Protocol Spec]: Inter-agent communication
+- [MCP Documentation]: Tool protocol documentation
+- [Task Template Schema]: YAML template specification
 
-## Performance Benchmarks
-- **Full Test Suite**: ~1.7 seconds (97 tests)
-- **Targeted Module Tests**: ~0.3-0.5 seconds per module
-- **Build Time**: ~2-3 seconds
-- **Pre-commit Hook**: ~5-7 seconds total
+## ⚠️ Critical Reminders
+1. **SOI Feature First**: Only implement SOI workflow initially
+2. **Use TODOs**: Mark unclear requirements for designer iteration
+3. **Maintain Tests**: Never commit without passing tests
+4. **Document Decisions**: Update this file with architectural changes
 
 Last Updated: 2025-08-03
-Test Suite Status: ✅ 97/97 tests passing
+Current Focus: CA Statement of Information (SOI) Feature Implementation
