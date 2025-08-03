@@ -8,7 +8,9 @@ import { createServer } from 'http';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { apiRoutes } from './api';
+import { persistentRoutes } from './api/persistentRoutes';
 import { AgentManager } from './agents';
+import { persistentAgentManager } from './agents/PersistentAgentManager';
 import { MCPServer } from './mcp-server';
 import { QueueManager } from './queues';
 
@@ -81,6 +83,7 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use('/api', apiRoutes);
+app.use('/api/v2', persistentRoutes); // New persistent API routes
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -108,6 +111,9 @@ const gracefulShutdown = async () => {
       
       // Shutdown services
       await AgentManager.stop();
+      if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+        await persistentAgentManager.stop();
+      }
       await MCPServer.stop();
       await QueueManager.stop();
       
@@ -143,6 +149,14 @@ async function startServer() {
     
     await AgentManager.initialize();
     logger.info('✅ Agent Manager initialized');
+    
+    // Initialize Persistent Agent Manager if Supabase is configured
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+      await persistentAgentManager.initialize();
+      logger.info('✅ Persistent Agent Manager initialized');
+    } else {
+      logger.warn('⚠️ Supabase not configured - using in-memory agent manager only');
+    }
     
     // Start HTTP server
     server.listen(PORT, () => {
