@@ -1,14 +1,18 @@
+# Force Node.js detection
 [providers]
-node = "18"
+node = "18.17.0"
 
 [phases.setup]
-providers = ["node"]
+nixPkgs = ["nodejs_18", "npm-9_x"]
+
+[phases.install]  
+cmds = ["npm ci"]
 
 [phases.build]
-cmds = ["npm ci", "npm run build"]
+cmds = ["npm run build"]
 
 [phases.start]
 cmd = "npm start"
 
 [variables]
-NODE_VERSION = "18"
+NODE_ENV = "production"

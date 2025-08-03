@@ -1,6 +1,10 @@
-# Ignore TypeScript source files during auto-detection
-*.ts
-*.tsx
-deno.json
-deno.jsonc
-import_map.json
+# Ignore everything outside railway directory
+/*
+!/railway/
+
+# Ignore development files
+node_modules/
+.git/
+*.log
+.env
+.env.local
