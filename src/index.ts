@@ -18,10 +18,31 @@ const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 3001;
 
+// CORS configuration - allow multiple origins
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'https://raenkewzlvrdqufwxjpl.supabase.co',
+  'https://lovable.dev'
+];
+
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || ['http://localhost:5173', 'https://raenkewzlvrdqufwxjpl.supabase.co'],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or Postman)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list or is a Lovable subdomain
+    if (allowedOrigins.includes(origin) || 
+        origin.endsWith('.lovable.dev') ||
+        origin === process.env.FRONTEND_URL) {
+      callback(null, true);
+    } else {
+      logger.warn(`CORS blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
