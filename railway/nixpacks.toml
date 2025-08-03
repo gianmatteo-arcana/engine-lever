@@ -2,10 +2,13 @@
 nixPkgs = ['nodejs_18', 'npm']
 
 [phases.install]
-cmd = 'npm ci'
+cmd = 'npm ci --only=production'
 
-[phases.build]
+[phases.build] 
 cmd = 'npm run build'
 
 [start]
 cmd = 'npm start'
+
+[variables]
+NODE_ENV = 'production'
