@@ -1,0 +1,6 @@
+{
+  "builder": "DOCKERFILE",
+  "buildCommand": null,
+  "dockerfilePath": "Dockerfile",
+  "startCommand": "npm start"
+}

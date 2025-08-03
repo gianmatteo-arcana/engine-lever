@@ -1,0 +1,6 @@
+# Ignore TypeScript source files during auto-detection
+*.ts
+*.tsx
+deno.json
+deno.jsonc
+import_map.json
