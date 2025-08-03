@@ -1,5 +1,8 @@
 # SmallBizAlly Backend - Claude Code Workflow Guide
 
+## ⚡ Quick Start: Schema Change Workflow
+**MUST READ**: [DEVELOPMENT_WORKFLOW.md](./DEVELOPMENT_WORKFLOW.md) - The 5-step cycle for any schema changes
+
 ## 🎯 Product Vision
 SmallBizAlly is an agentic AI platform that automates business compliance through specialized AI agents, task templates, and MCP (Model Context Protocol) tool orchestration.
 
@@ -77,7 +80,19 @@ User Request → Master Orchestrator Agent → Specialist Agents → MCP Tools �
 **Competence**: User notifications, approval workflows, status updates
 **Implementation**: `src/agents/communication.ts`
 
-## 🚨 CRITICAL ARCHITECTURE RULE 🚨
+## 🚨 CRITICAL ARCHITECTURE RULES 🚨
+
+### 1. Schema Changes MUST Follow The Sacred 5-Step Cycle:
+
+1. **Create migration** in FRONTEND repo (`biz-buddy-ally-now/supabase/migrations/`)
+2. **Apply & verify** migration in Supabase Dashboard
+3. **Write unit tests** in BACKEND repo
+4. **Test locally** (both mocked and real DB)
+5. **Commit tests** to backend repo
+
+**See [DEVELOPMENT_WORKFLOW.md](./DEVELOPMENT_WORKFLOW.md) for the complete process!**
+
+### 2. Database Schema Ownership:
 
 **ALL DATABASE SCHEMA CHANGES GO IN THE FRONTEND REPO!**
 

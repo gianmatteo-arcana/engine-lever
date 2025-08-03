@@ -4,10 +4,17 @@ Agent-to-Agent orchestration and MCP service for SmallBizAlly platform.
 
 ## ⚠️ CRITICAL: Database Schema Management
 
-**ALL database schema changes must be made in the FRONTEND repository**, not here!
-- Schema migrations go in: `biz-buddy-ally-now/supabase/migrations/`
-- This backend only consumes the schema, never modifies it
-- See [SCHEMA_ARCHITECTURE.md](./SCHEMA_ARCHITECTURE.md) for full details
+### The 5-Step Schema Change Workflow
+
+1. **Create migration** in frontend repo (`biz-buddy-ally-now/supabase/migrations/`)
+2. **Apply migration** via Supabase Dashboard
+3. **Write unit tests** in this backend repo
+4. **Test locally** with `npm test` and `npm run test:db`
+5. **Commit tests** to this repo
+
+📚 **Required Reading**:
+- [DEVELOPMENT_WORKFLOW.md](./DEVELOPMENT_WORKFLOW.md) - Complete workflow guide
+- [SCHEMA_ARCHITECTURE.md](./SCHEMA_ARCHITECTURE.md) - Why frontend owns schema
 
 ## Overview
 
