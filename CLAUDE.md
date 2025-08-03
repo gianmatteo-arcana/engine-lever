@@ -77,6 +77,17 @@ User Request → Master Orchestrator Agent → Specialist Agents → MCP Tools �
 **Competence**: User notifications, approval workflows, status updates
 **Implementation**: `src/agents/communication.ts`
 
+## 🚨 CRITICAL ARCHITECTURE RULE 🚨
+
+**ALL DATABASE SCHEMA CHANGES GO IN THE FRONTEND REPO!**
+
+Never create migration files in this backend repo. All schema changes (CREATE TABLE, ALTER TABLE, etc.) must be created as migration files in the frontend repository at:
+```
+biz-buddy-ally-now/supabase/migrations/
+```
+
+See [SCHEMA_ARCHITECTURE.md](./SCHEMA_ARCHITECTURE.md) for full details.
+
 ## 📂 Project Structure
 ```
 src/

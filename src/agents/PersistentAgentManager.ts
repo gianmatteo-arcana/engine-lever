@@ -39,7 +39,7 @@ export interface ResumeTaskOptions {
 export class PersistentAgentManager extends EventEmitter {
   private agents: Map<AgentRole, BaseAgent> = new Map();
   private isInitialized = false;
-  private messageProcessingInterval: NodeJS.Timeout | null = null;
+  private messageProcessingInterval: ReturnType<typeof setInterval> | null = null;
 
   async initialize(): Promise<void> {
     if (this.isInitialized) {
@@ -529,7 +529,7 @@ export class PersistentAgentManager extends EventEmitter {
     return messages[status] || 'Unknown status';
   }
 
-  private async findTaskForMessage(message: AgentMessage): Promise<any> {
+  private async findTaskForMessage(_message: AgentMessage): Promise<any> {
     // TODO: Implement logic to find associated task
     // This could be based on correlation ID or payload content
     return null;

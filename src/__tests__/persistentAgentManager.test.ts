@@ -1,6 +1,6 @@
 import { PersistentAgentManager } from '../agents/PersistentAgentManager';
 import { dbService } from '../services/database';
-import { AgentRole, TaskPriority } from '../agents/base/types';
+import { AgentRole } from '../agents/base/types';
 
 // Mock the database service
 jest.mock('../services/database', () => ({

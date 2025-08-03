@@ -1,73 +1,151 @@
-# Welcome to your Lovable project
+# Biz Buddy Backend (Railway Service)
 
-## Project info
+Agent-to-Agent orchestration and MCP service for SmallBizAlly platform.
 
-**URL**: https://lovable.dev/projects/c8eb2d86-d79d-470d-b29c-7a82d220346b
+## ⚠️ CRITICAL: Database Schema Management
 
-## How can I edit this code?
+**ALL database schema changes must be made in the FRONTEND repository**, not here!
+- Schema migrations go in: `biz-buddy-ally-now/supabase/migrations/`
+- This backend only consumes the schema, never modifies it
+- See [SCHEMA_ARCHITECTURE.md](./SCHEMA_ARCHITECTURE.md) for full details
 
-There are several ways of editing your application.
+## Overview
 
-**Use Lovable**
+This is the Railway-deployed backend service that:
+- Orchestrates AI agents for business compliance tasks
+- Manages task persistence and state
+- Provides MCP tool integration
+- Handles background job processing
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/c8eb2d86-d79d-470d-b29c-7a82d220346b) and start prompting.
+## Quick Start
 
-Changes made via Lovable will be committed automatically to this repo.
+```bash
+# Install dependencies
+npm install
 
-**Use your preferred IDE**
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your Supabase credentials
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+# Check database connection
+npm run db:check
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
+
+# Run tests
+npm test
 ```
 
-**Edit a file directly in GitHub**
+## Environment Variables
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Required in `.env`:
+```
+SUPABASE_URL=https://[project-ref].supabase.co
+SUPABASE_SERVICE_KEY=eyJ...  # Service role key from Supabase
+FRONTEND_URL=https://[lovable-project].lovableproject.com
+PORT=3001
+```
 
-**Use GitHub Codespaces**
+## API Endpoints
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Health Check
+- `GET /health` - Service health status
 
-## What technologies are used for this project?
+### Task Management (v2 API)
+- `POST /api/v2/tasks` - Create new task
+- `GET /api/v2/tasks/:id` - Get task status
+- `POST /api/v2/tasks/:id/pause` - Pause task execution
+- `POST /api/v2/tasks/resume/:token` - Resume paused task
 
-This project is built with:
+### Legacy API (v1)
+- `POST /api/enqueue` - Queue background job
+- `GET /api/job/:id` - Get job status
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Architecture
 
-## How can I deploy this project?
+```
+Frontend (Lovable) → Backend (Railway) → Supabase
+     ↓                    ↓                 ↓
+ Owns Schema        Business Logic      Data Store
+ Anon Key          Service Key         RLS Policies
+```
 
-Simply open [Lovable](https://lovable.dev/projects/c8eb2d86-d79d-470d-b29c-7a82d220346b) and click on Share -> Publish.
+### Key Components
 
-## Can I connect a custom domain to my Lovable project?
+- **Agents**: Specialized AI agents for different tasks
+  - Orchestrator: Coordinates workflow
+  - Legal Compliance: Handles regulatory tasks
+  - Data Collection: Gathers business data
+  - Payment: Processes payments
+  - Agency Interaction: Interfaces with government
+  - Monitoring: Tracks task progress
+  - Communication: User notifications
 
-Yes, you can!
+- **Task Templates**: YAML-defined workflows
+- **Persistent Storage**: Supabase database
+- **MCP Tools**: External service integrations
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## Database Tables
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+All tables are defined in frontend migrations but used by this backend:
+- `tasks` - Main task records
+- `task_executions` - Execution state
+- `agent_messages` - Inter-agent communication
+- `workflow_states` - Workflow snapshots
+- `task_pause_points` - Pause/resume capability
+- `task_audit_trail` - Compliance logging
+- `task_documents` - File attachments
+- `agent_metrics` - Performance tracking
+
+## Development
+
+### Testing
+```bash
+npm test              # Run all tests
+npm run test:watch    # Watch mode
+npm run test:coverage # Coverage report
+```
+
+### Linting
+```bash
+npm run lint      # Check for issues
+npm run lint:fix  # Auto-fix issues
+```
+
+### Database
+```bash
+npm run db:check  # Check table status
+```
+
+## Deployment
+
+### Railway (Production)
+- Automatically deploys from `main` branch
+- Environment variables configured in Railway dashboard
+- Uses Supabase service key for admin access
+
+### Local Development
+- Uses `.env` file for configuration
+- Hot-reload with `tsx watch`
+- Full access to Supabase via service key
+
+## Important Files
+
+- [CLAUDE.md](./CLAUDE.md) - Development guide for Claude Code
+- [SCHEMA_ARCHITECTURE.md](./SCHEMA_ARCHITECTURE.md) - Database schema rules
+- [SECURITY_TODO.md](./SECURITY_TODO.md) - Security checklist
+
+## ⚠️ Remember
+
+1. **Never create database migrations in this repo**
+2. **All schema changes go in frontend repo**
+3. **Backend only uses existing tables**
+4. **Service key gives admin access - handle carefully**
+
+## Support
+
+For issues or questions:
+- Check [CLAUDE.md](./CLAUDE.md) for architecture details
+- Review [SCHEMA_ARCHITECTURE.md](./SCHEMA_ARCHITECTURE.md) for database rules
+- Create GitHub issue for bugs/features
