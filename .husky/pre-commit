@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run linting
+npm run lint
+
+# Run tests
+npm run test
+
+# Build to ensure no TypeScript errors
+npm run build

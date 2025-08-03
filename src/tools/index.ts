@@ -23,10 +23,11 @@ export const businessAnalyzer = {
 
   async analyzeFinancials(data: any): Promise<any> {
     // Placeholder financial analysis
+    const safeData = data || {};
     return {
-      revenue: data.revenue || 0,
-      expenses: data.expenses || 0,
-      profit: (data.revenue || 0) - (data.expenses || 0),
+      revenue: safeData.revenue || 0,
+      expenses: safeData.expenses || 0,
+      profit: (safeData.revenue || 0) - (safeData.expenses || 0),
       margins: {
         gross: 0.3,
         net: 0.15
@@ -39,7 +40,7 @@ export const businessAnalyzer = {
     };
   },
 
-  async analyzeMarket(data: any): Promise<any> {
+  async analyzeMarket(_data: any): Promise<any> {
     // Placeholder market analysis
     return {
       marketSize: '$1.2B',
@@ -57,7 +58,7 @@ export const businessAnalyzer = {
     };
   },
 
-  async analyzeOperations(data: any): Promise<any> {
+  async analyzeOperations(_data: any): Promise<any> {
     // Placeholder operations analysis
     return {
       efficiency: '75%',
@@ -96,7 +97,7 @@ export const documentProcessor = {
     }
   },
 
-  async processFinancialDocument(documentUrl: string): Promise<any> {
+  async processFinancialDocument(_documentUrl: string): Promise<any> {
     // Placeholder financial document processing
     return {
       documentType: 'financial',
@@ -110,7 +111,7 @@ export const documentProcessor = {
     };
   },
 
-  async processLegalDocument(documentUrl: string): Promise<any> {
+  async processLegalDocument(_documentUrl: string): Promise<any> {
     // Placeholder legal document processing
     return {
       documentType: 'legal',
@@ -124,7 +125,7 @@ export const documentProcessor = {
     };
   },
 
-  async processComplianceDocument(documentUrl: string): Promise<any> {
+  async processComplianceDocument(_documentUrl: string): Promise<any> {
     // Placeholder compliance document processing
     return {
       documentType: 'compliance',

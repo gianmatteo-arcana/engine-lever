@@ -154,7 +154,7 @@ export class QueueManager {
       
       job.progress(30);
       
-      const { toolName, params } = job.data;
+      const { toolName, params: _params } = job.data;
       
       // Simulate tool execution
       await new Promise(resolve => setTimeout(resolve, 500));

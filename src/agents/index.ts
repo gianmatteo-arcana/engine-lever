@@ -3,6 +3,7 @@ import { logger } from '../utils/logger';
 export class AgentManager {
   private static agents: Map<string, any> = new Map();
   private static initialized = false;
+  private static agentCounter = 0;
 
   static async initialize(): Promise<void> {
     try {
@@ -31,6 +32,7 @@ export class AgentManager {
       }
       
       this.agents.clear();
+      this.agentCounter = 0; // Reset counter on stop
       this.initialized = false;
       logger.info('Agent Manager stopped');
     } catch (error) {
@@ -49,7 +51,8 @@ export class AgentManager {
 
   static async createAgent(config: any): Promise<string> {
     // TODO: Create new A2A agent instance
-    const agentId = `agent_${Date.now()}`;
+    this.agentCounter++;
+    const agentId = `agent_${this.agentCounter}`;
     
     logger.info(`Creating agent: ${agentId}`, config);
     
