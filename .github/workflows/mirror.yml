@@ -18,13 +18,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false   # ← disable GITHUB_TOKEN override
+          persist-credentials: false
 
       - name: Push mirror
         env:
-          MIRROR_URL: >
-            https://${{ github.actor }}:${{ secrets.MIRROR_PAT }}
-            @github.com/Allygn/SmallBizAI-Backend.git
+          MIRROR_URL: "https://${{ github.actor }}:${{ secrets.MIRROR_PAT }}@github.com/Allygn/SmallBizAI-Backend.git"
         run: |
-          echo "Mirror URL is [$MIRROR_URL]"      # you’ll see your username masked
+          echo "Mirror URL is [$MIRROR_URL]"
           git push --mirror "$MIRROR_URL"
