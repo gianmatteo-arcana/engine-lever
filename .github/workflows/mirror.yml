@@ -23,4 +23,4 @@ jobs:
       - name: Push mirror
         run: |
           git push --mirror \
-            https://${{ github.actor }}:${{ secrets.MIRROR_PAT }}@github.com/Allygn/SmallBizAI.git
+            https://${{ github.actor }}:${{ secrets.MIRROR_PAT }}@github.com/Allygn/SmallBizAI-Backend.git
