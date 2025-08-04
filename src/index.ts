@@ -7,6 +7,7 @@ import { createServer } from 'http';
 
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
+import { extractUserContext } from './middleware/auth';
 import { apiRoutes } from './api';
 import { persistentRoutes } from './api/persistentRoutes';
 import { AgentManager } from './agents';
@@ -53,7 +54,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-client-info', 'apikey'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-client-info', 'apikey', 'X-User-Id', 'X-User-Email', 'X-User-Role', 'X-User-Token'],
   preflightContinue: false,
   optionsSuccessStatus: 204
 }));
@@ -68,7 +69,11 @@ app.use(express.urlencoded({ extended: true }));
 // Logging
 app.use(morgan('combined', { stream: { write: (message) => logger.info(message.trim()) } }));
 
-// Health check endpoint
+// Extract user context from headers (set by backend-proxy edge function)
+// This runs for ALL requests to extract user info if present
+app.use(extractUserContext);
+
+// Health check endpoint (no auth required)
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'healthy',

@@ -9,6 +9,7 @@ import { PaymentAgent } from './payment';
 import { AgencyInteractionAgent } from './agency-interaction';
 import { MonitoringAgent } from './monitoring';
 import { CommunicationAgent } from './communication';
+import { DatabaseService } from '../services/database';
 
 class AgentManagerClass extends EventEmitter {
   private agents: Map<AgentRole, BaseAgent> = new Map();
@@ -123,6 +124,27 @@ class AgentManagerClass extends EventEmitter {
       templateId: taskContext.templateId
     });
 
+    // If we have a user token, save the task to the database using RLS
+    if (taskRequest.userToken) {
+      const db = DatabaseService.getInstance();
+      const taskRecord = await db.createTask(taskRequest.userToken, {
+        id: taskContext.taskId,
+        user_id: taskRequest.userId,
+        title: `${taskRequest.templateId} Task`,
+        description: `Task for ${taskRequest.businessId}`,
+        task_type: taskRequest.templateId || 'general',
+        business_id: taskRequest.businessId,
+        template_id: taskRequest.templateId,
+        status: 'pending',
+        priority: taskRequest.priority || 'medium',
+        deadline: taskRequest.deadline,
+        metadata: taskRequest.metadata || {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      logger.info('Task saved to database with RLS', { taskId: taskRecord.id });
+    }
+
     // Send task to orchestrator
     const orchestrator = this.agents.get(AgentRole.ORCHESTRATOR);
     if (!orchestrator) {
@@ -147,19 +169,59 @@ class AgentManagerClass extends EventEmitter {
     return taskContext.taskId;
   }
 
-  public getTaskStatus(taskId: string): any {
-    // Query orchestrator for task status
-    const orchestrator = this.agents.get(AgentRole.ORCHESTRATOR);
-    if (!orchestrator) {
-      return { status: 'error', message: 'Orchestrator not available' };
-    }
+  public async getTaskStatus(taskId: string, userToken: string): Promise<any> {
+    try {
+      // Get task from database using user token (RLS handles authorization)
+      const db = DatabaseService.getInstance();
+      const task = await db.getTask(userToken, taskId);
+      
+      if (!task) {
+        // Task not found or user doesn't have access
+        return null;
+      }
 
-    // TODO: Implement async status query
-    return {
-      taskId,
-      status: 'processing',
-      message: 'Task is being processed'
-    };
+      return {
+        taskId: task.id,
+        userId: task.user_id,
+        status: task.status,
+        priority: task.priority,
+        businessId: task.business_id,
+        templateId: task.template_id,
+        metadata: task.metadata,
+        createdAt: task.created_at,
+        updatedAt: task.updated_at,
+        completedAt: task.completed_at
+      };
+    } catch (error) {
+      logger.error('Failed to get task status', { taskId, error });
+      return null;
+    }
+  }
+
+  public async getUserTasks(userToken: string): Promise<any[]> {
+    try {
+      const db = DatabaseService.getInstance();
+      // RLS automatically filters to only the user's tasks
+      const tasks = await db.getUserTasks(userToken);
+      
+      return tasks.map(task => ({
+        taskId: task.id,
+        userId: task.user_id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        businessId: task.business_id,
+        templateId: task.template_id,
+        metadata: task.metadata,
+        createdAt: task.created_at,
+        updatedAt: task.updated_at,
+        completedAt: task.completed_at
+      }));
+    } catch (error) {
+      logger.error('Failed to get user tasks', error);
+      return [];
+    }
   }
 
   public getAgentStatus(role: AgentRole): any {

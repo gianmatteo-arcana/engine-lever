@@ -41,6 +41,7 @@ export type AgentMessage = z.infer<typeof AgentMessageSchema>;
 export const TaskContextSchema = z.object({
   taskId: z.string(),
   userId: z.string(),
+  userToken: z.string().optional(), // JWT token for RLS
   businessId: z.string(),
   templateId: z.string().optional(),
   title: z.string().optional(),

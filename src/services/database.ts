@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../utils/logger';
-import { TaskContext, TaskPriority, AgentRole, AgentMessage } from '../agents/base/types';
+import { TaskPriority, AgentMessage } from '../agents/base/types';
 
 // Database types matching our schema
 export interface TaskRecord {
@@ -94,7 +94,8 @@ export interface TaskAuditRecord {
 }
 
 export class DatabaseService {
-  private client: SupabaseClient | null = null;
+  private serviceClient: SupabaseClient | null = null; // Service role client for system operations
+  private userClients: Map<string, SupabaseClient> = new Map(); // User-scoped clients
   private static instance: DatabaseService;
 
   private constructor() {}
@@ -106,35 +107,98 @@ export class DatabaseService {
     return DatabaseService.instance;
   }
 
-  public initialize(supabaseUrl?: string, supabaseKey?: string): void {
-    const url = supabaseUrl || process.env.SUPABASE_URL;
-    const key = supabaseKey || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
+  /**
+   * Initialize the service role client for system operations
+   * This should only be used for operations that don't involve user data
+   */
+  private getServiceClient(): SupabaseClient {
+    if (!this.serviceClient) {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!url || !key) {
-      logger.error('Supabase credentials not provided');
-      throw new Error('Missing Supabase credentials');
+      if (!supabaseUrl || !supabaseServiceKey) {
+        throw new Error('Supabase configuration missing');
+      }
+
+      this.serviceClient = createClient(supabaseUrl, supabaseServiceKey);
     }
 
-    this.client = createClient(url, key, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false
+    return this.serviceClient;
+  }
+
+  /**
+   * Get or create a user-scoped Supabase client
+   * This client will automatically respect RLS policies for the user
+   */
+  public getUserClient(userToken: string): SupabaseClient {
+    // Check if we already have a client for this token
+    if (this.userClients.has(userToken)) {
+      return this.userClients.get(userToken)!;
+    }
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Supabase configuration missing');
+    }
+
+    // Create a client with the user's JWT token
+    // This will automatically enforce RLS policies
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${userToken}`
+        }
       }
     });
 
-    logger.info('Database service initialized');
+    // Cache the client (you might want to implement cache expiry)
+    this.userClients.set(userToken, userClient);
+
+    return userClient;
   }
 
-  private getClient(): SupabaseClient {
-    if (!this.client) {
-      throw new Error('Database not initialized. Call initialize() first.');
+  /**
+   * Clear user client cache (call periodically or on logout)
+   */
+  public clearUserClient(userToken: string): void {
+    this.userClients.delete(userToken);
+  }
+
+  /**
+   * Clear all user clients (for cleanup)
+   */
+  public clearAllUserClients(): void {
+    this.userClients.clear();
+  }
+
+  // Helper method to convert TaskPriority enum to string
+  private convertPriority(priority: TaskPriority): 'critical' | 'high' | 'medium' | 'low' {
+    switch (priority) {
+      case TaskPriority.CRITICAL:
+        return 'critical';
+      case TaskPriority.HIGH:
+        return 'high';
+      case TaskPriority.MEDIUM:
+        return 'medium';
+      case TaskPriority.LOW:
+        return 'low';
+      default:
+        return 'medium';
     }
-    return this.client;
   }
 
-  // Task operations
-  async createTask(task: Omit<TaskRecord, 'id' | 'created_at' | 'updated_at'>): Promise<TaskRecord> {
-    const { data, error } = await this.getClient()
+  // ========== USER-SCOPED OPERATIONS (use user's token) ==========
+  
+  /**
+   * Create a task for a user
+   * RLS will automatically ensure the user can only create their own tasks
+   */
+  async createTask(userToken: string, task: Partial<TaskRecord>): Promise<TaskRecord> {
+    const client = this.getUserClient(userToken);
+    
+    const { data, error } = await client
       .from('tasks')
       .insert(task)
       .select()
@@ -148,8 +212,14 @@ export class DatabaseService {
     return data;
   }
 
-  async getTask(taskId: string): Promise<TaskRecord | null> {
-    const { data, error } = await this.getClient()
+  /**
+   * Get a task by ID
+   * RLS will automatically ensure the user can only see their own tasks
+   */
+  async getTask(userToken: string, taskId: string): Promise<TaskRecord | null> {
+    const client = this.getUserClient(userToken);
+    
+    const { data, error } = await client
       .from('tasks')
       .select('*')
       .eq('id', taskId)
@@ -157,7 +227,8 @@ export class DatabaseService {
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return null; // Not found
+        // No rows returned - either doesn't exist or user doesn't have access
+        return null;
       }
       logger.error('Failed to get task', error);
       throw error;
@@ -166,16 +237,16 @@ export class DatabaseService {
     return data;
   }
 
-  async updateTask(taskId: string, updates: Partial<TaskRecord>): Promise<TaskRecord> {
-    // Map any backend status to frontend-compatible status
-    const mappedUpdates = { ...updates };
-    if (updates.status) {
-      mappedUpdates.status = this.mapStatusToFrontend(updates.status);
-    }
-
-    const { data, error } = await this.getClient()
+  /**
+   * Update a task
+   * RLS will automatically ensure the user can only update their own tasks
+   */
+  async updateTask(userToken: string, taskId: string, updates: Partial<TaskRecord>): Promise<TaskRecord> {
+    const client = this.getUserClient(userToken);
+    
+    const { data, error } = await client
       .from('tasks')
-      .update(mappedUpdates)
+      .update(updates)
       .eq('id', taskId)
       .select()
       .single();
@@ -188,14 +259,31 @@ export class DatabaseService {
     return data;
   }
 
-  async getUserTasks(userId: string, status?: string): Promise<TaskRecord[]> {
-    let query = this.getClient()
+  /**
+   * Get all tasks for the authenticated user
+   * RLS automatically filters to only the user's tasks
+   */
+  async getUserTasks(userToken: string, filters?: { 
+    status?: string; 
+    businessId?: string;
+    limit?: number;
+  }): Promise<TaskRecord[]> {
+    const client = this.getUserClient(userToken);
+    
+    let query = client
       .from('tasks')
-      .select('*')
-      .eq('user_id', userId);
+      .select('*');
 
-    if (status) {
-      query = query.eq('status', status);
+    if (filters?.status) {
+      query = query.eq('status', filters.status);
+    }
+
+    if (filters?.businessId) {
+      query = query.eq('business_id', filters.businessId);
+    }
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
     }
 
     query = query.order('created_at', { ascending: false });
@@ -210,9 +298,38 @@ export class DatabaseService {
     return data || [];
   }
 
-  // Task execution operations
-  async createExecution(execution: Omit<TaskExecutionRecord, 'id' | 'created_at' | 'updated_at'>): Promise<TaskExecutionRecord> {
-    const { data, error } = await this.getClient()
+  /**
+   * Get task executions for a user's task
+   * RLS ensures user can only see executions for their tasks
+   */
+  async getTaskExecutions(userToken: string, taskId: string): Promise<TaskExecutionRecord[]> {
+    const client = this.getUserClient(userToken);
+    
+    const { data, error } = await client
+      .from('task_executions')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      logger.error('Failed to get task executions', error);
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  // ========== SYSTEM OPERATIONS (use service role) ==========
+  // These are for internal system operations that don't involve user data
+
+  /**
+   * System operation: Create an execution record
+   * This is called by the system when processing tasks
+   */
+  async createSystemExecution(execution: Omit<TaskExecutionRecord, 'id' | 'created_at' | 'updated_at'>): Promise<TaskExecutionRecord> {
+    const client = this.getServiceClient();
+    
+    const { data, error } = await client
       .from('task_executions')
       .insert(execution)
       .select()
@@ -226,26 +343,13 @@ export class DatabaseService {
     return data;
   }
 
-  async getExecution(executionId: string): Promise<TaskExecutionRecord | null> {
-    const { data, error } = await this.getClient()
-      .from('task_executions')
-      .select('*')
-      .eq('execution_id', executionId)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return null;
-      }
-      logger.error('Failed to get execution', error);
-      throw error;
-    }
-
-    return data;
-  }
-
-  async updateExecution(executionId: string, updates: Partial<TaskExecutionRecord>): Promise<TaskExecutionRecord> {
-    const { data, error } = await this.getClient()
+  /**
+   * System operation: Update execution status
+   */
+  async updateSystemExecution(executionId: string, updates: Partial<TaskExecutionRecord>): Promise<TaskExecutionRecord> {
+    const client = this.getServiceClient();
+    
+    const { data, error } = await client
       .from('task_executions')
       .update(updates)
       .eq('execution_id', executionId)
@@ -260,23 +364,12 @@ export class DatabaseService {
     return data;
   }
 
-  async getPausedExecutions(): Promise<TaskExecutionRecord[]> {
-    const { data, error } = await this.getClient()
-      .from('task_executions')
-      .select('*')
-      .eq('is_paused', true)
-      .order('paused_at', { ascending: true });
-
-    if (error) {
-      logger.error('Failed to get paused executions', error);
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  // Agent message operations
-  async saveMessage(message: AgentMessage, taskId?: string, executionId?: string): Promise<void> {
+  /**
+   * System operation: Save agent messages for audit
+   */
+  async saveSystemMessage(message: AgentMessage, taskId?: string, executionId?: string): Promise<void> {
+    const client = this.getServiceClient();
+    
     const record: Omit<AgentMessageRecord, 'id' | 'created_at'> = {
       task_id: taskId,
       execution_id: executionId,
@@ -290,7 +383,7 @@ export class DatabaseService {
       processed: false
     };
 
-    const { error } = await this.getClient()
+    const { error } = await client
       .from('agent_messages')
       .insert(record);
 
@@ -300,273 +393,39 @@ export class DatabaseService {
     }
   }
 
-  async getUnprocessedMessages(limit = 100): Promise<AgentMessageRecord[]> {
-    const { data, error } = await this.getClient()
-      .from('agent_messages')
-      .select('*')
-      .eq('processed', false)
-      .order('created_at', { ascending: true })
-      .limit(limit);
-
-    if (error) {
-      logger.error('Failed to get unprocessed messages', error);
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  async markMessageProcessed(messageId: string): Promise<void> {
-    const { error } = await this.getClient()
-      .from('agent_messages')
-      .update({ 
-        processed: true, 
-        processed_at: new Date().toISOString() 
-      })
-      .eq('message_id', messageId);
-
-    if (error) {
-      logger.error('Failed to mark message as processed', error);
-      throw error;
-    }
-  }
-
-  // Pause point operations
-  async createPausePoint(pausePoint: Omit<TaskPausePointRecord, 'id' | 'created_at' | 'resume_token'>): Promise<string> {
-    const { data, error } = await this.getClient()
-      .from('task_pause_points')
-      .insert(pausePoint)
-      .select('resume_token')
-      .single();
-
-    if (error) {
-      logger.error('Failed to create pause point', error);
-      throw error;
-    }
-
-    return data.resume_token;
-  }
-
-  async resumeFromPausePoint(resumeToken: string, resumeResult?: any): Promise<TaskPausePointRecord | null> {
-    const { data, error } = await this.getClient()
-      .from('task_pause_points')
-      .update({
-        resumed: true,
-        resumed_at: new Date().toISOString(),
-        resume_result: resumeResult
-      })
-      .eq('resume_token', resumeToken)
-      .eq('resumed', false)
-      .select()
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return null; // Not found or already resumed
-      }
-      logger.error('Failed to resume from pause point', error);
-      throw error;
-    }
-
-    return data;
-  }
-
-  async getActivePausePoints(taskId: string): Promise<TaskPausePointRecord[]> {
-    const { data, error } = await this.getClient()
-      .from('task_pause_points')
-      .select('*')
-      .eq('task_id', taskId)
-      .eq('resumed', false)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      logger.error('Failed to get active pause points', error);
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  // Workflow state operations
-  async saveWorkflowState(taskId: string, executionId: string, stepId: string, agentRole: AgentRole, stateData: any): Promise<void> {
-    const { error } = await this.getClient()
-      .from('workflow_states')
-      .insert({
-        task_id: taskId,
-        execution_id: executionId,
-        step_id: stepId,
-        agent_role: agentRole,
-        state_data: stateData
-      });
-
-    if (error) {
-      logger.error('Failed to save workflow state', error);
-      throw error;
-    }
-  }
-
-  async getLatestWorkflowState(taskId: string, stepId?: string): Promise<WorkflowStateRecord | null> {
-    let query = this.getClient()
-      .from('workflow_states')
-      .select('*')
-      .eq('task_id', taskId);
-
-    if (stepId) {
-      query = query.eq('step_id', stepId);
-    }
-
-    query = query.order('created_at', { ascending: false }).limit(1);
-
-    const { data, error } = await query;
-
-    if (error) {
-      logger.error('Failed to get workflow state', error);
-      throw error;
-    }
-
-    return data?.[0] || null;
-  }
-
-  // Audit trail operations
-  async addAuditEntry(taskId: string, action: string, details: any, agentRole?: AgentRole, userId?: string): Promise<void> {
-    const { error } = await this.getClient()
-      .from('task_audit_trail')
-      .insert({
-        task_id: taskId,
-        agent_role: agentRole,
-        action,
-        details,
-        user_id: userId
-      });
-
-    if (error) {
-      logger.error('Failed to add audit entry', error);
-      throw error;
-    }
-  }
-
-  async getTaskAuditTrail(taskId: string): Promise<TaskAuditRecord[]> {
-    const { data, error } = await this.getClient()
-      .from('task_audit_trail')
-      .select('*')
-      .eq('task_id', taskId)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      logger.error('Failed to get audit trail', error);
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  // Helper methods
-  private convertPriority(priority: TaskPriority): 'critical' | 'high' | 'medium' | 'low' {
-    const mapping: Record<TaskPriority, 'critical' | 'high' | 'medium' | 'low'> = {
-      [TaskPriority.CRITICAL]: 'critical',
-      [TaskPriority.HIGH]: 'high',
-      [TaskPriority.MEDIUM]: 'medium',
-      [TaskPriority.LOW]: 'low'
-    };
-    return mapping[priority];
-  }
-
-  // Map backend status types to frontend-compatible statuses
-  private mapStatusToFrontend(backendStatus: string): 'pending' | 'in_progress' | 'completed' {
-    const mapping: Record<string, 'pending' | 'in_progress' | 'completed'> = {
-      'pending': 'pending',
-      'active': 'in_progress',
-      'paused': 'in_progress', // Paused tasks are still "in progress"
-      'completed': 'completed',
-      'failed': 'completed', // Failed tasks are considered "completed" for frontend
-      'cancelled': 'completed' // Cancelled tasks are considered "completed" for frontend
-    };
-    return mapping[backendStatus] || 'pending';
-  }
-
-  // Map frontend status back to backend status (for reads)
-  private mapStatusFromFrontend(frontendStatus: 'pending' | 'in_progress' | 'completed'): string[] {
-    const mapping: Record<string, string[]> = {
-      'pending': ['pending'],
-      'in_progress': ['active', 'paused'],
-      'completed': ['completed', 'failed', 'cancelled']
-    };
-    return mapping[frontendStatus] || ['pending'];
-  }
-
-  // Convert TaskContext to database format
-  convertTaskContextToRecord(context: TaskContext, userId: string): Omit<TaskRecord, 'id' | 'created_at' | 'updated_at'> {
-    return {
-      user_id: userId,
-      title: context.title || `${context.templateId} Task`,
-      description: context.description || `Automated task for ${context.templateId}`,
-      task_type: context.templateId || 'general',
-      business_id: context.businessId,
-      template_id: context.templateId || '',
-      status: this.mapStatusToFrontend('pending'),
-      priority: this.convertPriority(context.priority),
-      deadline: context.deadline?.toISOString(),
-      metadata: context.metadata,
-      completed_at: undefined
-    };
-  }
-
-  // Cleanup and testing helpers
-  async cleanup(): Promise<void> {
-    // Clean up old completed tasks (for testing)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    await this.getClient()
-      .from('tasks')
-      .delete()
-      .eq('status', 'completed')
-      .lt('completed_at', thirtyDaysAgo.toISOString());
-  }
-
-  // For testing - reset the client
-  reset(): void {
-    this.client = null;
-  }
-
-  // Testing helper to get user profiles
-  async getTestUserProfile(): Promise<{ user_id: string } | null> {
-    const { data } = await this.getClient()
-      .from('profiles')
-      .select('user_id')
-      .limit(1)
-      .single();
+  /**
+   * System operation: Create audit trail entry
+   */
+  async createSystemAuditEntry(audit: Omit<TaskAuditRecord, 'id' | 'created_at'>): Promise<void> {
+    const client = this.getServiceClient();
     
-    return data;
+    const { error } = await client
+      .from('task_audit_trail')
+      .insert(audit);
+
+    if (error) {
+      logger.error('Failed to create audit entry', error);
+      throw error;
+    }
   }
 
-  // Testing helper to delete test data
-  async deleteTestData(taskIds: string[], executionIds: string[] = []): Promise<void> {
-    // Clean up executions first (foreign key dependency)
-    for (const executionId of executionIds) {
-      try {
-        await this.getClient()
-          .from('task_executions')
-          .delete()
-          .eq('execution_id', executionId);
-      } catch (error) {
-        console.warn(`Failed to clean up execution ${executionId}:`, error);
-      }
-    }
+  /**
+   * System operation: Get agent metrics (no user data)
+   */
+  async getSystemAgentMetrics(): Promise<any[]> {
+    const client = this.getServiceClient();
     
-    // Clean up tasks
-    for (const taskId of taskIds) {
-      try {
-        await this.getClient()
-          .from('tasks')
-          .delete()
-          .eq('id', taskId);
-      } catch (error) {
-        console.warn(`Failed to clean up task ${taskId}:`, error);
-      }
+    const { data, error } = await client
+      .from('agent_metrics')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) {
+      logger.error('Failed to get agent metrics', error);
+      throw error;
     }
+
+    return data || [];
   }
 }
-
-// Export singleton instance
-export const dbService = DatabaseService.getInstance();
