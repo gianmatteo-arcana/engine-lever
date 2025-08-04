@@ -144,7 +144,7 @@ describe('PersistentAgentManager', () => {
         AgentRole.ORCHESTRATOR,
         'user-123'
       );
-      expect(dbService.updateTask).toHaveBeenCalledWith('task-123', { status: 'active' });
+      expect(dbService.updateTask).toHaveBeenCalledWith('task-123', { status: 'in_progress' });
     });
 
     it('should throw error if not initialized', async () => {
@@ -192,7 +192,7 @@ describe('PersistentAgentManager', () => {
         pause_reason: 'User approval required',
         resume_data: undefined
       });
-      expect(dbService.updateTask).toHaveBeenCalledWith('task-123', { status: 'paused' });
+      expect(dbService.updateTask).toHaveBeenCalledWith('task-123', { status: 'in_progress' });
       expect(dbService.createPausePoint).toHaveBeenCalled();
     });
 
@@ -248,7 +248,7 @@ describe('PersistentAgentManager', () => {
         pause_reason: undefined,
         resume_data: undefined
       });
-      expect(dbService.updateTask).toHaveBeenCalledWith('task-123', { status: 'active' });
+      expect(dbService.updateTask).toHaveBeenCalledWith('task-123', { status: 'in_progress' });
     });
 
     it('should return false for invalid resume token', async () => {

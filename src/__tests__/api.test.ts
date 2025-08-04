@@ -1,6 +1,16 @@
 import request from 'supertest';
 import express from 'express';
 import { apiRoutes } from '../api';
+import { AgentManager } from '../agents';
+
+// Initialize AgentManager for tests
+beforeAll(async () => {
+  await AgentManager.initialize();
+});
+
+afterAll(async () => {
+  await AgentManager.stop();
+});
 
 // Create test app
 const app = express();
@@ -22,44 +32,69 @@ describe('API Routes', () => {
     });
   });
 
-  describe('POST /api/webhooks/supabase', () => {
-    it('should process webhook successfully', async () => {
-      const webhookData = {
-        event: 'task_created',
-        data: { taskId: '123', userId: 'user-123' }
+  describe('POST /api/tasks', () => {
+    it('should create task successfully', async () => {
+      const taskData = {
+        userId: 'user-123',
+        businessId: 'biz-123',
+        templateId: 'soi-filing',
+        priority: 'high'
       };
 
       const response = await request(app)
-        .post('/api/webhooks/supabase')
-        .send(webhookData)
+        .post('/api/tasks')
+        .send(taskData)
         .expect(200);
 
-      expect(response.body).toEqual({
-        status: 'received',
-        timestamp: expect.any(String)
-      });
-    });
-
-    it('should handle empty webhook data', async () => {
-      const response = await request(app)
-        .post('/api/webhooks/supabase')
-        .send({})
-        .expect(200);
-
-      expect(response.body).toEqual({
-        status: 'received',
-        timestamp: expect.any(String)
-      });
-    });
-
-    it('should handle webhook processing successfully', async () => {
-      const response = await request(app)
-        .post('/api/webhooks/supabase')
-        .send({ test: 'data' })
-        .expect(200);
-
-      expect(response.body).toHaveProperty('status', 'received');
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('taskId');
       expect(response.body).toHaveProperty('timestamp');
+    });
+
+    it('should handle invalid task data', async () => {
+      const response = await request(app)
+        .post('/api/tasks')
+        .send({})
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should handle invalid priority', async () => {
+      const taskData = {
+        userId: 'user-123',
+        businessId: 'biz-123',
+        templateId: 'soi-filing',
+        priority: 'invalid'
+      };
+
+      const response = await request(app)
+        .post('/api/tasks')
+        .send(taskData)
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error');
+    });
+  });
+
+  describe('GET /api/tasks/:taskId', () => {
+    it('should return task status', async () => {
+      const response = await request(app)
+        .get('/api/tasks/task-123')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('taskId', 'task-123');
+      expect(response.body).toHaveProperty('timestamp');
+    });
+  });
+
+  describe('GET /api/executions/:executionId', () => {
+    it('should return 404 for non-existent execution', async () => {
+      const response = await request(app)
+        .get('/api/executions/exec-nonexistent')
+        .expect(404);
+
+      expect(response.body).toHaveProperty('error', 'Execution not found');
     });
   });
 
@@ -69,60 +104,30 @@ describe('API Routes', () => {
         .get('/api/agents')
         .expect(200);
 
-      expect(response.body).toEqual({
-        agents: [],
-        count: 0,
-        timestamp: expect.any(String)
-      });
+      expect(response.body).toHaveProperty('agents');
+      expect(response.body).toHaveProperty('count');
+      expect(response.body).toHaveProperty('timestamp');
+      expect(Array.isArray(response.body.agents)).toBe(true);
     });
   });
 
-  describe('POST /api/agents/:agentId/tasks', () => {
-    it('should assign task to agent', async () => {
-      const agentId = 'agent-123';
-      const taskData = {
-        type: 'business_analysis',
-        data: { company: 'Test Corp' }
-      };
-
+  describe('GET /api/agents/:role', () => {
+    it('should return agent status by role', async () => {
       const response = await request(app)
-        .post(`/api/agents/${agentId}/tasks`)
-        .send(taskData)
+        .get('/api/agents/orchestrator')
         .expect(200);
 
-      expect(response.body).toEqual({
-        status: 'task_queued',
-        agentId,
-        taskId: expect.stringMatching(/^task_\d+$/),
-        timestamp: expect.any(String)
-      });
+      expect(response.body).toHaveProperty('role', 'orchestrator');
+      expect(response.body).toHaveProperty('status');
+      expect(response.body).toHaveProperty('timestamp');
     });
 
-    it('should handle empty task data', async () => {
-      const agentId = 'agent-123';
-
+    it('should return 404 for unknown agent', async () => {
       const response = await request(app)
-        .post(`/api/agents/${agentId}/tasks`)
-        .send({})
-        .expect(200);
+        .get('/api/agents/unknown')
+        .expect(404);
 
-      expect(response.body).toEqual({
-        status: 'task_queued',
-        agentId,
-        taskId: expect.stringMatching(/^task_\d+$/),
-        timestamp: expect.any(String)
-      });
-    });
-
-    it('should handle special characters in agentId', async () => {
-      const agentId = 'agent-test_123';
-
-      const response = await request(app)
-        .post(`/api/agents/${agentId}/tasks`)
-        .send({ type: 'test' })
-        .expect(200);
-
-      expect(response.body.agentId).toBe(agentId);
+      expect(response.body).toHaveProperty('error', 'Agent not found');
     });
   });
 
@@ -132,11 +137,11 @@ describe('API Routes', () => {
         .get('/api/tools')
         .expect(200);
 
-      expect(response.body).toEqual({
-        tools: [],
-        count: 0,
-        timestamp: expect.any(String)
-      });
+      expect(response.body).toHaveProperty('tools');
+      expect(response.body).toHaveProperty('count', 4);
+      expect(response.body).toHaveProperty('timestamp');
+      expect(Array.isArray(response.body.tools)).toBe(true);
+      expect(response.body.tools.length).toBe(4);
     });
   });
 
@@ -156,7 +161,7 @@ describe('API Routes', () => {
       expect(response.body).toEqual({
         status: 'tool_invoked',
         toolName,
-        result: 'Tool execution stub',
+        result: 'Tool execution pending implementation',
         timestamp: expect.any(String)
       });
     });
@@ -172,7 +177,7 @@ describe('API Routes', () => {
       expect(response.body).toEqual({
         status: 'tool_invoked',
         toolName,
-        result: 'Tool execution stub',
+        result: 'Tool execution pending implementation',
         timestamp: expect.any(String)
       });
     });
@@ -189,45 +194,78 @@ describe('API Routes', () => {
     });
   });
 
+  describe('POST /api/soi/file', () => {
+    it('should initiate SOI filing', async () => {
+      const soiData = {
+        userId: 'user-123',
+        businessId: 'biz-123',
+        businessData: {
+          businessType: 'LLC',
+          incorporationDate: '2024-01-01'
+        }
+      };
+
+      const response = await request(app)
+        .post('/api/soi/file')
+        .send(soiData)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('message', 'SOI filing initiated');
+      expect(response.body).toHaveProperty('taskId');
+      expect(response.body).toHaveProperty('executionId');
+      expect(response.body).toHaveProperty('estimatedCompletion');
+    });
+
+    it('should return 400 for missing required fields', async () => {
+      const response = await request(app)
+        .post('/api/soi/file')
+        .send({})
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error', 'Missing required fields');
+    });
+  });
+
   describe('GET /api/queues/status', () => {
     it('should return queue status', async () => {
       const response = await request(app)
         .get('/api/queues/status')
         .expect(200);
 
-      expect(response.body).toEqual({
-        queues: {
-          agents: { active: 0, waiting: 0, completed: 0, failed: 0 },
-          mcp: { active: 0, waiting: 0, completed: 0, failed: 0 },
-          general: { active: 0, waiting: 0, completed: 0, failed: 0 }
-        },
-        timestamp: expect.any(String)
-      });
+      expect(response.body).toHaveProperty('queues');
+      expect(response.body.queues).toHaveProperty('agents');
+      expect(response.body.queues).toHaveProperty('executions');
+      expect(response.body.queues.agents).toHaveProperty('active');
+      expect(response.body.queues.agents).toHaveProperty('idle');
+      expect(response.body.queues.agents).toHaveProperty('error');
+      expect(response.body.queues.executions).toHaveProperty('running');
+      expect(response.body.queues.executions).toHaveProperty('completed');
+      expect(response.body.queues.executions).toHaveProperty('failed');
+      expect(response.body).toHaveProperty('timestamp');
     });
   });
 
   describe('Error handling', () => {
+    it('should handle 404 for unknown routes', async () => {
+      await request(app)
+        .get('/api/unknown-route')
+        .expect(404);
+    });
+
     it('should handle malformed JSON', async () => {
       await request(app)
-        .post('/api/webhooks/supabase')
+        .post('/api/tasks')
         .set('Content-Type', 'application/json')
         .send('{ invalid json }')
         .expect(400);
     });
-
-    it('should handle missing Content-Type header', async () => {
-      await request(app)
-        .post('/api/webhooks/supabase')
-        .send('plain text data')
-        .expect(200); // Express should handle this gracefully
-    });
   });
 
   describe('Route parameters validation', () => {
-    it('should handle empty agentId', async () => {
+    it('should handle empty taskId', async () => {
       await request(app)
-        .post('/api/agents//tasks')
-        .send({ type: 'test' })
+        .get('/api/tasks/')
         .expect(404); // Route won't match
     });
 
