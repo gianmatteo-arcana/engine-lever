@@ -20,6 +20,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Remove mirror.yml from history
+        run: |
+          echo "🗑️  Stripping .github/workflows/mirror.yml from all commits…"
+          git filter-branch --force \
+            --index-filter 'git rm --cached --ignore-unmatch .github/workflows/mirror.yml' \
+            --tag-name-filter cat \
+            -- --all
+
       - name: Push mirror
         env:
           MIRROR_URL: "https://${{ github.actor }}:${{ secrets.MIRROR_PAT }}@github.com/Allygn/SmallBizAI-Backend.git"
