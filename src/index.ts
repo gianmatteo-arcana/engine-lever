@@ -165,6 +165,7 @@ async function startServer() {
       logger.info(`🔗 Health check: http://localhost:${PORT}/health`);
       logger.info(`🤖 Agents: ${AgentManager.getAgentCount()} active`);
       logger.info(`🛠️ MCP Tools: ${MCPServer.getToolCount()} available`);
+      logger.info(`🚀 Version: 1.0.1 - DevOps test ${new Date().toISOString()}`);
     });
     
   } catch (error) {

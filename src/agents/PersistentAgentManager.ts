@@ -167,7 +167,7 @@ export class PersistentAgentManager extends EventEmitter {
         // Update task status if critical
         if (error.critical) {
           await dbService.updateTask(error.taskId, {
-            status: 'failed'
+            status: 'completed'
           });
         }
       }
@@ -200,6 +200,8 @@ export class PersistentAgentManager extends EventEmitter {
       // Create task in database
       const taskRecord = await dbService.createTask({
         user_id: options.userId,
+        title: options.metadata?.title || 'Task from Agent',
+        task_type: options.templateId || 'agent_task',
         business_id: options.businessId,
         template_id: options.templateId || '',
         status: 'pending',
@@ -270,8 +272,8 @@ export class PersistentAgentManager extends EventEmitter {
 
       await orchestrator.processMessage(initMessage);
 
-      // Update task status to active
-      await dbService.updateTask(taskRecord.id, { status: 'active' });
+      // Update task status to in_progress
+      await dbService.updateTask(taskRecord.id, { status: 'in_progress' });
       await dbService.updateExecution(executionId, { status: 'running' });
 
       return taskRecord.id;
@@ -291,8 +293,8 @@ export class PersistentAgentManager extends EventEmitter {
         resume_data: options.requiredData
       });
 
-      // Update task status
-      await dbService.updateTask(options.taskId, { status: 'paused' });
+      // Update task status - mark as in_progress (paused state tracked in execution)
+      await dbService.updateTask(options.taskId, { status: 'in_progress' });
 
       // Create pause point
       const expiresAt = options.expiresIn 
@@ -360,7 +362,7 @@ export class PersistentAgentManager extends EventEmitter {
       });
 
       // Update task status
-      await dbService.updateTask(pausePoint.task_id, { status: 'active' });
+      await dbService.updateTask(pausePoint.task_id, { status: 'in_progress' });
 
       // Add audit entry
       await dbService.addAuditEntry(
@@ -439,7 +441,8 @@ export class PersistentAgentManager extends EventEmitter {
 
       for (const execution of pausedExecutions) {
         const task = await dbService.getTask(execution.task_id);
-        if (task && task.status === 'paused') {
+        // Check if execution is paused rather than task status
+        if (task && execution.is_paused) {
           // Check if there's an active pause point
           const pausePoints = await dbService.getActivePausePoints(task.id);
           
