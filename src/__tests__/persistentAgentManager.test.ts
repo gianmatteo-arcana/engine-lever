@@ -1,13 +1,13 @@
 import { PersistentAgentManager } from '../agents/PersistentAgentManager';
-import { dbService } from '../services/database';
+// import { DatabaseService } from '../services/database'; // Unused - tests are skipped
 import { AgentRole } from '../agents/base/types';
 
 // Mock the database service
 jest.mock('../services/database', () => ({
-  dbService: {
-    initialize: jest.fn(),
-    createTask: jest.fn(),
-    getTask: jest.fn(),
+  DatabaseService: {
+    getInstance: jest.fn(() => ({
+      createTask: jest.fn(),
+      getTask: jest.fn(),
     updateTask: jest.fn(),
     createExecution: jest.fn(),
     getExecution: jest.fn(),
@@ -22,6 +22,7 @@ jest.mock('../services/database', () => ({
     addAuditEntry: jest.fn(),
     saveWorkflowState: jest.fn(),
     getLatestWorkflowState: jest.fn()
+    }))
   }
 }));
 
@@ -34,6 +35,36 @@ jest.mock('../utils/logger', () => ({
     debug: jest.fn()
   }
 }));
+
+// Mock DatabaseService instance
+const mockDbService = {
+  createTask: jest.fn(),
+  getTask: jest.fn(),
+  updateTask: jest.fn(),
+  createSystemExecution: jest.fn(),
+  updateSystemExecution: jest.fn(),
+  saveSystemMessage: jest.fn(),
+  createSystemAuditEntry: jest.fn(),
+  getUserTasks: jest.fn(),
+  getTaskExecutions: jest.fn(),
+  getUserClient: jest.fn(),
+  clearUserClient: jest.fn(),
+  clearAllUserClients: jest.fn(),
+  getSystemAgentMetrics: jest.fn(),
+  getPausedExecutions: jest.fn(),
+  markMessageProcessed: jest.fn(),
+  getUnprocessedMessages: jest.fn(),
+  createPausePoint: jest.fn(),
+  resumeFromPausePoint: jest.fn(),
+  getActivePausePoints: jest.fn(),
+  addAuditEntry: jest.fn(),
+  saveWorkflowState: jest.fn(),
+  getLatestWorkflowState: jest.fn()
+};
+
+// Override the mock to return our mock instance
+jest.spyOn(require('../services/database').DatabaseService, 'getInstance').mockReturnValue(mockDbService);
+const dbService = mockDbService;
 
 describe('PersistentAgentManager', () => {
   let manager: PersistentAgentManager;
