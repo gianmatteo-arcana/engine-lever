@@ -4,7 +4,6 @@
  */
 
 import { DatabaseService } from '../services/database';
-import { TaskContext } from '../agents/base/types';
 
 describe('Last Viewed At Feature', () => {
   let dbService: DatabaseService;
