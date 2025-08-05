@@ -82,16 +82,24 @@ User Request → Master Orchestrator Agent → Specialist Agents → MCP Tools �
 
 ## 🚨 CRITICAL ARCHITECTURE RULES 🚨
 
-### 1. Schema Changes MUST Follow The Sacred 5-Step Cycle:
+### 1. Schema Changes MUST Follow The Sacred 6-Step Cycle:
 
-1. **Create migration** in FRONTEND repo (`biz-buddy-ally-now/supabase/migrations/`)
-2. **Add to registry** in `biz-buddy-ally-now/src/data/migration-registry.json`
-3. **Apply via Lovable Migration Runner UI** (DEV mode only - NEVER manually!)
-4. **Write unit tests** in BACKEND repo
-5. **Test locally** (both mocked and real DB)
-6. **Commit tests** to backend repo
+1. **Create migration files** in FRONTEND repo (`biz-buddy-ally-now/supabase/migrations/`)
+2. **Update migration registry** in `biz-buddy-ally-now/src/data/migration-registry.json`
+3. **IMMEDIATELY commit & push** frontend repo changes to make migrations visible in Lovable UI
+4. **Apply via Lovable Migration Runner UI** (DEV mode only - NEVER manually!)
+5. **Write unit tests** in BACKEND repo with proper mocking
+6. **Test locally** (both mocked and real DB), then commit backend changes
 
-**🚨 CRITICAL**: Always use the Lovable Migration Runner UI in development mode to apply migrations. Manual application via Supabase Dashboard should NEVER be suggested or used unless the Migration Runner is completely unavailable.
+**🚨 CRITICAL FAILURE POINT**: Migration files MUST be created in the frontend repo and pushed to GitHub BEFORE backend implementation. If migrations aren't visible in Lovable UI, they weren't created in the right place!
+
+**✅ VERIFICATION CHECKLIST**:
+- [ ] Migration files exist in `biz-buddy-ally-now/supabase/migrations/`
+- [ ] Migration registry updated in frontend repo
+- [ ] Frontend repo changes committed & pushed to GitHub
+- [ ] Migrations visible in Lovable Migration Runner UI
+- [ ] Backend tests written with proper database mocking
+- [ ] All tests passing before final commit
 
 **See [DEVELOPMENT_WORKFLOW.md](./DEVELOPMENT_WORKFLOW.md) for the complete process!**
 
