@@ -1,0 +1,50 @@
+{
+  "_comment": "Add these entries to biz-buddy-ally-now/src/data/migration-registry.json",
+  "migrations": [
+    {
+      "id": "enhance-tasks-onboarding",
+      "name": "Enhance tasks table for onboarding support",
+      "filename": "[timestamp]_enhance_tasks_onboarding.sql",
+      "description": "Adds task_context, task_goals, required_inputs, entry_mode, and orchestrator_config columns to tasks table",
+      "category": "feature",
+      "requiredForOnboarding": true,
+      "appliedAt": null
+    },
+    {
+      "id": "create-task-ui-augmentations",
+      "name": "Create task_ui_augmentations table",
+      "filename": "[timestamp]_create_task_ui_augmentations.sql",
+      "description": "Stores UI augmentation requests from agents with pure semantic data",
+      "category": "feature",
+      "requiredForOnboarding": true,
+      "appliedAt": null
+    },
+    {
+      "id": "create-task-agent-contexts",
+      "name": "Create task_agent_contexts table",
+      "filename": "[timestamp]_create_task_agent_contexts.sql",
+      "description": "Stores agent-specific contexts and deliverables for each task",
+      "category": "feature",
+      "requiredForOnboarding": true,
+      "appliedAt": null
+    },
+    {
+      "id": "enhance-task-pause-points",
+      "name": "Enhance task_pause_points for onboarding",
+      "filename": "[timestamp]_enhance_task_pause_points.sql",
+      "description": "Adds UI augmentation links and stage tracking to pause points",
+      "category": "feature",
+      "requiredForOnboarding": true,
+      "appliedAt": null
+    },
+    {
+      "id": "create-task-orchestration-plans",
+      "name": "Create task_orchestration_plans table",
+      "filename": "[timestamp]_create_task_orchestration_plans.sql",
+      "description": "Stores declarative goals and dynamic execution plans from LLM orchestrator",
+      "category": "feature",
+      "requiredForOnboarding": false,
+      "appliedAt": null
+    }
+  ]
+}
