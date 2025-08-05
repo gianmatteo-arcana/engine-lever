@@ -4,6 +4,7 @@ import { AgentManager, convertPriority, TaskPriority } from '../agents';
 import { TemplateExecutor } from '../templates/executor';
 import { z } from 'zod';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
+import { onboardingRoutes } from './onboarding';
 
 const router = Router();
 const templateExecutor = new TemplateExecutor();
@@ -297,5 +298,8 @@ router.get('/queues/status', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// Mount onboarding routes
+router.use('/onboarding', onboardingRoutes);
 
 export { router as apiRoutes };
