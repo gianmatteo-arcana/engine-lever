@@ -18,6 +18,12 @@ export interface TaskRecord {
   created_at: string;
   updated_at: string;
   completed_at?: string;
+  // New onboarding fields
+  task_context?: Record<string, any>;
+  task_goals?: Array<any>;
+  required_inputs?: Record<string, any>;
+  entry_mode?: 'user_initiated' | 'system_initiated';
+  orchestrator_config?: Record<string, any>;
 }
 
 export interface TaskExecutionRecord {
@@ -91,6 +97,62 @@ export interface TaskAuditRecord {
   details: any;
   user_id?: string;
   created_at: string;
+}
+
+export interface TaskUIAugmentationRecord {
+  id: string;
+  task_id: string;
+  agent_role: string;
+  request_id: string;
+  sequence_number: number;
+  presentation: Record<string, any>;
+  action_pills?: Array<any>;
+  form_sections?: Array<any>;
+  context?: Record<string, any>;
+  response_config?: Record<string, any>;
+  tenant_context?: Record<string, any>;
+  status: 'pending' | 'presented' | 'responded' | 'expired' | 'error';
+  user_response?: Record<string, any>;
+  responded_at?: string;
+  presented_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskAgentContextRecord {
+  id: string;
+  task_id: string;
+  agent_role: string;
+  context_data: Record<string, any>;
+  deliverables?: Array<any>;
+  requirements_met?: Record<string, any>;
+  last_action?: string;
+  last_action_at?: string;
+  is_complete: boolean;
+  completion_summary?: string;
+  error_count: number;
+  last_error?: any;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskOrchestrationPlanRecord {
+  id: string;
+  task_id: string;
+  goals: Array<any>;
+  constraints?: Record<string, any>;
+  success_criteria?: Record<string, any>;
+  execution_plan: Record<string, any>;
+  plan_version: number;
+  is_active: boolean;
+  llm_model?: string;
+  llm_prompt_template?: string;
+  llm_response?: any;
+  llm_tokens_used?: number;
+  steps_completed: number;
+  steps_total: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export class DatabaseService {
@@ -427,5 +489,217 @@ export class DatabaseService {
     }
 
     return data || [];
+  }
+
+  // ========== UI AUGMENTATION OPERATIONS ==========
+
+  /**
+   * Create a UI augmentation request (system operation)
+   */
+  async createUIAugmentation(augmentation: Omit<TaskUIAugmentationRecord, 'id' | 'created_at' | 'updated_at'>): Promise<TaskUIAugmentationRecord> {
+    const client = this.getServiceClient();
+    
+    const { data, error } = await client
+      .from('task_ui_augmentations')
+      .insert(augmentation)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Failed to create UI augmentation', error);
+      throw error;
+    }
+
+    return data;
+  }
+
+  /**
+   * Get UI augmentations for a task (user operation)
+   */
+  async getTaskUIAugmentations(userToken: string, taskId: string): Promise<TaskUIAugmentationRecord[]> {
+    const client = this.getUserClient(userToken);
+    
+    const { data, error } = await client
+      .from('task_ui_augmentations')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('sequence_number', { ascending: true });
+
+    if (error) {
+      logger.error('Failed to get UI augmentations', error);
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Update UI augmentation status (system operation)
+   */
+  async updateUIAugmentationStatus(
+    augmentationId: string, 
+    status: TaskUIAugmentationRecord['status'],
+    response?: Record<string, any>
+  ): Promise<void> {
+    const client = this.getServiceClient();
+    
+    const updates: Partial<TaskUIAugmentationRecord> = {
+      status,
+      updated_at: new Date().toISOString()
+    };
+
+    if (status === 'responded' && response) {
+      updates.user_response = response;
+      updates.responded_at = new Date().toISOString();
+    }
+
+    if (status === 'presented') {
+      updates.presented_at = new Date().toISOString();
+    }
+
+    const { error } = await client
+      .from('task_ui_augmentations')
+      .update(updates)
+      .eq('id', augmentationId);
+
+    if (error) {
+      logger.error('Failed to update UI augmentation status', error);
+      throw error;
+    }
+  }
+
+  // ========== AGENT CONTEXT OPERATIONS ==========
+
+  /**
+   * Create or update agent context (system operation)
+   */
+  async upsertAgentContext(
+    taskId: string,
+    agentRole: string,
+    contextData: Partial<TaskAgentContextRecord>
+  ): Promise<TaskAgentContextRecord> {
+    const client = this.getServiceClient();
+    
+    const record = {
+      task_id: taskId,
+      agent_role: agentRole,
+      ...contextData,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await client
+      .from('task_agent_contexts')
+      .upsert(record, {
+        onConflict: 'task_id,agent_role',
+        ignoreDuplicates: false
+      })
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Failed to upsert agent context', error);
+      throw error;
+    }
+
+    return data;
+  }
+
+  /**
+   * Get agent contexts for a task (user operation)
+   */
+  async getTaskAgentContexts(userToken: string, taskId: string): Promise<TaskAgentContextRecord[]> {
+    const client = this.getUserClient(userToken);
+    
+    const { data, error } = await client
+      .from('task_agent_contexts')
+      .select('*')
+      .eq('task_id', taskId);
+
+    if (error) {
+      logger.error('Failed to get agent contexts', error);
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  // ========== ORCHESTRATION PLAN OPERATIONS ==========
+
+  /**
+   * Create orchestration plan (system operation)
+   */
+  async createOrchestrationPlan(
+    plan: Omit<TaskOrchestrationPlanRecord, 'id' | 'created_at' | 'updated_at'>
+  ): Promise<TaskOrchestrationPlanRecord> {
+    const client = this.getServiceClient();
+    
+    const { data, error } = await client
+      .from('task_orchestration_plans')
+      .insert(plan)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Failed to create orchestration plan', error);
+      throw error;
+    }
+
+    return data;
+  }
+
+  /**
+   * Get active orchestration plan for a task (system operation)
+   */
+  async getActiveOrchestrationPlan(taskId: string): Promise<TaskOrchestrationPlanRecord | null> {
+    const client = this.getServiceClient();
+    
+    const { data, error } = await client
+      .from('task_orchestration_plans')
+      .select('*')
+      .eq('task_id', taskId)
+      .eq('is_active', true)
+      .order('plan_version', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      logger.error('Failed to get orchestration plan', error);
+      throw error;
+    }
+
+    return data;
+  }
+
+  // ========== PAUSE POINT OPERATIONS ==========
+
+  /**
+   * Create pause point with UI augmentation link
+   */
+  async createPausePointWithUI(
+    pausePoint: Omit<TaskPausePointRecord, 'id' | 'created_at'>,
+    uiAugmentationId?: string
+  ): Promise<TaskPausePointRecord> {
+    const client = this.getServiceClient();
+    
+    const record = {
+      ...pausePoint,
+      ui_augmentation_id: uiAugmentationId
+    };
+
+    const { data, error } = await client
+      .from('task_pause_points')
+      .insert(record)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Failed to create pause point', error);
+      throw error;
+    }
+
+    return data;
   }
 }
