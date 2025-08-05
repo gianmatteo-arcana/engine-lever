@@ -18,6 +18,7 @@ import {
   TaskGoal
 } from '../../types/task-context';
 import { TaskOrchestrationPlanRecord } from '../../services/database';
+import { emitTaskEvent } from '../../services/task-events';
 
 interface ExecutionPlan {
   phases: Array<{
@@ -149,6 +150,14 @@ export class A2AOrchestrator extends BaseA2AAgent {
       // Save plan to database
       await this.savePlan(task.id, executionPlan, llmResponse);
 
+      // Emit plan created event
+      emitTaskEvent('plan-created', {
+        taskId: task.id,
+        plan: executionPlan,
+        estimatedDuration: executionPlan.totalDuration,
+        phaseCount: executionPlan.phases.length
+      });
+
       // Return the plan
       return {
         status: 'complete',
@@ -220,6 +229,15 @@ export class A2AOrchestrator extends BaseA2AAgent {
         }
       }));
 
+      // Emit phase started event
+      emitTaskEvent('phase-started', {
+        taskId: task.id,
+        phaseId: phase.id,
+        phaseName: phase.name,
+        requiredAgents: phase.requiredAgents,
+        delegatedTo: availableAgents
+      });
+
       return {
         status: 'complete',
         result: {
@@ -274,6 +292,15 @@ export class A2AOrchestrator extends BaseA2AAgent {
 
       // Determine if we need to move to next phase
       const allComplete = progress.completedAgents === progress.totalAgents && progress.totalAgents > 0;
+
+      // Emit progress event
+      emitTaskEvent('progress', {
+        taskId: task.id,
+        progress: progress.percentComplete,
+        completedAgents: progress.completedAgents,
+        totalAgents: progress.totalAgents,
+        agentStatuses: progress.agentStatuses
+      });
 
       return {
         status: 'complete',
@@ -338,6 +365,15 @@ export class A2AOrchestrator extends BaseA2AAgent {
 
       const llmResponse = await this.llm.complete(llmRequest);
       const recoveryStrategy = JSON.parse(llmResponse.content);
+
+      // Emit error event
+      emitTaskEvent('error', {
+        taskId: task.id,
+        agentRole,
+        phaseId,
+        failureDetails,
+        recoveryStrategy: recoveryStrategy.recommendation
+      });
 
       return {
         status: 'complete',
