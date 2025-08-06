@@ -5,7 +5,6 @@ import { TemplateExecutor } from '../templates/executor';
 import { z } from 'zod';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { onboardingRoutes } from './onboarding';
-import { streamingRoutes } from './streaming';
 
 const router = Router();
 const templateExecutor = new TemplateExecutor();
@@ -303,7 +302,5 @@ router.get('/queues/status', (req, res) => {
 // Mount onboarding routes
 router.use('/onboarding', onboardingRoutes);
 
-// Mount streaming routes
-router.use('/streaming', streamingRoutes);
 
 export { router as apiRoutes };

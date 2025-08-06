@@ -6,10 +6,8 @@ import dotenv from 'dotenv';
 import { createServer } from 'http';
 
 import { logger } from './utils/logger';
-import { errorHandler } from './middleware/errorHandler';
 import { extractUserContext } from './middleware/auth';
 import { apiRoutes } from './api';
-import { persistentRoutes } from './api/persistentRoutes';
 import { AgentManager } from './agents';
 import { persistentAgentManager } from './agents/PersistentAgentManager';
 import { MCPServer } from './mcp-server';
@@ -88,7 +86,6 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use('/api', apiRoutes);
-app.use('/api/v2', persistentRoutes); // New persistent API routes
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -100,7 +97,13 @@ app.use('*', (req, res) => {
 });
 
 // Error handling
-app.use(errorHandler);
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  logger.error('Error:', err);
+  res.status(err.statusCode || 500).json({
+    error: err.message || 'Internal Server Error',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Graceful shutdown
 const gracefulShutdown = async () => {
