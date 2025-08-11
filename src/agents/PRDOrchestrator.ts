@@ -259,7 +259,7 @@ Response format:
     }
     
     return {
-      status: 'complete',
+      status: 'completed' as const,
       results
     };
   }
