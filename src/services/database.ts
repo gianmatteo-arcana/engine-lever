@@ -99,6 +99,23 @@ export interface TaskAuditRecord {
   created_at: string;
 }
 
+export interface ContextHistoryRecord {
+  id: string;
+  task_id: string;
+  sequence_number: number;
+  entry_type: string;
+  actor_type: 'user' | 'agent' | 'system';
+  actor_id?: string;
+  actor_role?: string;
+  operation: string;
+  data: Record<string, any>;
+  reasoning?: string;
+  phase?: string;
+  parent_entry_id?: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+}
+
 export interface TaskUIAugmentationRecord {
   id: string;
   task_id: string;
@@ -701,5 +718,99 @@ export class DatabaseService {
     }
 
     return data;
+  }
+
+  /**
+   * Create a context history entry for event sourcing
+   * This is used to track all events that happen during task execution
+   */
+  async createContextHistoryEntry(userToken: string, entry: Partial<ContextHistoryRecord>): Promise<ContextHistoryRecord> {
+    const client = this.getUserClient(userToken);
+    
+    // Get the next sequence number
+    const { data: lastEntry } = await client
+      .from('context_history')
+      .select('sequence_number')
+      .eq('task_id', entry.task_id!)
+      .order('sequence_number', { ascending: false })
+      .limit(1)
+      .single();
+    
+    const nextSequence = (lastEntry?.sequence_number || 0) + 1;
+    
+    const { data, error } = await client
+      .from('context_history')
+      .insert({
+        ...entry,
+        sequence_number: nextSequence,
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Failed to create context history entry', error);
+      throw error;
+    }
+
+    return data;
+  }
+
+  /**
+   * Get context history entries for a task
+   * Used by the visualizer to show the complete event history
+   */
+  async getContextHistory(userToken: string, taskId: string, limit?: number): Promise<ContextHistoryRecord[]> {
+    const client = this.getUserClient(userToken);
+    
+    let query = client
+      .from('context_history')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('sequence_number', { ascending: true });
+    
+    if (limit) {
+      query = query.limit(limit);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      logger.error('Failed to get context history', error);
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Subscribe to context history changes for real-time updates
+   * Used by the visualizer for live event streaming
+   */
+  subscribeToContextHistory(taskId: string, callback: (entry: ContextHistoryRecord) => void): () => void {
+    const serviceClient = this.getServiceClient();
+    if (!serviceClient) {
+      logger.warn('Cannot subscribe to context history - Supabase not configured');
+      return () => {};
+    }
+
+    const subscription = serviceClient
+      .channel(`context_history:${taskId}`)
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'context_history',
+          filter: `task_id=eq.${taskId}`
+        },
+        (payload: any) => {
+          callback(payload.new as ContextHistoryRecord);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }
 }

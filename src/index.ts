@@ -12,6 +12,7 @@ import { AgentManager } from './agents';
 import { persistentAgentManager } from './agents/PersistentAgentManager';
 import { MCPServer } from './mcp-server';
 import { QueueManager } from './queues';
+import { initializeTaskEvents } from './services/task-events';
 
 dotenv.config();
 
@@ -147,6 +148,10 @@ process.on('SIGINT', gracefulShutdown);
 async function startServer() {
   try {
     logger.info('🚀 Starting Biz Buddy Backend Services...');
+    
+    // Initialize task events service
+    initializeTaskEvents();
+    logger.info('✅ Task Events service initialized');
     
     // Initialize core services
     await QueueManager.initialize();

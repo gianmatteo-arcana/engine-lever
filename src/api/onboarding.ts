@@ -361,4 +361,31 @@ router.get('/ui-requests/:taskId', requireAuth, async (req: AuthenticatedRequest
   }
 });
 
+/**
+ * GET /context-history/:taskId
+ * Get context history for a task (for the visualizer)
+ */
+router.get('/context-history/:taskId', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { taskId } = req.params;
+    const userToken = req.userToken!;
+    const limit = parseInt(req.query.limit as string) || undefined;
+    
+    const dbService = DatabaseService.getInstance();
+    const history = await dbService.getContextHistory(userToken, taskId, limit);
+    
+    res.json({
+      taskId,
+      entries: history,
+      count: history.length
+    });
+    
+  } catch (error) {
+    logger.error('Failed to get context history', { error, taskId: req.params.taskId });
+    res.status(500).json({
+      error: 'Failed to get context history'
+    });
+  }
+});
+
 export { router as onboardingRoutes };

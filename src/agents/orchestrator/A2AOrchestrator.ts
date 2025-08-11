@@ -150,12 +150,19 @@ export class A2AOrchestrator extends BaseA2AAgent {
       // Save plan to database
       await this.savePlan(task.id, executionPlan, llmResponse);
 
-      // Emit plan created event
-      emitTaskEvent('plan-created', {
+      // Emit plan created event with context
+      await emitTaskEvent('plan-created', {
         taskId: task.id,
         plan: executionPlan,
         estimatedDuration: executionPlan.totalDuration,
         phaseCount: executionPlan.phases.length
+      }, {
+        userToken: task.tenantContext?.userToken,
+        actorType: 'agent',
+        actorId: this.agentId,
+        actorRole: this.agentRole,
+        reasoning: `Created execution plan with ${executionPlan.phases.length} phases`,
+        phase: 'planning'
       });
 
       // Return the plan
@@ -229,13 +236,20 @@ export class A2AOrchestrator extends BaseA2AAgent {
         }
       }));
 
-      // Emit phase started event
-      emitTaskEvent('phase-started', {
+      // Emit phase started event with context
+      await emitTaskEvent('phase-started', {
         taskId: task.id,
         phaseId: phase.id,
         phaseName: phase.name,
         requiredAgents: phase.requiredAgents,
         delegatedTo: availableAgents
+      }, {
+        userToken: task.tenantContext?.userToken,
+        actorType: 'agent',
+        actorId: this.agentId,
+        actorRole: this.agentRole,
+        reasoning: `Starting phase ${phase.name} with ${availableAgents.length} agents`,
+        phase: phase.name
       });
 
       return {
@@ -293,13 +307,19 @@ export class A2AOrchestrator extends BaseA2AAgent {
       // Determine if we need to move to next phase
       const allComplete = progress.completedAgents === progress.totalAgents && progress.totalAgents > 0;
 
-      // Emit progress event
-      emitTaskEvent('progress', {
+      // Emit progress event with context
+      await emitTaskEvent('progress', {
         taskId: task.id,
         progress: progress.percentComplete,
         completedAgents: progress.completedAgents,
         totalAgents: progress.totalAgents,
         agentStatuses: progress.agentStatuses
+      }, {
+        userToken: task.tenantContext?.userToken,
+        actorType: 'agent',
+        actorId: this.agentId,
+        actorRole: this.agentRole,
+        reasoning: `Task progress: ${progress.percentComplete}% complete`
       });
 
       return {
@@ -366,13 +386,20 @@ export class A2AOrchestrator extends BaseA2AAgent {
       const llmResponse = await this.llm.complete(llmRequest);
       const recoveryStrategy = JSON.parse(llmResponse.content);
 
-      // Emit error event
-      emitTaskEvent('error', {
+      // Emit error event with context
+      await emitTaskEvent('error', {
         taskId: task.id,
         agentRole,
         phaseId,
         failureDetails,
         recoveryStrategy: recoveryStrategy.recommendation
+      }, {
+        userToken: task.tenantContext?.userToken,
+        actorType: 'agent',
+        actorId: this.agentId,
+        actorRole: this.agentRole,
+        reasoning: `Error in ${agentRole}: ${failureDetails}. Recovery: ${recoveryStrategy.recommendation}`,
+        phase: phaseId
       });
 
       return {

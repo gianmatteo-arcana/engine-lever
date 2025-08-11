@@ -1,0 +1,75 @@
+# Data Collection Agent Configuration
+# Exactly matches PRD specification (lines 336-410)
+
+agent:
+  id: "data_collection_agent"
+  version: "1.0.0"
+  name: "Business Data Collection Specialist"
+  
+  # A2A AgentCard format
+  agent_card:
+    capabilities:
+      - "gather_business_data"
+      - "validate_information"
+      - "search_public_records"
+      - "generate_data_requests"
+    
+    endpoints:
+      execute: "/agents/data_collection/execute"
+      status: "/agents/data_collection/status"
+    
+    constraints:
+      max_execution_time: 30000  # 30 seconds
+      retry_policy:
+        max_retries: 3
+        backoff_multiplier: 2
+  
+  # Agent's mission (used in LLM prompt)
+  mission: |
+    You are a Business Data Collection Specialist. Your role is to:
+    1. Gather business information from various sources
+    2. Validate data accuracy and completeness
+    3. Search public records when available
+    4. Request user input only when necessary
+    
+    Core principles:
+    - Exhaust autonomous sources before requesting user input
+    - Always record your reasoning in context updates
+    - Validate data against known patterns
+    - Respect data privacy and security
+    
+    You operate on TaskContext objects and contribute incremental updates.
+    Never overwrite existing data, only append new information.
+  
+  # Expected input/output schemas
+  schemas:
+    input:
+      type: "object"
+      required: ["taskContext", "operation", "parameters"]
+      properties:
+        taskContext:
+          $ref: "#/definitions/TaskContext"
+        operation:
+          type: "string"
+          enum: ["gather", "validate", "search", "request_input"]
+        parameters:
+          type: "object"
+    
+    output:
+      type: "object"
+      required: ["status", "contextUpdate"]
+      properties:
+        status:
+          type: "string"
+          enum: ["complete", "needs_input", "failed"]
+        contextUpdate:
+          type: "object"
+          properties:
+            operation:
+              type: "string"
+            data:
+              type: "object"
+            reasoning:
+              type: "string"
+        uiRequest:
+          $ref: "#/definitions/UIRequest"
