@@ -1,129 +1,99 @@
 # ============================================================================
-# USER ONBOARDING TASK TEMPLATE
-# PRD Lines 589-699: Task Template Structure
+# COMPREHENSIVE USER ONBOARDING TASK TEMPLATE
+# EXACTLY matches Unified Onboarding PRD v4.0 (lines 52-144)
 # 
-# This template EXACTLY matches the PRD specification
-# No business logic - pure declaration of WHAT needs to be achieved
+# This template drives the universal engine to create context-aware onboarding
+# flows that adapt based on discovered user/business context
 # ============================================================================
 
 task_template:
   id: "user_onboarding"
-  version: "1.0.0"
+  version: "2.0"
   
-  # PRD Lines 594-599: Metadata
   metadata:
-    name: "New User Onboarding"
-    description: "Collect business information for new users"
+    name: "New User Business Profile Setup"
+    description: "Establish complete business profile for new SmallBizAlly users"
     category: "onboarding"
-    estimatedDuration: 180  # seconds
-  
-  # PRD Lines 601-618: Declarative goals - WHAT to achieve
+    estimatedDuration: 180  # 3 minutes active time
+    
+  # Pure declarative goals - WHAT we want, not HOW (PRD lines 67-93)
   goals:
     primary:
-      - id: "create_user_profile"
-        description: "Establish user identity and preferences"
+      - id: "establish_identity"
+        description: "Verify user and business identity"
         required: true
         
-      - id: "collect_business_info"
-        description: "Gather essential business details"
+      - id: "determine_structure" 
+        description: "Understand business entity type and jurisdiction"
         required: true
         
-      - id: "verify_entity"
-        description: "Confirm business entity status"
+      - id: "identify_compliance"
+        description: "Determine applicable regulations and deadlines"
+        required: true
+        
+      - id: "enable_features"
+        description: "Activate relevant platform capabilities"
         required: true
     
     secondary:
-      - id: "connect_accounts"
-        description: "Link QuickBooks or bank accounts"
+      - id: "collect_operations"
+        description: "Gather business operational details"
+        required: false
+        
+      - id: "connect_integrations"
+        description: "Link external data sources"
         required: false
   
-  # PRD Lines 621-631: State machine
-  states:
-    allowed:
-      - "created"
-      - "gathering_user_info"
-      - "collecting_business_data"
-      - "verifying_entity"
-      - "completed"
-      - "failed"
-    
-    initial: "created"
-    terminal: ["completed", "failed"]
-  
-  # PRD Lines 634-648: Phases of execution
-  phases:
-    - id: "user_info"
-      description: "Gather user information"
-      prerequisites: []
-      next: ["business_info"]
-      
-    - id: "business_info"
-      description: "Collect business details"
-      prerequisites: ["user_info"]
-      next: ["entity_verification"]
-      
-    - id: "entity_verification"
-      description: "Verify business entity"
-      prerequisites: ["business_info"]
-      next: ["complete"]
-  
-  # PRD Lines 651-678: Data schema for validation
-  data_schema:
-    type: "object"
-    required: ["user", "business"]
-    properties:
-      user:
-        type: "object"
-        required: ["firstName", "lastName", "email"]
-        properties:
-          firstName:
-            type: "string"
-            minLength: 1
-            maxLength: 100
-          lastName:
-            type: "string"
-            minLength: 1
-            maxLength: 100
-          email:
-            type: "string"
-            format: "email"
-            pattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
-      
-      business:
-        type: "object"
-        required: ["name", "entityType"]
-        properties:
-          name:
-            type: "string"
-            minLength: 2
-            maxLength: 200
-          entityType:
-            type: "string"
-            enum: ["LLC", "Corporation", "Sole Proprietorship", "Partnership"]
-          ein:
-            type: "string"
-            pattern: "^[0-9]{2}-[0-9]{7}$"
-            description: "Federal Employer Identification Number"
-  
-  # PRD Lines 680-690: Success criteria
+  # Success criteria - How we know we're done (PRD lines 95-107)
   success_criteria:
     required:
-      - "user.firstName != null"
-      - "user.email != null"
+      - "user.authenticated == true"
       - "business.name != null"
       - "business.entityType != null"
+      - "business.jurisdiction != null"
+      - "complianceCalendar.generated == true"
     
     optional:
       - "business.ein != null"
       - "integrations.quickbooks == true"
+      - "business.website != null"
   
-  # PRD Lines 693-698: Constraints
+  # Context factors that affect execution (PRD lines 109-114)
+  context_factors:
+    user_source: ["google_oauth", "email_signup", "referral"]
+    business_stage: ["idea", "forming", "operating", "expanding"]
+    business_type: ["tech", "restaurant", "retail", "service", "other"]
+    geographic_location: ["california", "delaware", "new_york", "other"]
+  
+  # Available data sources for agents (PRD lines 116-130)
+  data_sources:
+    immediate:
+      - google_oauth: "Name, email, profile data"
+      - ip_geolocation: "Approximate location"
+      - email_domain: "Potential business inference"
+    
+    external:
+      - cbc_api: "California business records"
+      - irs_database: "EIN verification"
+      - delaware_sos: "Delaware entity search"
+    
+    user_provided:
+      - manual_entry: "Information only user knows"
+      - document_upload: "Formation documents"
+  
+  # Constraints that shape execution (PRD lines 132-137)
   constraints:
-    maxDuration: 300  # 5 minutes
-    maxUserInputRequests: 5
-    requiredAgents:
-      - "orchestrator"
-      - "data_collection"
+    max_user_time: 180  # 3 minutes
+    max_ui_requests: 5   # Don't overwhelm user
+    progressive_disclosure: true
+    mobile_optimized: true
+  
+  # Preferences for optimization (PRD lines 139-144)
+  preferences:
+    minimize_typing: true
+    prefer_selection: true  # Buttons over text input
+    batch_questions: true   # Group related items
+    celebrate_progress: true
       
 # ============================================================================
 # EXECUTION HINTS (Not in PRD but useful for orchestrator)

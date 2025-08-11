@@ -5,6 +5,7 @@ import { TemplateExecutor } from '../templates/executor';
 import { z } from 'zod';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { onboardingRoutes } from './onboarding';
+import tasksRoutes from './tasks';
 
 const router = Router();
 const templateExecutor = new TemplateExecutor();
@@ -301,6 +302,9 @@ router.get('/queues/status', (req, res) => {
 
 // Mount onboarding routes
 router.use('/onboarding', onboardingRoutes);
+
+// Generic tasks endpoints (ENGINE PRD compliant)
+router.use('/tasks', tasksRoutes);
 
 
 export { router as apiRoutes };

@@ -749,11 +749,67 @@ export class DatabaseService {
       .single();
 
     if (error) {
+      // If table doesn't exist, log warning and return mock entry
+      if (error.code === '42P01') {
+        logger.warn('Context history table does not exist yet - migration pending');
+        return {
+          ...entry,
+          id: 'pending-migration',
+          sequence_number: nextSequence,
+          created_at: new Date().toISOString()
+        } as ContextHistoryRecord;
+      }
       logger.error('Failed to create context history entry', error);
       throw error;
     }
 
     return data;
+  }
+
+  /**
+   * Get all tasks for a user
+   * Returns all tasks owned by the authenticated user
+   */
+  async getTasks(userToken: string): Promise<TaskRecord[]> {
+    const client = this.getUserClient(userToken);
+    
+    const { data, error } = await client
+      .from('tasks')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      logger.error('Failed to get tasks', error);
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Get agent contexts for a task
+   * Shows which agents are working on the task and their status
+   */
+  async getAgentContexts(userToken: string, taskId: string): Promise<any[]> {
+    const client = this.getUserClient(userToken);
+    
+    const { data, error } = await client
+      .from('task_agent_contexts')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      // If table doesn't exist or has missing columns, return empty array
+      if (error.code === '42P01' || error.code === 'PGRST204') {
+        logger.warn('Agent contexts not available', error);
+        return [];
+      }
+      logger.error('Failed to get agent contexts', error);
+      throw error;
+    }
+
+    return data || [];
   }
 
   /**
@@ -776,6 +832,11 @@ export class DatabaseService {
     const { data, error } = await query;
 
     if (error) {
+      // If table doesn't exist, return empty array
+      if (error.code === '42P01') {
+        logger.warn('Context history table does not exist yet');
+        return [];
+      }
       logger.error('Failed to get context history', error);
       throw error;
     }

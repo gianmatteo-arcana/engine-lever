@@ -89,7 +89,7 @@ export class RealLLMProvider {
     
     // Extract task type from context
     const isOnboarding = context.lowerContent.includes('onboarding');
-    const isSoiFiling = context.lowerContent.includes('soi') || context.lowerContent.includes('statement of information');
+    const _isSoiFiling = context.lowerContent.includes('soi') || context.lowerContent.includes('statement of information');
     
     if (isOnboarding) {
       return {
@@ -198,7 +198,7 @@ export class RealLLMProvider {
   /**
    * Handle data collection with REAL logic
    */
-  private handleDataCollection(context: any): any {
+  private handleDataCollection(_context: any): any {
     logger.info('[RealLLMProvider] Processing data collection request');
     
     return {

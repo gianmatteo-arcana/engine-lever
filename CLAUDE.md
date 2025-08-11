@@ -244,14 +244,23 @@ git push origin main
 // TODO: Product Designer - Specify escalation thresholds
 ```
 
+## 📁 Test Output Directory (MANDATORY)
+
+**ALL test results, screenshots, and logs MUST be stored in:**
+```
+/Users/gianmatteo/Documents/Arcana-Prototype/tests/
+```
+
+**NEVER store test files in repository directories!**
+
 ## 🚦 Quick Commands
 
 ```bash
 # Start development server
 npm run dev
 
-# Run tests
-npm test
+# Run tests (output goes to central test directory)
+TEST_OUTPUT_DIR=/Users/gianmatteo/Documents/Arcana-Prototype/tests npm test
 
 # Run specific agent tests
 npm test -- agents/legal-compliance.test.ts

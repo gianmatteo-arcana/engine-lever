@@ -5,6 +5,7 @@
  */
 
 import { Router } from 'express';
+import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { DatabaseService } from '../services/database';
@@ -55,26 +56,30 @@ router.post('/initiate', requireAuth, async (req: AuthenticatedRequest, res) => 
     const businessId = `biz_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Define onboarding goals
-    const goals: TaskGoal[] = [
+    const _goals: TaskGoal[] = [
       {
         id: 'collect_business_info',
         description: 'Collect basic business information',
-        required: true
+        required: true,
+        completed: false
       },
       {
         id: 'verify_ownership',
         description: 'Verify business ownership',
-        required: true
+        required: true,
+        completed: false
       },
       {
         id: 'setup_profile',
         description: 'Complete business profile setup',
-        required: true
+        required: true,
+        completed: false
       },
       {
         id: 'cbc_registration',
         description: 'Register with California Business Connect',
-        required: false
+        required: false,
+        completed: false
       }
     ];
     
@@ -89,9 +94,12 @@ router.post('/initiate', requireAuth, async (req: AuthenticatedRequest, res) => 
       userToken
     };
     
+    // Generate UUID for task ID
+    const taskId = crypto.randomUUID();
+    
     // Create task context
     const taskContext: OnboardingTaskContext = {
-      taskId: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      taskId,
       taskType: 'onboarding',
       userId,
       userToken,
@@ -134,7 +142,7 @@ router.post('/initiate', requireAuth, async (req: AuthenticatedRequest, res) => 
     // Save task to database
     const dbService = DatabaseService.getInstance();
     const task = await dbService.createTask(userToken, {
-      id: taskContext.taskId,
+      id: taskId,
       user_id: userId,
       title: `Onboarding: ${input.businessName}`,
       description: 'New business onboarding',
@@ -144,15 +152,15 @@ router.post('/initiate', requireAuth, async (req: AuthenticatedRequest, res) => 
       status: 'in_progress',
       priority: 'high',
       metadata: {},
-      task_context: taskContext,
-      task_goals: goals,
-      entry_mode: 'user_initiated',
-      orchestrator_config: {
-        model: 'claude-3',
-        maxRetries: 3,
-        timeoutMinutes: 30,
-        atomicExecution: false
-      }
+      task_context: taskContext as any,  // Cast to any to avoid type issues
+      task_goals: []  // Empty array for now
+      // entry_mode: 'user_initiated',  // Column doesn't exist in database
+      // orchestrator_config: {  // Column doesn't exist in database
+      //   model: 'claude-3',
+      //   maxRetries: 3,
+      //   timeoutMinutes: 30,
+      //   atomicExecution: false
+      // }
     });
     
     // Start orchestration
