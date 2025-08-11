@@ -248,7 +248,7 @@ export class CelebrationAgent extends PRDCompliantAgent {
    * Get motivational context for personalization
    */
   private getMotivationalContext(context: TaskContext, request: AgentRequest): MotivationalContext {
-    const userData = context.currentState.data.user || {};
+    // const userData = context.currentState.data.user || {}; // Reserved for future use
     const businessData = context.currentState.data.business || {};
     const previousAchievements = context.history.filter(e => 
       e.operation === 'celebration_generated'
@@ -407,7 +407,7 @@ export class CelebrationAgent extends PRDCompliantAgent {
   private generateMotivationalMessage(
     achievement: Achievement,
     context: MotivationalContext,
-    celebration: CelebrationConfig
+    _celebration: CelebrationConfig
   ): string {
     const messages: string[] = [];
 
@@ -505,7 +505,7 @@ export class CelebrationAgent extends PRDCompliantAgent {
     return `${progress}% complete`;
   }
 
-  private suggestNextAction(achievement: Achievement, context: MotivationalContext): string {
+  private suggestNextAction(achievement: Achievement, _context: MotivationalContext): string {
     if (achievement.type === 'completion') {
       return 'View your accomplishments';
     }
