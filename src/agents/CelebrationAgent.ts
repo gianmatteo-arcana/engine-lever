@@ -526,6 +526,15 @@ export class CelebrationAgent extends PRDCompliantAgent {
   }
 
   /**
+   * Update context progress
+   */
+  private updateContextProgress(context: TaskContext, increment: number): void {
+    const currentProgress = context.currentState.completeness || 0;
+    context.currentState.completeness = Math.min(100, currentProgress + increment);
+    context.currentState.lastUpdated = new Date().toISOString();
+  }
+
+  /**
    * Record context entry with proper reasoning
    */
   private async recordContextEntry(context: TaskContext, entry: Partial<ContextEntry>): Promise<void> {

@@ -48,6 +48,11 @@ export interface ContextEntry {
   data: Record<string, any>;
   reasoning?: string;
   previousEntryId?: string;
+  trigger?: {
+    type: string;
+    source: string;
+    details: Record<string, any>;
+  };
 }
 
 /**
@@ -105,6 +110,10 @@ export interface AgentRequest {
     deviceType?: 'mobile' | 'desktop' | 'tablet';
     userProgress?: number;
   };
+  taskContext?: TaskContext; // Optional for PRDCompliantAgent
+  operation?: string; // Optional for PRDCompliantAgent
+  parameters?: Record<string, any>; // Optional for PRDCompliantAgent
+  llmModel?: string; // Optional LLM model override
   timeout?: number; // milliseconds
   retryPolicy?: RetryPolicy;
 }
@@ -119,6 +128,7 @@ export interface AgentResponse {
   reasoning?: string;
   nextAgent?: string;
   confidence?: number;
+  contextUpdate?: ContextEntry; // Optional context update for PRDCompliantAgent
   error?: {
     code: string;
     message: string;
@@ -219,18 +229,65 @@ export interface LayoutHints {
  * Agent configuration loaded from YAML
  */
 export interface AgentConfig {
-  id: string;
-  version: string;
-  name: string;
-  persona: string;
-  capabilities: string[];
-  toolchain: {
+  agent: {
+    id: string;
+    version: string;
+    name: string;
+    persona: string;
+    capabilities: string[];
+    mission?: string;
+    agent_card?: string;
+  };
+  toolchain?: {
     required: string[];
     optional?: string[];
+  };
+  schemas?: {
+    input?: any;
+    output?: any;
   };
   successMetrics?: Record<string, string>;
   decisionRules?: string;
   promptTemplate?: string;
+  [key: string]: any; // Allow additional properties from YAML
+}
+
+/**
+ * Execution plan for orchestration
+ */
+export interface ExecutionPlan {
+  phases: ExecutionPhase[];
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Execution phase definition
+ */
+export interface ExecutionPhase {
+  name: string;
+  agents: string[];
+  parallel?: boolean;
+  dependencies?: string[];
+}
+
+/**
+ * Phase execution result
+ */
+export interface PhaseResult {
+  phase: string;
+  status: 'completed' | 'failed' | 'partial';
+  results: AgentResponse[];
+}
+
+/**
+ * Task template definition
+ */
+export interface TaskTemplate {
+  id: string;
+  name: string;
+  version: string;
+  agents: string[];
+  phases?: ExecutionPhase[];
 }
 
 /**

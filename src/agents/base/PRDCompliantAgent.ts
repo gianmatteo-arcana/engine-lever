@@ -85,7 +85,7 @@ export abstract class PRDCompliantAgent {
       model: request.llmModel || 'gpt-4',
       prompt,
       responseFormat: 'json',
-      schema: this.config.schemas.output
+      schema: this.config.schemas?.output
     });
     
     // Validate response (PRD line 442)
@@ -95,7 +95,7 @@ export abstract class PRDCompliantAgent {
     const contextUpdate: ContextEntry = {
       entryId: this.generateId(),
       timestamp: new Date().toISOString(),
-      sequenceNumber: request.taskContext.history.length + 1,
+      sequenceNumber: request.taskContext?.history.length ?? 0 + 1,
       actor: {
         type: 'agent',
         id: this.config.agent.id,
@@ -114,7 +114,7 @@ export abstract class PRDCompliantAgent {
     return {
       status: validated.status,
       contextUpdate,
-      uiRequest: validated.uiRequest
+      uiRequests: validated.uiRequest ? [validated.uiRequest] : undefined
     };
   }
   
@@ -152,7 +152,7 @@ ${this.toolChain.getAvailableTools()}
 
 ## Response Format
 You must respond with JSON matching this schema:
-${JSON.stringify(this.config.schemas.output, null, 2)}
+${JSON.stringify(this.config.schemas?.output || {}, null, 2)}
 
 Remember:
 - Record your reasoning
@@ -207,7 +207,8 @@ export class DataCollectionAgent extends PRDCompliantAgent {
       
       if (publicData) {
         return {
-          status: 'complete',
+          status: 'completed',
+          data: { businessFound: true },
           contextUpdate: {
             entryId: this.generateId(),
             timestamp: new Date().toISOString(),
@@ -248,9 +249,16 @@ export class DataCollectionAgent extends PRDCompliantAgent {
         data: {},
         reasoning: 'No public records found, need user to provide business details'
       },
-      uiRequest: {
+      uiRequests: [{
+        id: this.generateId(),
         agentRole: 'data_collection',
-        requestId: this.generateId(),
+        suggestedTemplates: ['business_info_form'],
+        dataNeeded: ['entityType', 'formationDate'],
+        context: {
+          userProgress: 35,
+          deviceType: 'desktop',
+          urgency: 'medium'
+        },
         timestamp: new Date().toISOString(),
         metadata: {
           purpose: 'Complete business information',
@@ -258,7 +266,7 @@ export class DataCollectionAgent extends PRDCompliantAgent {
           category: 'business_identity',
           allowSkip: false
         },
-        dataNeeded: [
+        fields: [
           {
             field: 'entityType',
             dataType: 'enum',
@@ -275,12 +283,8 @@ export class DataCollectionAgent extends PRDCompliantAgent {
             required: false
           }
         ],
-        context: {
-          taskPhase: 'business_info',
-          completeness: 35,
-          reason: 'Need business entity details to proceed'
-        }
-      }
+        reason: 'Need business entity details to proceed'
+      }]
     };
   }
 }
