@@ -59,7 +59,7 @@ describe('BusinessDiscoveryAgent', () => {
       expect(response.data).toHaveProperty('name');
       expect(response.data).toHaveProperty('entityType');
       expect(response.uiRequests).toHaveLength(1);
-      expect(response.uiRequests[0].suggestedTemplates).toContain('found_you_card');
+      expect(response.uiRequests![0].suggestedTemplates).toContain('found_you_card');
       expect(response.reasoning).toContain('Business found');
     });
 
@@ -243,7 +243,7 @@ describe('BusinessDiscoveryAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       if (response.status === 'needs_input' && response.uiRequests) {
-        const uiRequest = response.uiRequests[0];
+        const uiRequest = response.uiRequests![0];
 
         expect(uiRequest.suggestedTemplates).toContain('found_you_card');
         expect(uiRequest.agentRole).toBe('business_discovery_agent');

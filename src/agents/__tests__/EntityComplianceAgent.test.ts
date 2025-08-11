@@ -427,7 +427,7 @@ describe('EntityComplianceAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       expect(response.uiRequests).toHaveLength(1);
-      const uiRequest = response.uiRequests[0];
+      const uiRequest = response.uiRequests![0];
       
       expect(uiRequest.suggestedTemplates).toContain('compliance_roadmap');
       expect(uiRequest.title).toBe('Your Compliance Roadmap');
@@ -446,7 +446,7 @@ describe('EntityComplianceAgent', () => {
 
       const response = await agent.processRequest(request, mockContext);
 
-      const uiRequest = response.uiRequests[0];
+      const uiRequest = response.uiRequests![0];
       const sections = uiRequest.sections;
       
       expect(sections.find(s => s.id === 'critical_requirements')).toBeDefined();
@@ -464,7 +464,7 @@ describe('EntityComplianceAgent', () => {
 
       const response = await agent.processRequest(request, mockContext);
 
-      const uiRequest = response.uiRequests[0];
+      const uiRequest = response.uiRequests![0];
       const riskLevel = response.data.riskAssessment.overallRisk;
       
       if (riskLevel === 'high') {
