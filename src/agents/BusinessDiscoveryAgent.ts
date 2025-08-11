@@ -45,7 +45,7 @@ interface SearchClues {
  */
 export class BusinessDiscoveryAgent extends PRDCompliantAgent {
   constructor() {
-    super('/config/agents/business_discovery_agent.yaml');
+    super('business_discovery_agent.yaml');
   }
 
   /**

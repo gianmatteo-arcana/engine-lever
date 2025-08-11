@@ -61,7 +61,7 @@ interface MotivationalContext {
  */
 export class CelebrationAgent extends PRDCompliantAgent {
   constructor() {
-    super('/config/agents/celebration_agent.yaml');
+    super('celebration_agent.yaml');
   }
 
   /**

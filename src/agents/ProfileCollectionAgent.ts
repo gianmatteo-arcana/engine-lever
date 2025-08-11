@@ -50,7 +50,7 @@ interface SmartDefaults {
  */
 export class ProfileCollectionAgent extends PRDCompliantAgent {
   constructor() {
-    super('/config/agents/profile_collection_agent.yaml');
+    super('profile_collection_agent.yaml');
   }
 
   /**

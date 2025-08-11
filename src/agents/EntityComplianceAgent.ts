@@ -63,7 +63,7 @@ interface RiskAssessment {
  */
 export class EntityComplianceAgent extends PRDCompliantAgent {
   constructor() {
-    super('/config/agents/entity_compliance_agent.yaml');
+    super('entity_compliance_agent.yaml');
   }
 
   /**

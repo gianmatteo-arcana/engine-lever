@@ -82,7 +82,7 @@ interface OptimizationMetrics {
  */
 export class UXOptimizationAgent extends PRDCompliantAgent {
   constructor() {
-    super('/config/agents/ux_optimization_agent.yaml');
+    super('ux_optimization_agent.yaml');
   }
 
   /**

@@ -57,7 +57,8 @@ export abstract class PRDCompliantAgent {
    * TODO [OPTIMIZATION]: Cache parsed YAML configs in memory
    */
   protected loadConfig(configPath: string): AgentConfig {
-    const fullPath = `/config/agents/${configPath}`;
+    const path = require('path');
+    const fullPath = path.join(__dirname, '../../../config/agents/', configPath);
     const configContent = fs.readFileSync(fullPath, 'utf8');
     return yaml.parse(configContent);
   }
@@ -113,6 +114,7 @@ export abstract class PRDCompliantAgent {
     
     return {
       status: validated.status,
+      data: validated.data || {},
       contextUpdate,
       uiRequests: validated.uiRequest ? [validated.uiRequest] : undefined
     };
@@ -236,6 +238,7 @@ export class DataCollectionAgent extends PRDCompliantAgent {
     // Need user input (PRD lines 540-574)
     return {
       status: 'needs_input',
+      data: {},
       contextUpdate: {
         entryId: this.generateId(),
         timestamp: new Date().toISOString(),
