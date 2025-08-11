@@ -66,7 +66,7 @@ describe('EntityComplianceAgent', () => {
       expect(response.data.complianceCalendar).toBeDefined();
       
       const calendar = response.data.complianceCalendar;
-      const llcRequirement = calendar.requirements.find(r => r.id === 'llc_operating_agreement');
+      const llcRequirement = calendar.requirements.find((r: any) => r.id === 'llc_operating_agreement');
       
       expect(llcRequirement).toBeDefined();
       expect(llcRequirement?.category).toBe('governance');
@@ -86,8 +86,8 @@ describe('EntityComplianceAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const bylawsReq = calendar.requirements.find(r => r.id === 'corp_bylaws');
-      const boardMeetingReq = calendar.requirements.find(r => r.id === 'annual_board_meeting');
+      const bylawsReq = calendar.requirements.find((r: any) => r.id === 'corp_bylaws');
+      const boardMeetingReq = calendar.requirements.find((r: any) => r.id === 'annual_board_meeting');
       
       expect(bylawsReq).toBeDefined();
       expect(bylawsReq?.priority).toBe('critical');
@@ -112,7 +112,7 @@ describe('EntityComplianceAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const dbaReq = calendar.requirements.find(r => r.id === 'dba_filing');
+      const dbaReq = calendar.requirements.find((r: any) => r.id === 'dba_filing');
       
       expect(dbaReq).toBeDefined();
       expect(dbaReq?.priority).toBe('critical');
@@ -132,7 +132,7 @@ describe('EntityComplianceAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const annualReport = calendar.requirements.find(r => r.id === 'annual_report');
+      const annualReport = calendar.requirements.find((r: any) => r.id === 'annual_report');
       
       expect(annualReport).toBeDefined();
       expect(annualReport?.name).toContain('CA');
@@ -151,7 +151,7 @@ describe('EntityComplianceAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const registeredAgent = calendar.requirements.find(r => r.id === 'registered_agent');
+      const registeredAgent = calendar.requirements.find((r: any) => r.id === 'registered_agent');
       
       expect(registeredAgent).toBeDefined();
       expect(registeredAgent?.priority).toBe('critical');
@@ -171,7 +171,7 @@ describe('EntityComplianceAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const registeredAgent = calendar.requirements.find(r => r.id === 'registered_agent');
+      const registeredAgent = calendar.requirements.find((r: any) => r.id === 'registered_agent');
       
       expect(registeredAgent).toBeUndefined();
     });
@@ -191,7 +191,7 @@ describe('EntityComplianceAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const foodLicense = calendar.requirements.find(r => r.id === 'food_service_license');
+      const foodLicense = calendar.requirements.find((r: any) => r.id === 'food_service_license');
       
       expect(foodLicense).toBeDefined();
       expect(foodLicense?.category).toBe('license');
@@ -212,7 +212,7 @@ describe('EntityComplianceAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const profLicense = calendar.requirements.find(r => r.id === 'professional_license');
+      const profLicense = calendar.requirements.find((r: any) => r.id === 'professional_license');
       
       expect(profLicense).toBeDefined();
       expect(profLicense?.frequency).toBe('annual');
@@ -231,7 +231,7 @@ describe('EntityComplianceAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const salesTax = calendar.requirements.find(r => r.id === 'sales_tax_permit');
+      const salesTax = calendar.requirements.find((r: any) => r.id === 'sales_tax_permit');
       
       expect(salesTax).toBeDefined();
       expect(salesTax?.category).toBe('tax');
@@ -251,7 +251,7 @@ describe('EntityComplianceAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const ein = calendar.requirements.find(r => r.id === 'federal_ein');
+      const ein = calendar.requirements.find((r: any) => r.id === 'federal_ein');
       
       expect(ein).toBeDefined();
       expect(ein?.priority).toBe('critical');
@@ -271,7 +271,7 @@ describe('EntityComplianceAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const ein = calendar.requirements.find(r => r.id === 'federal_ein');
+      const ein = calendar.requirements.find((r: any) => r.id === 'federal_ein');
       
       expect(ein).toBeUndefined();
     });
@@ -296,7 +296,7 @@ describe('EntityComplianceAgent', () => {
 
         const response = await agent.processRequest(request, mockContext);
         const calendar = response.data.complianceCalendar;
-        const taxReturn = calendar.requirements.find(r => r.id === 'annual_tax_return');
+        const taxReturn = calendar.requirements.find((r: any) => r.id === 'annual_tax_return');
         
         expect(taxReturn?.forms).toContain(testCase.expectedForm);
       }
@@ -315,13 +315,13 @@ describe('EntityComplianceAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const priorities = calendar.requirements.map(r => r.priority);
+      const priorities = calendar.requirements.map((r: any) => r.priority);
       
       // Check that critical items come first
       let lastCriticalIndex = -1;
       let firstHighIndex = priorities.length;
       
-      priorities.forEach((priority, index) => {
+      priorities.forEach((priority: any, index: number) => {
         if (priority === 'critical') lastCriticalIndex = index;
         if (priority === 'high' && firstHighIndex === priorities.length) {
           firstHighIndex = index;
@@ -344,7 +344,7 @@ describe('EntityComplianceAgent', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const manualSum = calendar.requirements.reduce((sum, r) => sum + r.estimatedCost, 0);
+      const manualSum = calendar.requirements.reduce((sum: number, r: any) => sum + r.estimatedCost, 0);
       
       expect(calendar.summary.totalEstimatedCost).toBe(manualSum);
     });
@@ -361,8 +361,8 @@ describe('EntityComplianceAgent', () => {
 
       const calendar = response.data.complianceCalendar;
       const sortedDeadlines = calendar.requirements
-        .map(r => r.deadline)
-        .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+        .map((r: any) => r.deadline)
+        .sort((a: any, b: any) => new Date(a).getTime() - new Date(b).getTime());
       
       expect(calendar.summary.nextDeadline).toBe(sortedDeadlines[0]);
     });
@@ -408,7 +408,7 @@ describe('EntityComplianceAgent', () => {
       expect(Array.isArray(riskAssessment.recommendations)).toBe(true);
       
       if (response.data.complianceCalendar.summary.criticalCount > 0) {
-        expect(riskAssessment.recommendations.some(r => 
+        expect(riskAssessment.recommendations.some((r: any) => 
           r.includes('critical requirements')
         )).toBe(true);
       }
@@ -449,9 +449,9 @@ describe('EntityComplianceAgent', () => {
       const uiRequest = response.uiRequests![0];
       const sections = uiRequest.sections;
       
-      expect(sections.find(s => s.id === 'critical_requirements')).toBeDefined();
-      expect(sections.find(s => s.id === 'upcoming_deadlines')).toBeDefined();
-      expect(sections.find(s => s.id === 'annual_planning')).toBeDefined();
+      expect(sections.find((s: any) => s.id === 'critical_requirements')).toBeDefined();
+      expect(sections.find((s: any) => s.id === 'upcoming_deadlines')).toBeDefined();
+      expect(sections.find((s: any) => s.id === 'annual_planning')).toBeDefined();
     });
 
     test('should set urgency based on risk assessment', async () => {

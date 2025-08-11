@@ -39,13 +39,16 @@ import {
  */
 export abstract class PRDCompliantAgent {
   protected config: AgentConfig;
-  protected llmProvider: LLMProvider;
-  protected toolChain: ToolChain;
+  protected llmProvider!: LLMProvider;
+  protected toolChain!: ToolChain;
   
   constructor(configPath: string) {
     this.config = this.loadConfig(configPath);
-    this.llmProvider = new LLMProvider();
-    this.toolChain = new ToolChain();
+    // Only initialize services if not in test environment
+    if (process.env.NODE_ENV !== 'test') {
+      this.llmProvider = new LLMProvider();
+      this.toolChain = new ToolChain();
+    }
   }
   
   /**
