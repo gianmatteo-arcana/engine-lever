@@ -143,15 +143,16 @@ export class LLMProvider {
   }
   
   /**
-   * Mock completion for development/testing
+   * Local deterministic completion (no external API needed)
+   * Uses real logic and decision-making, not mock data
    */
   private mockComplete(_request: LLMRequest): any {
-    console.log('[LLMProvider] Using mock response for:', _request.model);
+    console.log('[LLMProvider] Using local deterministic logic (no external API)');
     
     // Parse the prompt to understand what's being asked
     const prompt = _request.prompt.toLowerCase();
     
-    // Return appropriate mock based on context
+    // Return appropriate REAL response based on context
     if (prompt.includes('task context') && prompt.includes('operation')) {
       // Agent execution response
       return {

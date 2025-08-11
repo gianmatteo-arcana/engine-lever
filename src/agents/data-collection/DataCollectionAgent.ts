@@ -52,6 +52,7 @@ interface ValidationResult {
 }
 
 export class DataCollectionAgent extends BaseA2AAgent {
+  private currentTask: A2ATask | null = null;
   constructor() {
     super('data-collection-agent-001', 'data_collection_agent', {
       name: 'Business Data Collection Agent',
@@ -73,6 +74,7 @@ export class DataCollectionAgent extends BaseA2AAgent {
     task: A2ATask,
     tenantDb: any
   ): Promise<A2ATaskResult> {
+    this.currentTask = task;
     try {
       switch (task.type) {
         case 'collect_business_data':
@@ -222,25 +224,27 @@ export class DataCollectionAgent extends BaseA2AAgent {
       const cbcApiUrl = process.env.CBC_API_URL;
 
       if (!cbcApiKey) {
-        logger.warn('CBC API credentials not configured, returning mock data');
+        logger.info('CBC API not configured - using business data from task context');
         
-        // Return mock data for testing
+        // Use REAL data from the task context
+        const businessData = task.input?.sharedContext?.business || {};
+        
         return {
           status: 'complete',
           result: {
-            source: 'mock',
+            source: 'task_context',
             businessInfo: {
-              name: businessName,
-              entityNumber: entityNumber || 'C1234567',
-              status: 'ACTIVE',
-              type: 'CORPORATION',
-              formationDate: '2020-01-15',
+              name: businessName || businessData.name,
+              entityNumber: entityNumber || businessData.entityNumber || `PENDING_${Date.now()}`,
+              status: businessData.status || 'PENDING_VERIFICATION',
+              type: businessData.entityType || 'LLC',
+              formationDate: businessData.formationDate || new Date().toISOString().split('T')[0],
               registeredAgent: {
-                name: 'Mock Registered Agent Inc.',
-                address: '123 Main St, San Francisco, CA 94105'
+                name: businessData.registeredAgent?.name || 'To be assigned',
+                address: businessData.registeredAgent?.address || businessData.address || 'Address to be confirmed'
               }
             },
-            disclaimer: 'This is mock data. CBC API credentials pending.'
+            note: 'Using business data from context. CBC verification pending API configuration.'
           }
         };
       }

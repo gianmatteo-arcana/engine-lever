@@ -10,7 +10,7 @@
  */
 
 import { BaseA2AAgent, A2ATask, A2ATaskResult, AgentCapabilities } from '../base/BaseA2AAgent';
-import { LLMProvider, LLMRequest } from '../../services/llm-provider';
+import { RealLLMProvider } from '../../services/RealLLMProvider';
 import { logger } from '../../utils/logger';
 import { 
   TaskContext, 
@@ -47,7 +47,7 @@ interface AgentRegistry {
 }
 
 export class A2AOrchestrator extends BaseA2AAgent {
-  private llm: LLMProvider;
+  private llm: RealLLMProvider;
   private agentRegistry: AgentRegistry;
 
   constructor() {
@@ -63,7 +63,7 @@ export class A2AOrchestrator extends BaseA2AAgent {
       version: '1.0.0'
     });
 
-    this.llm = LLMProvider.getInstance();
+    this.llm = RealLLMProvider.getInstance();
     
     // Initialize agent registry (hardcoded for MVP, future: dynamic discovery)
     this.agentRegistry = {
@@ -128,10 +128,12 @@ export class A2AOrchestrator extends BaseA2AAgent {
       const userPrompt = this.buildPlanningPrompt(taskContext);
 
       // Get plan from LLM
-      const llmRequest: LLMRequest = {
+      const llmRequest = {
+        model: 'gpt-4',
+        prompt: userPrompt,
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
+          { role: 'system' as const, content: systemPrompt },
+          { role: 'user' as const, content: userPrompt }
         ],
         temperature: 0.7,
         maxTokens: 2000,
@@ -355,14 +357,25 @@ export class A2AOrchestrator extends BaseA2AAgent {
 
     try {
       // Use LLM to determine recovery strategy
-      const llmRequest: LLMRequest = {
+      const llmRequest = {
+        model: 'gpt-4',
+        prompt: JSON.stringify({
+          taskType: taskContext.taskType,
+          currentPhase: phaseId,
+          failedAgent: agentRole,
+          failureDetails,
+          taskContext: {
+            status: taskContext.status,
+            completedPhases: taskContext.completedPhases
+          }
+        }),
         messages: [
           { 
-            role: 'system', 
+            role: 'system' as const, 
             content: 'You are an expert at error recovery and task orchestration. Analyze the failure and suggest recovery strategies.'
           },
           { 
-            role: 'user', 
+            role: 'user' as const, 
             content: JSON.stringify({
               taskType: taskContext.taskType,
               currentPhase: phaseId,
