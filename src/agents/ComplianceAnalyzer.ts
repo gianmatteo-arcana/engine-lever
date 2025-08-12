@@ -159,13 +159,13 @@ export class ComplianceAnalyzer extends Agent {
     const profileData = profileEntry?.data?.business || {};
 
     return {
-      name: business.name || profileData.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-      entityType: business.entityType || profileData.entityType || 'Sole Proprietorship',
-      state: business.state || profileData.state || 'CA',
-      industry: business.industry || profileData.industry,
-      formationDate: business.formationDate || profileData.formationDate,
+      name: profileData.name || business.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+      entityType: profileData.entityType || business.entityType || 'Sole Proprietorship',
+      state: profileData.state || business.state || 'CA',
+      industry: profileData.industry || business.industry,
+      formationDate: profileData.formationDate || business.formationDate,
       employeeCount: business.employeeCount || 1,
-      website: business.website || profileData.website
+      website: profileData.website || business.website
     };
   }
 

@@ -125,8 +125,8 @@ export class StateComputer {
       case 'data_collected':
       case 'user_data_provided':
       case 'public_records_found':
-        // Merge new data into state
-        Object.assign(newState.data, event.data);
+        // Deep merge new data into state
+        this.deepMerge(newState.data, event.data);
         // Update completeness based on data
         newState.completeness = this.calculateDataCompleteness(newState.data);
         break;
@@ -191,6 +191,27 @@ export class StateComputer {
     };
     
     return phaseProgress[phase] || 0;
+  }
+
+  /**
+   * Deep merge objects without overwriting existing nested objects
+   */
+  private static deepMerge(target: Record<string, any>, source: Record<string, any>): void {
+    for (const key in source) {
+      if (source.hasOwnProperty(key)) {
+        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+          // If target doesn't have this key or it's not an object, create empty object
+          if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) {
+            target[key] = {};
+          }
+          // Recursively merge nested objects
+          this.deepMerge(target[key], source[key]);
+        } else {
+          // For primitive values, arrays, or null, just assign
+          target[key] = source[key];
+        }
+      }
+    }
   }
   
   /**

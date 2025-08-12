@@ -343,8 +343,9 @@ export class BusinessDiscovery extends Agent {
   private extractBusinessNameFromDomain(domain: string): string {
     // Remove TLD and convert to business name
     const baseName = domain.split('.')[0];
-    // Convert camelCase/PascalCase to words
-    return baseName.replace(/([A-Z])/g, ' $1').trim();
+    // Convert camelCase/PascalCase to words and capitalize first letter
+    const nameWithSpaces = baseName.replace(/([A-Z])/g, ' $1').trim();
+    return nameWithSpaces.charAt(0).toUpperCase() + nameWithSpaces.slice(1);
   }
 
   private extractStateFromLocation(location: string): string | null {

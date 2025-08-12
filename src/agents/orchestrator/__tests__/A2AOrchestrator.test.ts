@@ -6,6 +6,7 @@ import { A2AOrchestrator } from '../A2AOrchestrator';
 import { A2ATask } from '../../base/BaseA2AAgent';
 import { DatabaseService } from '../../../services/database';
 import { LLMProvider } from '../../../services/llm-provider';
+import { RealLLMProvider } from '../../../services/RealLLMProvider';
 import { logger } from '../../../utils/logger';
 import { TaskContext } from '../../../types/engine-types';
 import { OnboardingTaskContext } from '../../../types/onboarding-types';
@@ -13,6 +14,7 @@ import { OnboardingTaskContext } from '../../../types/onboarding-types';
 // Mock dependencies
 jest.mock('../../../services/database');
 jest.mock('../../../services/llm-provider');
+jest.mock('../../../services/RealLLMProvider');
 jest.mock('../../../utils/logger');
 
 // Mock database service
@@ -39,6 +41,7 @@ const mockLLMInstance = {
 };
 
 (LLMProvider.getInstance as jest.Mock).mockReturnValue(mockLLMInstance);
+(RealLLMProvider.getInstance as jest.Mock).mockReturnValue(mockLLMInstance);
 
 describe('A2AOrchestrator', () => {
   let orchestrator: A2AOrchestrator;

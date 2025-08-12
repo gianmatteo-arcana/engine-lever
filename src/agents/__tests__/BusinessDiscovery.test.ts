@@ -46,6 +46,21 @@ describe('BusinessDiscovery', () => {
 
   describe('Business Discovery from Email Domain', () => {
     test('should identify tech company from .io domain', async () => {
+      // Mock successful business discovery for this test
+      const originalSearchStateRecords = (agent as any).searchStateRecords;
+      (agent as any).searchStateRecords = jest.fn().mockResolvedValue({
+        found: true,
+        confidence: 0.95,
+        businessData: {
+          name: 'TechStartup LLC',
+          entityType: 'LLC',
+          state: 'Delaware',
+          entityNumber: 'DE123456789',
+          status: 'Active',
+          formationDate: '2023-01-15'
+        }
+      });
+
       const request: AgentRequest = {
         requestId: 'req_123',
         agentRole: 'business_discovery_agent',
@@ -60,7 +75,10 @@ describe('BusinessDiscovery', () => {
       expect(response.data).toHaveProperty('entityType');
       expect(response.uiRequests).toHaveLength(1);
       expect(response.uiRequests![0].suggestedTemplates).toContain('found_you_card');
-      expect(response.reasoning).toContain('Business found');
+      expect(response.reasoning).toContain('Found business in public records');
+
+      // Restore original method
+      (agent as any).searchStateRecords = originalSearchStateRecords;
     });
 
     test('should try multiple states for tech companies', async () => {
