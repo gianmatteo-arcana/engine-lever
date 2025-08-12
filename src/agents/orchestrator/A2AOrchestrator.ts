@@ -10,7 +10,7 @@
  */
 
 import { BaseA2AAgent, A2ATask, A2ATaskResult, AgentCapabilities } from '../base/BaseA2AAgent';
-import { RealLLMProvider } from '../../services/RealLLMProvider';
+import { RealLLMProvider } from '../../services/real-llm-provider';
 import { logger } from '../../utils/logger';
 import { 
   TaskContext, 

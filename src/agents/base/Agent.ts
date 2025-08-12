@@ -22,8 +22,8 @@
 
 import * as fs from 'fs';
 import * as yaml from 'yaml';
-import { LLMProvider } from '../../services/LLMProvider';
-import { ToolChain } from '../../services/ToolChain';
+import { LLMProvider } from '../../services/llm-provider-interface';
+import { ToolChain } from '../../services/tool-chain';
 import { 
   TaskContext, 
   ContextEntry, 

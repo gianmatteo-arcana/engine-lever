@@ -12,7 +12,7 @@
 
 // import * as fs from 'fs';
 // import * as yaml from 'yaml';
-import { LLMProvider } from '../services/LLMProvider';
+import { LLMProvider } from '../services/llm-provider-interface';
 import { 
   TaskContext,
   ContextEntry,

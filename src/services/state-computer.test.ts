@@ -6,7 +6,7 @@
  * Every test validates PRD compliance
  */
 
-import { StateComputer, ComputedState } from './StateComputer';
+import { StateComputer, ComputedState } from './state-computer';
 import { ContextEntry } from '../types/engine-types';
 
 describe('StateComputer - PRD Event Sourcing Implementation', () => {

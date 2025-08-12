@@ -6,7 +6,7 @@ import { A2AOrchestrator } from '../A2AOrchestrator';
 import { A2ATask } from '../../base/BaseA2AAgent';
 import { DatabaseService } from '../../../services/database';
 import { LLMProvider } from '../../../services/llm-provider';
-import { RealLLMProvider } from '../../../services/RealLLMProvider';
+import { RealLLMProvider } from '../../../services/real-llm-provider';
 import { logger } from '../../../utils/logger';
 import { TaskContext } from '../../../types/engine-types';
 import { OnboardingTaskContext } from '../../../types/onboarding-types';
@@ -14,7 +14,7 @@ import { OnboardingTaskContext } from '../../../types/onboarding-types';
 // Mock dependencies
 jest.mock('../../../services/database');
 jest.mock('../../../services/llm-provider');
-jest.mock('../../../services/RealLLMProvider');
+jest.mock('../../../services/real-llm-provider');
 jest.mock('../../../utils/logger');
 
 // Mock database service

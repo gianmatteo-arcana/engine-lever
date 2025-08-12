@@ -6,7 +6,7 @@
  * Will migrate to MCP Server post-MVP
  */
 
-import { CredentialVault } from './CredentialVault';
+import { CredentialVault } from './credential-vault';
 
 export interface BusinessEntity {
   name: string;
