@@ -188,7 +188,7 @@ export class AchievementTracker extends Agent {
    */
   private detectAchievement(context: TaskContext): Achievement | null {
     const currentProgress = context.currentState.completeness || 0;
-    const lastEntry = context.history[context.history.length - 1];
+    const lastEntry = context.history[(context.history?.length || 0) - 1];
     
     // Check for task completion
     if (context.currentState.status === 'completed') {
@@ -240,7 +240,7 @@ export class AchievementTracker extends Agent {
 
     // Check for other specific operation completions (after milestone check)
     // Only if this operation represents fresh progress, not stale context
-    if (lastEntry && context.history.length > 1) {
+    if (lastEntry && (context.history?.length || 0) > 1) {
       // Only celebrate specific operations if there are multiple history entries (real workflow)
       // Single entry contexts are often test setups that shouldn't trigger achievements
       
@@ -594,7 +594,7 @@ export class AchievementTracker extends Agent {
     const contextEntry: ContextEntry = {
       entryId: `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date().toISOString(),
-      sequenceNumber: context.history.length + 1,
+      sequenceNumber: (context.history?.length || 0) + 1,
       actor: {
         type: 'agent',
         id: 'celebration_agent',

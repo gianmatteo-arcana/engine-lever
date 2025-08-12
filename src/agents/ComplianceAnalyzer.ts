@@ -635,7 +635,7 @@ export class ComplianceAnalyzer extends Agent {
     const contextEntry: ContextEntry = {
       entryId: `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date().toISOString(),
-      sequenceNumber: context.history.length + 1,
+      sequenceNumber: (context.history?.length || 0) + 1,
       actor: {
         type: 'agent',
         id: 'entity_compliance_agent',

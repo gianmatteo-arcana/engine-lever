@@ -284,7 +284,7 @@ Response format:
     const entry: ContextEntry = {
       entryId: this.generateId(),
       timestamp: new Date().toISOString(),
-      sequenceNumber: context.history.length + 1,
+      sequenceNumber: (context.history?.length || 0) + 1,
       actor: {
         type: 'agent',
         id: 'orchestrator',
@@ -347,7 +347,7 @@ Return the requests in optimal order with reasoning.
     const entry: ContextEntry = {
       entryId: this.generateId(),
       timestamp: new Date().toISOString(),
-      sequenceNumber: context.history.length + 1,
+      sequenceNumber: (context.history?.length || 0) + 1,
       actor: {
         type: 'agent',
         id: 'orchestrator',
@@ -432,7 +432,7 @@ Return the requests in optimal order with reasoning.
     const entry: ContextEntry = {
       entryId: this.generateId(),
       timestamp: new Date().toISOString(),
-      sequenceNumber: context.history.length + 1,
+      sequenceNumber: (context.history?.length || 0) + 1,
       actor: {
         type: 'agent',
         id: 'orchestrator',
@@ -459,7 +459,7 @@ Return the requests in optimal order with reasoning.
     const entry: ContextEntry = {
       entryId: this.generateId(),
       timestamp: new Date().toISOString(),
-      sequenceNumber: context.history.length + 1,
+      sequenceNumber: (context.history?.length || 0) + 1,
       actor: {
         type: 'agent',
         id: 'orchestrator',
