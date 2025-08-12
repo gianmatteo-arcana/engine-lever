@@ -152,6 +152,88 @@ src/
 2. **Check test coverage**: `npm test`
 3. **Review the PRD** for feature requirements
 
+## 📏 Naming Conventions (MANDATORY)
+
+### File Naming Standards
+**All files MUST follow kebab-case naming convention:**
+
+```
+✅ CORRECT:
+- state-computer.ts
+- llm-provider-interface.ts
+- configuration-manager.ts
+- credential-vault.ts
+- tool-chain.ts
+
+❌ INCORRECT:
+- StateComputer.ts (PascalCase)
+- LLMProvider.ts (PascalCase)
+- ConfigurationManager.ts (PascalCase)
+```
+
+### Service File Organization
+```
+services/
+├── database.ts                    # Core database service
+├── state-computer.ts             # Event sourcing state computation
+├── llm-provider-interface.ts     # LLM abstraction interface
+├── real-llm-provider.ts          # Production LLM implementation
+├── configuration-manager.ts      # YAML config management
+├── credential-vault.ts           # Secure credential storage
+├── tool-chain.ts                 # External tool integrations
+└── task-events.ts                # Event handling service
+```
+
+### Class & Interface Naming
+- **Classes**: PascalCase (e.g., `StateComputer`, `DatabaseService`)
+- **Interfaces**: PascalCase (e.g., `LLMProvider`, `TaskContext`)
+- **Types**: PascalCase (e.g., `ComputedState`, `AgentRequest`)
+- **Variables/Functions**: camelCase (e.g., `computeState`, `processRequest`)
+
+### Import Path Standards
+```typescript
+// ✅ CORRECT - kebab-case file paths
+import { StateComputer } from '../services/state-computer';
+import { LLMProvider } from '../services/llm-provider-interface';
+import { ToolChain } from '../services/tool-chain';
+
+// ❌ INCORRECT - mixed case
+import { StateComputer } from '../services/StateComputer';
+import { LLMProvider } from '../services/LLMProvider';
+```
+
+### Agent Naming Conventions
+```
+agents/
+├── AchievementTracker.ts         # Domain-specific PascalCase
+├── BusinessDiscovery.ts          # Domain-specific PascalCase
+├── ComplianceAnalyzer.ts         # Domain-specific PascalCase
+├── ProfileCollector.ts           # Domain-specific PascalCase
+└── base/
+    ├── Agent.ts                   # Base classes in PascalCase
+    └── BaseA2AAgent.ts           # Base classes in PascalCase
+```
+
+**RULE**: Services use kebab-case files, Agents use PascalCase files
+
+### Test File Naming
+```
+✅ CORRECT:
+- state-computer.test.ts          # Matches service file name
+- AchievementTracker.test.ts      # Matches agent file name
+- __tests__/integration.test.ts   # Test directory structure
+
+✅ Jest Mock Paths:
+jest.mock('../services/state-computer');
+jest.mock('../services/real-llm-provider');
+```
+
+### Why These Conventions?
+1. **kebab-case for services**: Follows Node.js ecosystem standards
+2. **PascalCase for agents**: Reflects class-based domain entities
+3. **Consistency**: Reduces cognitive load and import errors
+4. **Tooling**: Better IDE autocomplete and file navigation
+
 ### Standard Development Cycle
 ```bash
 # 1. Create feature branch
