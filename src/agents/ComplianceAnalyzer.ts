@@ -118,6 +118,7 @@ export class ComplianceAnalyzer extends Agent {
       return {
         status: 'needs_input',
         data: {
+          requirements: complianceCalendar.requirements || [],
           complianceCalendar,
           riskAssessment,
           businessProfile

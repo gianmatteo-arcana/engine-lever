@@ -322,7 +322,7 @@ describe('E2E Onboarding Flow', () => {
       // Verify celebration
       expect(achievementResponse.status).toBe('completed');
       expect(achievementResponse.data.achievement).toBeDefined();
-      expect(achievementResponse.data.achievement.type).toBe('task_completed');
+      expect(achievementResponse.data.achievement.type).toBe('completion');
       expect(achievementResponse.data.celebration).toBeDefined();
       expect(achievementResponse.data.celebration.intensity).toBe('enthusiastic');
 

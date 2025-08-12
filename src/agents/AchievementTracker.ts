@@ -71,8 +71,31 @@ export class AchievementTracker extends Agent {
     const requestId = `cel_${Date.now()}`;
     
     try {
-      // Detect achievement from context
-      const achievement = this.detectAchievement(context);
+      // Detect achievement from context or request data
+      let achievement = this.detectAchievement(context);
+      
+      // Also check request data for explicit achievement indicators
+      if (!achievement && request.data) {
+        if (request.data.taskCompleted || request.data.progress === 100) {
+          achievement = {
+            id: 'task_completed',
+            type: 'completion',
+            title: 'Task Completed!',
+            description: request.data.taskType === 'onboarding' 
+              ? 'Welcome aboard! You\'ve completed onboarding!'
+              : 'You\'ve successfully completed your task',
+            progress: 100
+          };
+        } else if (request.data.milestone || request.data.progress === 50) {
+          achievement = {
+            id: 'milestone_reached',
+            type: 'milestone',
+            title: 'Milestone Reached!',
+            description: 'You\'re halfway there!',
+            progress: request.data.progress || 50
+          };
+        }
+      }
       
       if (!achievement) {
         // No achievement to celebrate
@@ -131,7 +154,7 @@ export class AchievementTracker extends Agent {
       this.updateContextProgress(context, progressIncrement);
       
       return {
-        status: 'needs_input',
+        status: 'completed',
         data: {
           achievement,
           celebration: celebrationConfig,

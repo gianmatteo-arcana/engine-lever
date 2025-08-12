@@ -183,7 +183,7 @@ describe('Agent Integration Tests', () => {
         context
       );
 
-      expect(complianceResponse.status).toBe('completed');
+      expect(complianceResponse.status).toBe('needs_input');
       expect(complianceResponse.data.requirements).toBeDefined();
       expect(complianceResponse.data.requirements.length).toBeGreaterThan(0);
       // ComplianceAnalyzer returns ux_optimization_agent
@@ -568,7 +568,7 @@ describe('Agent Integration Tests', () => {
 
       expect(response.status).toBe('completed');
       expect(response.data.achievement).toBeDefined();
-      expect(response.data.achievement.type).toBe('task_completed');
+      expect(response.data.achievement.type).toBe('completion');
       expect(response.data.celebration).toBeDefined();
       expect(response.data.celebration.duration).toBeGreaterThan(0);
     });

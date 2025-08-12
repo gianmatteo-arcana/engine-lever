@@ -74,7 +74,7 @@ describe('AchievementTracker', () => {
 
       const response = await agent.processRequest(request, mockContext);
 
-      expect(response.status).toBe('needs_input');
+      expect(response.status).toBe('completed');
       expect(response.data.achievement).toBeDefined();
       expect(response.data.achievement.type).toBe('completion');
       expect(response.data.achievement.title).toBe('Task Completed!');

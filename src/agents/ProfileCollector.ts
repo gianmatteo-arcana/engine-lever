@@ -353,7 +353,7 @@ export class ProfileCollector extends Agent {
     return {
       id: `profile_collection_${Date.now()}`,
       agentRole: 'profile_collection_agent',
-      suggestedTemplates: ['business_profile_form'],
+      suggestedTemplates: ['profile_form', 'business_profile_form'],
       dataNeeded: formDefinition.map(field => field.id),
       context: {
         userProgress: 45,

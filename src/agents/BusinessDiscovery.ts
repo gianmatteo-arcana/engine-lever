@@ -86,7 +86,7 @@ export class BusinessDiscovery extends Agent {
           data: searchResult.businessData,
           uiRequests: [this.createFoundCard(searchResult.businessData, searchResult.confidence)],
           reasoning: 'Found business in public records, requesting user confirmation',
-          nextAgent: 'profile_collection_agent'
+          nextAgent: 'profile_collector'
         };
 
       } else {
@@ -102,10 +102,13 @@ export class BusinessDiscovery extends Agent {
 
         // Hand off to Profile Collection Agent to ask user
         return {
-          status: 'completed',
-          data: { businessFound: false },
-          reasoning: 'Business not found in public records, profile collection agent should ask user directly',
-          nextAgent: 'profile_collection_agent'
+          status: 'needs_input',
+          data: { 
+            businessFound: false,
+            searchAttempted: true
+          },
+          reasoning: 'Business not found in public records, need user to provide business information',
+          nextAgent: 'profile_collector'
         };
       }
 

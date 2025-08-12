@@ -113,9 +113,9 @@ describe('BusinessDiscovery', () => {
       const response = await agent.processRequest(request, mockContext);
 
       // Should not find business for Gmail addresses typically
-      expect(response.status).toBe('completed');
+      expect(response.status).toBe('needs_input');
       expect(response.data.businessFound).toBe(false);
-      expect(response.nextAgent).toBe('profile_collection_agent');
+      expect(response.nextAgent).toBe('profile_collector');
     });
   });
 
@@ -291,7 +291,7 @@ describe('BusinessDiscovery', () => {
 
       const response = await agent.processRequest(request, mockContext);
 
-      expect(response.status).toBe('completed'); // Should fallback gracefully
+      expect(response.status).toBe('needs_input'); // Should fallback gracefully
       expect(response.data.businessFound).toBe(false);
       
       // Should record the error attempt
@@ -335,7 +335,7 @@ describe('BusinessDiscovery', () => {
       const response = await agent.processRequest(request, mockContext);
 
       expect(response).toHaveProperty('nextAgent');
-      expect(response.nextAgent).toBe('profile_collection_agent');
+      expect(response.nextAgent).toBe('profile_collector');
     });
 
     test('should maintain context completeness progression', async () => {
