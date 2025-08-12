@@ -9,9 +9,7 @@
 import { StateComputer, ComputedState } from '../services/state-computer';
 import { 
   TaskContext, 
-  ContextEntry, 
-  AgentRequest, 
-  AgentResponse 
+  ContextEntry 
 } from '../types/engine-types';
 import { DatabaseService } from '../services/database';
 import { logger } from '../utils/logger';

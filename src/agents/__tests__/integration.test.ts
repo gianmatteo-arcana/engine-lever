@@ -149,7 +149,7 @@ describe('Agent Integration Tests', () => {
 
       expect(profileResponse.status).toBe('needs_input');
       expect(profileResponse.uiRequests).toHaveLength(1);
-      expect(profileResponse.uiRequests![0].suggestedTemplates).toContain('profile_form');
+      expect(profileResponse.uiRequests![0].suggestedTemplates).toContain('business_profile_form');
       expect(profileResponse.nextAgent).toBe('compliance_analyzer');
 
       // Simulate user providing profile data

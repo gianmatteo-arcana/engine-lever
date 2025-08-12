@@ -132,11 +132,38 @@ export class StateComputer {
       case 'data_collected':
       case 'user_data_provided':
       case 'public_records_found':
+        // Deep merge new data into state
+        this.deepMerge(newState.data, event.data);
+        newState.completeness = this.calculateDataCompleteness(newState.data);
+        break;
+        
+      case 'business_search_initiated':
+        newState.data.searchQuery = event.data.searchQuery;
+        newState.data.email = event.data.email;
+        newState.phase = 'discovery';
+        newState.completeness = this.calculateDataCompleteness(newState.data);
+        break;
+        
       case 'business_found':
+        // Deep merge new data into state
+        this.deepMerge(newState.data, event.data);
+        newState.phase = 'profile_collection';
+        // Update completeness based on data
+        newState.completeness = this.calculateDataCompleteness(newState.data);
+        break;
+        
       case 'profile_collected':
+        // Deep merge new data into state
+        this.deepMerge(newState.data, event.data);
+        newState.phase = 'compliance_analysis';
+        // Update completeness based on data
+        newState.completeness = this.calculateDataCompleteness(newState.data);
+        break;
+        
       case 'requirements_identified':
         // Deep merge new data into state
         this.deepMerge(newState.data, event.data);
+        newState.phase = 'completion';
         // Update completeness based on data
         newState.completeness = this.calculateDataCompleteness(newState.data);
         break;

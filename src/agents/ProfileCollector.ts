@@ -106,7 +106,7 @@ export class ProfileCollector extends Agent {
         },
         uiRequests: [uiRequest],
         reasoning: 'Generated optimized profile collection form with smart defaults',
-        nextAgent: 'entity_compliance_agent'
+        nextAgent: 'compliance_analyzer'
       };
 
     } catch (error: any) {

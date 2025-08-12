@@ -492,7 +492,7 @@ describe('ProfileCollector', () => {
       const response = await agent.processRequest(request, mockContext);
 
       expect(response).toHaveProperty('nextAgent');
-      expect(response.nextAgent).toBe('entity_compliance_agent');
+      expect(response.nextAgent).toBe('compliance_analyzer');
     });
 
     test('should maintain context progression', async () => {
