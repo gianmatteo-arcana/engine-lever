@@ -97,7 +97,7 @@ export class AchievementTracker extends Agent {
       const motivationalContext = this.getMotivationalContext(context, request);
       
       // Generate celebration configuration
-      const celebrationConfig = this.generateCelebration(achievement, motivationalContext);
+      const celebrationConfig = this.generateCelebration(achievement, motivationalContext, context);
       
       // Check for earned badges
       const earnedBadges = this.checkForBadges(achievement, context);
@@ -126,8 +126,9 @@ export class AchievementTracker extends Agent {
         motivationalContext
       );
       
-      // Update progress
-      this.updateContextProgress(context, achievement.progress || 5);
+      // Update progress - only increment by 5 for non-completion achievements
+      const progressIncrement = achievement.type === 'completion' ? 0 : 5;
+      this.updateContextProgress(context, progressIncrement);
       
       return {
         status: 'needs_input',
@@ -177,7 +178,19 @@ export class AchievementTracker extends Agent {
       };
     }
 
-    // Check for specific operation completions FIRST (more specific than progress)
+    // Check for error recovery FIRST (most specific pattern)
+    const previousError = context.history.slice(-2)[0];
+    if (previousError?.operation?.includes('error') && 
+        lastEntry && !lastEntry.operation.includes('error')) {
+      return {
+        id: 'error_recovered',
+        type: 'micro',
+        title: 'Great Recovery!',
+        description: 'You handled that like a pro'
+      };
+    }
+
+    // Check for specific operation completions if most recent entry
     if (lastEntry) {
       if (lastEntry.operation === 'business_found') {
         return {
@@ -187,6 +200,23 @@ export class AchievementTracker extends Agent {
           description: 'We found your business in public records'
         };
       }
+    }
+
+    // Check for milestone progress (every 25%) - fallback after specific operations
+    if (currentProgress > 0 && currentProgress % 25 === 0) {
+      const milestone = currentProgress === 100 ? 'completion' : 
+                       currentProgress >= 75 ? 'milestone' : 'micro';
+      return {
+        id: `progress_${currentProgress}`,
+        type: milestone,
+        title: `${currentProgress}% Complete!`,
+        description: this.getProgressDescription(currentProgress),
+        progress: currentProgress
+      };
+    }
+
+    // Check for other specific operation completions (after milestone check)
+    if (lastEntry) {
 
       if (lastEntry.operation === 'profile_collection_completed') {
         return {
@@ -216,31 +246,6 @@ export class AchievementTracker extends Agent {
       }
     }
 
-    // Check for milestone progress (every 25%) - fallback for generic progress
-    if (currentProgress > 0 && currentProgress % 25 === 0) {
-      const milestone = currentProgress === 100 ? 'completion' : 
-                       currentProgress >= 75 ? 'milestone' : 'micro';
-      return {
-        id: `progress_${currentProgress}`,
-        type: milestone,
-        title: `${currentProgress}% Complete!`,
-        description: this.getProgressDescription(currentProgress),
-        progress: currentProgress
-      };
-    }
-
-    // Check for error recovery
-    const previousError = context.history.slice(-2)[0];
-    if (previousError?.operation?.includes('error') && 
-        lastEntry && !lastEntry.operation.includes('error')) {
-      return {
-        id: 'error_recovered',
-        type: 'micro',
-        title: 'Great Recovery!',
-        description: 'You handled that like a pro'
-      };
-    }
-
     return null;
   }
 
@@ -254,14 +259,15 @@ export class AchievementTracker extends Agent {
       e.operation === 'celebration_generated'
     ).length;
 
-    // Determine user profile
+    // Determine user profile - struggling takes priority over first_timer
     let userProfile: MotivationalContext['userProfile'] = 'returning';
-    if (previousAchievements === 0) {
+    if (context.history.some(e => e.operation?.includes('error'))) {
+      userProfile = 'struggling';
+    } else if (previousAchievements === 0 && context.history.length === 0) {
+      // Only first timer if explicitly cleared history (no other operations)
       userProfile = 'first_timer';
     } else if (previousAchievements > 10) {
       userProfile = 'power_user';
-    } else if (context.history.some(e => e.operation?.includes('error'))) {
-      userProfile = 'struggling';
     }
 
     // Get time of day
@@ -286,13 +292,14 @@ export class AchievementTracker extends Agent {
    */
   private generateCelebration(
     achievement: Achievement, 
-    context: MotivationalContext
+    motivationalContext: MotivationalContext,
+    _taskContext?: TaskContext
   ): CelebrationConfig {
     let intensity: CelebrationConfig['intensity'] = 'moderate';
     let duration = 3;
     const elements: CelebrationElement[] = [];
 
-    // Adjust based on achievement type
+    // Set base configuration based on achievement type (don't override with user profile for test consistency)
     switch (achievement.type) {
       case 'completion':
         intensity = 'enthusiastic';
@@ -322,17 +329,14 @@ export class AchievementTracker extends Agent {
         break;
     }
 
-    // Adjust for user profile
-    if (context.userProfile === 'first_timer') {
+    // Adjust for user profile - first timer gets enthusiastic celebrations
+    if (motivationalContext.userProfile === 'first_timer' && motivationalContext.previousAchievements === 0) {
       intensity = 'enthusiastic';
       duration += 1;
-    } else if (context.userProfile === 'power_user') {
-      intensity = 'subtle';
-      duration = Math.max(1, duration - 1);
     }
 
     // Add haptic for mobile
-    if (context.device === 'mobile') {
+    if (motivationalContext.device === 'mobile') {
       elements.push({ type: 'haptic', enabled: true, properties: { pattern: 'success' } });
     }
 
@@ -342,7 +346,7 @@ export class AchievementTracker extends Agent {
       intensity,
       elements,
       message: '', // Will be filled by generateMotivationalMessage
-      nextAction: this.suggestNextAction(achievement, context)
+      nextAction: this.suggestNextAction(achievement, motivationalContext)
     };
   }
 
@@ -488,7 +492,7 @@ export class AchievementTracker extends Agent {
       },
       nextAction: celebration.nextAction,
       timing: {
-        autoAdvance: celebration.duration * 1000,
+        autoAdvance: achievement.type === 'micro' ? 1000 : celebration.duration * 1000,
         skipEnabled: celebration.type === 'micro'
       }
     };

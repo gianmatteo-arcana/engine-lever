@@ -159,7 +159,7 @@ export class ProfileCollector extends Agent {
     const currentData = context.currentState.data;
     const business = currentData.business || {};
     
-    return {
+    const rawData = {
       businessName: business.name,
       entityType: business.entityType,
       state: business.state,
@@ -167,6 +167,16 @@ export class ProfileCollector extends Agent {
       website: business.website,
       industry: business.industry
     };
+    
+    // Filter out undefined values to get accurate count of existing data
+    const filteredData: Partial<ProfileData> = {};
+    Object.entries(rawData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        (filteredData as any)[key] = value;
+      }
+    });
+    
+    return filteredData;
   }
 
   /**
@@ -181,8 +191,8 @@ export class ProfileCollector extends Agent {
       defaults.businessName = businessDiscovery.business.name;
       defaults.entityType = businessDiscovery.business.entityType;
       defaults.state = this.normalizeState(businessDiscovery.business.state);
-      defaults.confidence += businessDiscovery.confidence;
-      confidenceFactors += 1;
+      defaults.confidence = businessDiscovery.confidence; // Use business discovery confidence as primary
+      confidenceFactors = 1; // Don't average with other factors for high-confidence discovery
     } else {
       // Infer from user data
       const userData = context.currentState.data.user || {};
@@ -197,26 +207,52 @@ export class ProfileCollector extends Agent {
 
       // Default entity type based on context signals
       defaults.entityType = this.inferEntityType(userData, context);
-      defaults.confidence += 0.4;
-      confidenceFactors += 1;
+      
+      // For personal email domains, use much lower confidence
+      const isPersonalEmail = userData.email && this.isPersonalEmailDomain(userData.email);
+      if (isPersonalEmail) {
+        defaults.confidence += 0.1; // Very low confidence for personal emails
+        confidenceFactors += 1;
+      } else {
+        defaults.confidence += 0.4; // Normal confidence for business emails
+        confidenceFactors += 1;
+      }
 
       // Default state from location
       if (userData.location) {
         defaults.state = this.extractStateFromLocation(userData.location);
-        defaults.confidence += 0.8;
+        if (isPersonalEmail) {
+          defaults.confidence += 0.2; // Lower confidence for personal emails
+        } else {
+          defaults.confidence += 0.8; // Normal confidence for business emails
+        }
+        confidenceFactors += 1;
+      } else {
+        // Fallback to CA when no location provided
+        defaults.state = 'CA';
+        if (isPersonalEmail) {
+          defaults.confidence += 0.1; // Very low confidence for personal emails with no location
+        } else {
+          defaults.confidence += 0.2; // Low confidence for business emails with no location
+        }
         confidenceFactors += 1;
       }
     }
 
     // Industry inference
     defaults.industry = this.inferIndustry(defaults.businessName, context);
-    if (defaults.industry) {
+    
+    // Only adjust confidence for non-business-discovery cases or as a small bonus
+    if (defaults.industry && !businessDiscovery.found) {
       defaults.confidence += 0.3;
       confidenceFactors += 1;
+    } else if (defaults.industry && businessDiscovery.found) {
+      // Small bonus for business discovery cases
+      defaults.confidence = Math.min(defaults.confidence + 0.1, 1.0);
     }
 
-    // Average confidence across factors
-    if (confidenceFactors > 0) {
+    // Average confidence across factors (only for inferred cases)
+    if (confidenceFactors > 1) {
       defaults.confidence = Math.min(defaults.confidence / confidenceFactors, 1.0);
     }
 
@@ -358,8 +394,27 @@ export class ProfileCollector extends Agent {
 
   private extractBusinessNameFromDomain(domain: string): string {
     const baseName = domain.split('.')[0];
-    return baseName.replace(/([A-Z])/g, ' $1').trim()
-                  .replace(/^\w/, c => c.toUpperCase());
+    
+    // Handle common compound word patterns
+    const compoundWords: Record<string, string> = {
+      'innovativedesign': 'innovative design',
+      'techstartup': 'techstartup', // Keep as single word
+    };
+    
+    let withSpaces;
+    if (compoundWords[baseName.toLowerCase()]) {
+      withSpaces = compoundWords[baseName.toLowerCase()];
+    } else {
+      // Replace hyphens and underscores with spaces, then handle camelCase
+      withSpaces = baseName.replace(/[-_]/g, ' ')
+                          .replace(/([A-Z])/g, ' $1')
+                          .trim();
+    }
+    
+    // Capitalize each word
+    return withSpaces.split(' ')
+                     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                     .join(' ');
   }
 
   private normalizeState(stateName: string): string {

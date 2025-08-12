@@ -42,8 +42,8 @@ export class StateComputer {
    * TODO [POST-MVP]: Add state snapshots for performance (PRD:1675)
    */
   static computeState(history: ContextEntry[]): ComputedState {
-    // Only log in development or when explicitly enabled
-    if (process.env.NODE_ENV !== 'test') {
+    // Only log in development or when explicitly enabled  
+    if (process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'production') {
       console.log(`[StateComputer] Computing state from ${history.length} events`);
     }
     
@@ -58,13 +58,13 @@ export class StateComputer {
     // Replay each event in sequence to build current state
     // PRD Line 45: "Current state is computed by replaying history"
     history.forEach((entry, index) => {
-      if (process.env.NODE_ENV !== 'test') {
+      if (process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'production') {
         console.log(`[StateComputer] Replaying event ${index + 1}: ${entry.operation}`);
       }
       state = this.applyEvent(state, entry);
     });
     
-    if (process.env.NODE_ENV !== 'test') {
+    if (process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'production') {
       console.log('[StateComputer] Final computed state:', state);
     }
     return state;

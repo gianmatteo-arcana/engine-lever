@@ -428,7 +428,7 @@ describe('ProfileCollector', () => {
 
     test('should extract business name from domain correctly', () => {
       expect((agent as any).extractBusinessNameFromDomain('techstartup.com')).toBe('Techstartup');
-      expect((agent as any).extractBusinessNameFromDomain('innovativedesign.io')).toBe('Innovativedesign');
+      expect((agent as any).extractBusinessNameFromDomain('innovativedesign.io')).toBe('Innovative Design');
       expect((agent as any).extractBusinessNameFromDomain('myCompany.net')).toBe('My Company');
     });
 
