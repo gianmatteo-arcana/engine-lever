@@ -234,16 +234,18 @@ Response format:
       
       const request: AgentRequest = {
         taskContext: context,
-        operation: phase.goal,
-        parameters: phase.parameters || {},
+        operation: (phase as any).goal || phase.name,
+        parameters: (phase as any).parameters || {},
         llmModel: this.config.llm_config.default_model
       };
       
       const response = await agent.execute(request);
       
       // Append to context
-      context.history.push(response.contextUpdate);
-      context.currentState = this.computeState(context.history);
+      if (response.contextUpdate) {
+        context.history.push(response.contextUpdate);
+        context.currentState = this.computeState(context.history);
+      }
       
       // Save context after each agent
       await this.saveContext(context);
@@ -251,7 +253,9 @@ Response format:
       if (response.status === 'needs_input') {
         return {
           status: 'needs_input',
-          uiRequests: [response.uiRequest!]
+          phase: phase,
+          results: [response],
+          uiRequests: response.uiRequests || []
         };
       }
       
@@ -260,6 +264,7 @@ Response format:
     
     return {
       status: 'completed' as const,
+      phase: phase,
       results
     };
   }
@@ -352,7 +357,7 @@ Return the requests in optimal order with reasoning.
       data: {
         plan
       },
-      reasoning: plan.reasoning
+      reasoning: (plan as any).reasoning || 'Execution plan created'
     };
     
     context.history.push(entry);
@@ -494,7 +499,7 @@ Return the requests in optimal order with reasoning.
       tenantId,
       createdAt: new Date().toISOString(),
       currentState: {
-        status: template.states.initial,
+        status: 'pending',
         phase: 'initialization',
         completeness: 0,
         data: initialData || {}
@@ -554,33 +559,24 @@ Return the requests in optimal order with reasoning.
           }
         ]
       },
-      states: {
-        allowed: ['created', 'gathering_user_info', 'collecting_business_data', 'completed', 'failed'],
-        initial: 'created',
-        terminal: ['completed', 'failed']
-      },
       phases: [
         {
           id: 'user_info',
+          name: 'User Information',
           description: 'Gather user information',
-          prerequisites: [],
-          next: ['business_info']
+          agents: ['data_collection_agent'],
+          maxDuration: 10,
+          canSkip: false
         },
         {
           id: 'business_info',
+          name: 'Business Information',
           description: 'Collect business details',
-          prerequisites: ['user_info'],
-          next: ['complete']
+          agents: ['data_collection_agent'],
+          maxDuration: 15,
+          canSkip: false
         }
-      ],
-      data_schema: {},
-      success_criteria: {
-        required: [
-          'user.firstName != null',
-          'user.email != null',
-          'business.name != null'
-        ]
-      }
+      ]
     };
   }
 }

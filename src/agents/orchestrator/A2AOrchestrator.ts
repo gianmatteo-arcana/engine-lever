@@ -120,7 +120,7 @@ export class A2AOrchestrator extends BaseA2AAgent {
    */
   private async createExecutionPlan(
     task: A2ATask,
-    taskContext: TaskContext
+    taskContext: TaskContext | OnboardingTaskContext
   ): Promise<A2ATaskResult> {
     try {
       // Build prompt for LLM
@@ -195,7 +195,7 @@ export class A2AOrchestrator extends BaseA2AAgent {
    */
   private async delegatePhase(
     task: A2ATask,
-    taskContext: TaskContext
+    taskContext: TaskContext | OnboardingTaskContext
   ): Promise<A2ATaskResult> {
     const { phaseId, planId } = task.input;
     
@@ -281,7 +281,7 @@ export class A2AOrchestrator extends BaseA2AAgent {
    */
   private async monitorProgress(
     task: A2ATask,
-    taskContext: TaskContext
+    taskContext: TaskContext | OnboardingTaskContext
   ): Promise<A2ATaskResult> {
     try {
       // Get all agent contexts
@@ -351,7 +351,7 @@ export class A2AOrchestrator extends BaseA2AAgent {
    */
   private async handleFailure(
     task: A2ATask,
-    taskContext: TaskContext
+    taskContext: TaskContext | OnboardingTaskContext
   ): Promise<A2ATaskResult> {
     const { failureDetails, agentRole, phaseId } = task.input;
 
@@ -360,13 +360,13 @@ export class A2AOrchestrator extends BaseA2AAgent {
       const llmRequest = {
         model: 'gpt-4',
         prompt: JSON.stringify({
-          taskType: taskContext.taskType,
+          taskType: (taskContext as OnboardingTaskContext).taskType || 'unknown',
           currentPhase: phaseId,
           failedAgent: agentRole,
           failureDetails,
           taskContext: {
-            status: taskContext.status,
-            completedPhases: taskContext.completedPhases
+            status: (taskContext as OnboardingTaskContext).status || 'unknown',
+            completedPhases: (taskContext as OnboardingTaskContext).completedPhases || []
           }
         }),
         messages: [
@@ -377,13 +377,13 @@ export class A2AOrchestrator extends BaseA2AAgent {
           { 
             role: 'user' as const, 
             content: JSON.stringify({
-              taskType: taskContext.taskType,
+              taskType: (taskContext as OnboardingTaskContext).taskType || 'unknown',
               currentPhase: phaseId,
               failedAgent: agentRole,
               failureDetails,
               taskContext: {
-                status: taskContext.status,
-                completedPhases: taskContext.completedPhases
+                status: (taskContext as OnboardingTaskContext).status || 'unknown',
+                completedPhases: (taskContext as OnboardingTaskContext).completedPhases || []
               }
             })
           }
@@ -458,15 +458,15 @@ Always respond with valid JSON following the execution plan schema.`;
   /**
    * Build planning prompt based on task context
    */
-  private buildPlanningPrompt(taskContext: TaskContext): string {
+  private buildPlanningPrompt(taskContext: TaskContext | OnboardingTaskContext): string {
     const goals = (taskContext as any).task_goals || [];
     const requirements = (taskContext as any).required_inputs || {};
 
     return `Create an execution plan for the following task:
 
-Task Type: ${taskContext.taskType}
-Task ID: ${taskContext.taskId}
-Current Status: ${taskContext.status}
+Task Type: ${(taskContext as OnboardingTaskContext).taskType || 'unknown'}
+Task ID: ${(taskContext as OnboardingTaskContext).taskId || taskContext.contextId}
+Current Status: ${(taskContext as OnboardingTaskContext).status || taskContext.currentState.status}
 
 Task Goals:
 ${JSON.stringify(goals, null, 2)}
@@ -475,7 +475,7 @@ Required Inputs:
 ${JSON.stringify(requirements, null, 2)}
 
 Current Context:
-${JSON.stringify(taskContext.sharedContext, null, 2)}
+${JSON.stringify((taskContext as OnboardingTaskContext).sharedContext || taskContext.currentState.data, null, 2)}
 
 Create a detailed execution plan with:
 1. Logical phases to achieve all goals

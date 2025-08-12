@@ -56,7 +56,7 @@ router.post('/initiate', requireAuth, async (req: AuthenticatedRequest, res) => 
     const businessId = `biz_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Define onboarding goals
-    const _goals: TaskGoal[] = [
+    const goals: TaskGoal[] = [
       {
         id: 'collect_business_info',
         description: 'Collect basic business information',
@@ -99,10 +99,33 @@ router.post('/initiate', requireAuth, async (req: AuthenticatedRequest, res) => 
     
     // Create task context
     const taskContext: OnboardingTaskContext = {
+      // Base TaskContext fields
+      contextId: taskId,
+      taskTemplateId: 'user_onboarding',
+      tenantId: businessId,
+      createdAt: new Date().toISOString(),
+      currentState: {
+        status: 'gathering_user_info',
+        phase: 'initialization',
+        completeness: 0,
+        data: {}
+      },
+      history: [],
+      templateSnapshot: {
+        id: 'user_onboarding',
+        version: '1.0',
+        metadata: {
+          name: 'User Onboarding',
+          description: 'Onboard new business',
+          category: 'onboarding'
+        },
+        goals: {
+          primary: goals
+        }
+      },
+      // OnboardingTaskContext specific fields
       taskId,
       taskType: 'onboarding',
-      userId,
-      userToken,
       tenantContext,
       status: 'active',
       currentPhase: 'initialization',
@@ -128,15 +151,7 @@ router.post('/initiate', requireAuth, async (req: AuthenticatedRequest, res) => 
           lastActiveAt: new Date().toISOString(),
           source: input.source
         }
-      },
-      agentContexts: {},
-      auditTrail: [{
-        timestamp: new Date().toISOString(),
-        action: 'onboarding_initiated',
-        data: { businessName: input.businessName }
-      }],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      }
     };
     
     // Save task to database

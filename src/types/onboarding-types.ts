@@ -229,14 +229,32 @@ export interface OrchestratorConfig {
 // Onboarding-specific task context
 export interface OnboardingTaskContext extends TaskContext {
   taskType: 'onboarding';
+  taskId?: string;
   tenantContext: TenantContext;
-  sharedContext: TaskContext['currentState']['data'] & {
+  status?: 'active' | 'paused_for_input' | 'completed' | 'failed';
+  currentPhase?: string;
+  completedPhases?: string[];
+  sharedContext?: TaskContext['currentState']['data'] & {
     onboarding?: {
       currentStage: number;
       completedStages: number[];
       startedAt: string;
       lastActiveAt: string;
       source: 'google' | 'email' | 'invite';
+    };
+    user?: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      googleId?: string;
+    };
+    business?: {
+      id?: string;
+      name?: string;
+      entityType?: string;
+      state?: string;
+      ein?: string;
+      formationDate?: string;
     };
   };
 }

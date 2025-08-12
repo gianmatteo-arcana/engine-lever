@@ -8,6 +8,7 @@ import { DatabaseService } from '../../../services/database';
 import { LLMProvider } from '../../../services/llm-provider';
 import { logger } from '../../../utils/logger';
 import { TaskContext } from '../../../types/engine-types';
+import { OnboardingTaskContext } from '../../../types/onboarding-types';
 
 // Mock dependencies
 jest.mock('../../../services/database');
@@ -52,17 +53,41 @@ describe('A2AOrchestrator', () => {
   });
 
   describe('create_execution_plan', () => {
-    const mockTaskContext: TaskContext = {
+    const mockTaskContext: OnboardingTaskContext = {
+      // Base TaskContext fields
+      contextId: 'task-123',
+      taskTemplateId: 'user_onboarding',
+      tenantId: 'business-123',
+      createdAt: new Date().toISOString(),
+      currentState: {
+        status: 'gathering_user_info',
+        phase: 'initial',
+        completeness: 0,
+        data: {}
+      },
+      history: [],
+      templateSnapshot: {
+        id: 'user_onboarding',
+        version: '1.0',
+        metadata: {
+          name: 'User Onboarding',
+          description: 'Onboard new business',
+          category: 'onboarding'
+        },
+        goals: {
+          primary: []
+        }
+      },
+      // OnboardingTaskContext specific fields
       taskId: 'task-123',
       taskType: 'onboarding',
-      userId: 'user-123',
-      userToken: 'test-token',
       tenantContext: {
         businessId: 'business-123',
         sessionUserId: 'user-123',
         dataScope: 'business',
         allowedAgents: ['orchestrator'],
-        isolationLevel: 'strict'
+        isolationLevel: 'strict',
+        userToken: 'test-token'
       },
       status: 'active',
       currentPhase: 'initial',
@@ -77,11 +102,7 @@ describe('A2AOrchestrator', () => {
           name: 'Test Business'
         },
         metadata: {}
-      },
-      agentContexts: {},
-      auditTrail: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      }
     };
 
     const mockTask: A2ATask = {

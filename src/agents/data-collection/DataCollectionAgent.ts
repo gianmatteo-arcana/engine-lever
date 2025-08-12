@@ -113,7 +113,7 @@ export class DataCollectionAgent extends BaseA2AAgent {
       const requiredFields = this.determineRequiredFields(phaseGoals);
       
       // Check what data we already have
-      const existingData = taskContext.sharedContext.business || {};
+      const existingData = (taskContext as any).sharedContext?.business || taskContext.currentState.data;
       const missingFields = this.identifyMissingFields(requiredFields, existingData);
 
       if (missingFields.length === 0) {

@@ -180,7 +180,7 @@ export class ResilientOrchestrator extends BaseAgent {
     unavailable: string[];
     userInputsNeeded: UserRequest[];
   }> {
-    const requiredServices = this.getRequiredServices(context.templateId);
+    const requiredServices = this.getRequiredServices(context.templateId || 'default');
     const available: string[] = [];
     const unavailable: string[] = [];
     const userInputsNeeded: UserRequest[] = [];

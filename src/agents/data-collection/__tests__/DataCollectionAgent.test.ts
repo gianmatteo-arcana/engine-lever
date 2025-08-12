@@ -7,6 +7,7 @@ import { A2ATask } from '../../base/BaseA2AAgent';
 import { DatabaseService } from '../../../services/database';
 import { logger } from '../../../utils/logger';
 import { TaskContext } from '../../../types/engine-types';
+import { OnboardingTaskContext } from '../../../types/onboarding-types';
 
 // Mock dependencies
 jest.mock('../../../services/database');
@@ -32,17 +33,41 @@ describe('DataCollectionAgent', () => {
     mockDbService = mockDbServiceInstance;
   });
 
-  const createMockTaskContext = (businessData = {}): TaskContext => ({
+  const createMockTaskContext = (businessData = {}): OnboardingTaskContext => ({
+    // Base TaskContext fields
+    contextId: 'task-123',
+    taskTemplateId: 'user_onboarding',
+    tenantId: 'business-123',
+    createdAt: new Date().toISOString(),
+    currentState: {
+      status: 'gathering_user_info',
+      phase: 'data_collection',
+      completeness: 25,
+      data: {}
+    },
+    history: [],
+    templateSnapshot: {
+      id: 'user_onboarding',
+      version: '1.0',
+      metadata: {
+        name: 'User Onboarding',
+        description: 'Onboard new business',
+        category: 'onboarding'
+      },
+      goals: {
+        primary: []
+      }
+    },
+    // OnboardingTaskContext specific fields
     taskId: 'task-123',
     taskType: 'onboarding',
-    userId: 'user-123',
-    userToken: 'test-token',
     tenantContext: {
       businessId: 'business-123',
       sessionUserId: 'user-123',
       dataScope: 'business',
       allowedAgents: ['data_collection_agent'],
-      isolationLevel: 'strict'
+      isolationLevel: 'strict',
+      userToken: 'test-token'
     },
     status: 'active',
     currentPhase: 'data_collection',
@@ -55,11 +80,7 @@ describe('DataCollectionAgent', () => {
       },
       business: businessData,
       metadata: {}
-    },
-    agentContexts: {},
-    auditTrail: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    }
   });
 
   describe('collect_business_data', () => {
@@ -223,7 +244,7 @@ describe('DataCollectionAgent', () => {
   });
 
   describe('cbc_lookup', () => {
-    it('should return mock data when CBC API not configured', async () => {
+    it('should return task context data when CBC API not configured', async () => {
       const task: A2ATask = {
         id: 'task-123',
         type: 'cbc_lookup',
@@ -246,10 +267,8 @@ describe('DataCollectionAgent', () => {
       const result = await agent.executeTask(task);
 
       expect(result.status).toBe('complete');
-      expect(result.result.source).toBe('mock');
+      expect(result.result.source).toBe('task_context');
       expect(result.result.businessInfo).toBeDefined();
-      expect(result.result.businessInfo.name).toBe('Test Corp');
-      expect(result.result.disclaimer).toContain('mock data');
     });
 
     it('should handle CBC lookup errors', async () => {

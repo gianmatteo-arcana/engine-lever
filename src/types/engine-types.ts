@@ -89,6 +89,9 @@ export interface TaskGoal {
   id: string;
   description: string;
   required: boolean;
+  completed?: boolean;
+  completedBy?: string;
+  completedAt?: string;
   successCriteria?: string[];
   metadata?: Record<string, any>;
 }
@@ -101,10 +104,10 @@ export interface TaskGoal {
  * Request sent to an agent for processing
  */
 export interface AgentRequest {
-  requestId: string;
-  agentRole: string;
-  instruction: string;
-  data: Record<string, any>;
+  requestId?: string;
+  agentRole?: string;
+  instruction?: string;
+  data?: Record<string, any>;
   context?: {
     urgency?: 'low' | 'medium' | 'high' | 'critical';
     deviceType?: 'mobile' | 'desktop' | 'tablet';
@@ -274,9 +277,11 @@ export interface ExecutionPhase {
  * Phase execution result
  */
 export interface PhaseResult {
-  phase: string;
-  status: 'completed' | 'failed' | 'partial';
+  phase: string | ExecutionPhase;
+  status: 'completed' | 'failed' | 'partial' | 'needs_input';
   results: AgentResponse[];
+  uiRequests?: UIRequest[];
+  error?: any;
 }
 
 /**

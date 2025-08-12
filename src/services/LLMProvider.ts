@@ -101,7 +101,8 @@ export class LLMProvider {
       return content;
     } catch (error) {
       console.error('[LLMProvider] OpenAI error:', error);
-      throw new Error(`OpenAI API error: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`OpenAI API error: ${message}`);
     }
   }
   
@@ -137,7 +138,8 @@ export class LLMProvider {
       return content;
     } catch (error) {
       console.error('[LLMProvider] Anthropic error:', error);
-      throw new Error(`Anthropic API error: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Anthropic API error: ${message}`);
     }
   }
   

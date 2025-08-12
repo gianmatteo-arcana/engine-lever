@@ -55,7 +55,8 @@ export class ConfigurationManager {
       
       return template;
     } catch (error) {
-      throw new Error(`Failed to load template ${templateId}: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to load template ${templateId}: ${message}`);
     }
   }
 
@@ -91,7 +92,8 @@ export class ConfigurationManager {
       
       return config;
     } catch (error) {
-      throw new Error(`Failed to load agent config ${agentId}: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to load agent config ${agentId}: ${message}`);
     }
   }
 
