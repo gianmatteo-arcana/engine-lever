@@ -11,12 +11,12 @@
 
 import { logger } from '../../utils/logger';
 import { DatabaseService } from '../../services/database';
+import { TaskContext } from '../../types/engine-types';
 import { 
-  TaskContext, 
   TenantContext, 
   UIAugmentationRequest,
   UIAugmentationResponse 
-} from '../../types/task-context';
+} from '../../types/onboarding-types';
 
 // A2A Task interface (compatible with future A2A protocol)
 export interface A2ATask {

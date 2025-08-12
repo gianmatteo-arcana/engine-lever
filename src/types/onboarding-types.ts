@@ -1,7 +1,9 @@
 /**
- * Task Context Types for Onboarding
- * Based on PRD-new-user-onboarding-final.md
+ * Onboarding-specific types that extend the core engine types
+ * These types are specific to the onboarding flow and multi-tenant features
  */
+
+import { TaskContext } from './engine-types';
 
 // Multi-tenant security context
 export interface TenantContext {
@@ -11,71 +13,7 @@ export interface TenantContext {
   allowedAgents: string[];     // Which agents can access this task
   tenantName?: string;         // For audit trails
   isolationLevel: 'strict' | 'standard'; // Compliance requirement
-  userToken?: string;          // JWT for RLS enforcement (passed separately in TaskContext)
-}
-
-// Generic task context that travels with the task
-export interface TaskContext {
-  // Core task identification
-  taskId: string;
-  taskType: string; // 'onboarding', 'soi-filing', 'renewal', etc.
-  userId: string;   // Business owner/primary user
-  userToken: string; // JWT for RLS enforcement
-  
-  // Multi-tenant security context
-  tenantContext: TenantContext;
-  
-  // Task state
-  status: 'active' | 'paused_for_input' | 'completed' | 'failed';
-  currentPhase: string;
-  completedPhases: string[];
-  
-  // Shared data accessible to all agents (scoped to tenant)
-  sharedContext: {
-    user?: {
-      firstName?: string;
-      lastName?: string;
-      email?: string;
-      googleId?: string;
-    };
-    business?: {
-      id?: string;
-      name?: string;
-      entityType?: string;
-      state?: string;
-      ein?: string;
-      formationDate?: string; // can be unstructured data
-    };
-    metadata: Record<string, any>;
-  };
-  
-  // Agent-specific subcontexts (tenant-isolated)
-  agentContexts: {
-    [agentRole: string]: {
-      state: any;           // Agent's working memory
-      requirements: any[];  // What agent needs
-      findings: any[];      // What agent discovered
-      deliverables: any[];  // What agent produced
-    };
-  };
-  
-  // Currently active UI requests (max 1 per agent)
-  activeUIRequests?: {
-    [agentRole: string]: UIAugmentationRequest;
-  };
-  
-  // Audit trail
-  auditTrail: Array<{
-    timestamp: string;
-    action: string;
-    agent?: string;
-    data?: any;
-  }>;
-  
-  // Timestamps
-  createdAt: string;
-  updatedAt: string;
-  completedAt?: string;
+  userToken?: string;          // JWT for RLS enforcement
 }
 
 // UI Augmentation Request from agents
@@ -267,16 +205,6 @@ export interface UIAugmentationResponse {
   };
 }
 
-// Task goals (declarative)
-export interface TaskGoal {
-  id: string;
-  description: string;
-  required: boolean;
-  completed?: boolean;
-  completedBy?: string; // agent role
-  completedAt?: string;
-}
-
 // Required inputs tracking
 export interface RequiredInput {
   fieldName: string;
@@ -301,7 +229,8 @@ export interface OrchestratorConfig {
 // Onboarding-specific task context
 export interface OnboardingTaskContext extends TaskContext {
   taskType: 'onboarding';
-  sharedContext: TaskContext['sharedContext'] & {
+  tenantContext: TenantContext;
+  sharedContext: TaskContext['currentState']['data'] & {
     onboarding?: {
       currentStage: number;
       completedStages: number[];

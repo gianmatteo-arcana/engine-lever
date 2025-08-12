@@ -6,7 +6,7 @@ import { DataCollectionAgent } from '../DataCollectionAgent';
 import { A2ATask } from '../../base/BaseA2AAgent';
 import { DatabaseService } from '../../../services/database';
 import { logger } from '../../../utils/logger';
-import { TaskContext } from '../../../types/task-context';
+import { TaskContext } from '../../../types/engine-types';
 
 // Mock dependencies
 jest.mock('../../../services/database');

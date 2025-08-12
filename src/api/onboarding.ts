@@ -11,11 +11,11 @@ import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { DatabaseService } from '../services/database';
 import { A2AOrchestrator } from '../agents/orchestrator/A2AOrchestrator';
 import { z } from 'zod';
+import { TaskGoal } from '../types/engine-types';
 import { 
   OnboardingTaskContext,
-  TenantContext,
-  TaskGoal
-} from '../types/task-context';
+  TenantContext
+} from '../types/onboarding-types';
 
 const router = Router();
 

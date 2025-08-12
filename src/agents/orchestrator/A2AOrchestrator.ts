@@ -14,9 +14,9 @@ import { RealLLMProvider } from '../../services/RealLLMProvider';
 import { logger } from '../../utils/logger';
 import { 
   TaskContext, 
-  OnboardingTaskContext, 
   TaskGoal
-} from '../../types/task-context';
+} from '../../types/engine-types';
+import { OnboardingTaskContext } from '../../types/onboarding-types';
 import { TaskOrchestrationPlanRecord } from '../../services/database';
 import { emitTaskEvent } from '../../services/task-events';
 

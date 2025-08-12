@@ -7,7 +7,7 @@ import { A2ATask } from '../../base/BaseA2AAgent';
 import { DatabaseService } from '../../../services/database';
 import { LLMProvider } from '../../../services/llm-provider';
 import { logger } from '../../../utils/logger';
-import { TaskContext } from '../../../types/task-context';
+import { TaskContext } from '../../../types/engine-types';
 
 // Mock dependencies
 jest.mock('../../../services/database');

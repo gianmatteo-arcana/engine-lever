@@ -10,11 +10,11 @@
 
 import { BaseA2AAgent, A2ATask, A2ATaskResult } from '../base/BaseA2AAgent';
 import { logger } from '../../utils/logger';
+import { TaskContext } from '../../types/engine-types';
 import { 
-  TaskContext,
   UIAugmentationRequest,
   FormField
-} from '../../types/task-context';
+} from '../../types/onboarding-types';
 
 interface BusinessData {
   businessName?: string;
