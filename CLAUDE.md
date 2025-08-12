@@ -379,5 +379,111 @@ git push origin main  # Auto-deploys
 3. **Maintain Tests**: Never commit without passing tests
 4. **Document Decisions**: Update this file with architectural changes
 
-Last Updated: 2025-08-03
+Last Updated: 2025-08-12
 Current Focus: CA Statement of Information (SOI) Feature Implementation
+
+## 🏗️ CLAUDE.md ARCHITECTURAL SUPPLEMENT
+
+### **MANDATORY DATABASE ACCESS PATTERNS - BACKEND-CENTRIC ARCHITECTURE**
+
+**CRITICAL: This section defines the ONLY acceptable patterns for database access. ANY deviation is a violation.**
+
+#### 🔴 THE SINGLE SOURCE OF TRUTH
+
+**Frontend → Backend API → Database (service role only)**
+
+This is the ONLY acceptable data flow. No exceptions.
+
+#### ✅ CORRECT PATTERNS (MANDATORY)
+
+1. **Backend Database Access**
+   ```typescript
+   // CORRECT: Backend uses service role
+   const dbService = DatabaseService.getInstance();
+   const result = await dbService.query(
+     'SELECT * FROM tasks WHERE user_id = $1',
+     [userId]
+   );
+   ```
+
+2. **Authentication Validation**
+   ```typescript
+   // CORRECT: Backend validates tokens
+   const userId = await validateToken(req.headers.authorization);
+   const userClient = await getUserClient(token);
+   ```
+
+3. **Universal API Endpoints**
+   ```typescript
+   // CORRECT: Universal task endpoint
+   router.post('/api/tasks', async (req, res) => {
+     const { taskType, title, metadata } = req.body;
+     // Handle ALL task types with same endpoint
+   });
+   ```
+
+#### ❌ FORBIDDEN PATTERNS (NEVER USE)
+
+1. **Task-Specific Endpoints**
+   ```typescript
+   // FORBIDDEN: Task-specific endpoints
+   router.post('/api/onboarding-tasks');  // NO!
+   router.post('/api/compliance-tasks');  // NO!
+   ```
+
+2. **User Token Database Clients**
+   ```typescript
+   // FORBIDDEN: Creating user-scoped clients
+   const userClient = createClient(userToken);  // NO!
+   ```
+
+3. **Direct RLS Dependency**
+   ```typescript
+   // FORBIDDEN: Relying on RLS as primary security
+   // Always validate at backend level first
+   ```
+
+#### 📋 ARCHITECTURAL RULES
+
+1. **Service Role Pattern**
+   - Backend ALWAYS uses service role key
+   - Backend validates user tokens
+   - Backend enforces access control
+   - Database RLS is defense-in-depth, not primary security
+
+2. **Universal APIs Only**
+   - ✅ `/api/tasks` - handles ALL task types
+   - ❌ `/api/onboarding-tasks` - task-specific endpoints forbidden
+   - All variation handled through parameters, not endpoints
+
+3. **Migration-Driven Schema**
+   - Backend discovers schema from database
+   - Never hardcode schema assumptions
+   - Handle schema evolution gracefully
+
+#### 🔍 VALIDATION CHECKLIST
+
+Before ANY commit involving data access:
+
+- [ ] All endpoints are universal (not task-specific)
+- [ ] Backend uses DatabaseService.getInstance()
+- [ ] User tokens validated before operations
+- [ ] No user token clients created
+- [ ] Access control enforced in backend
+- [ ] Schema discovered, not hardcoded
+
+#### 💡 WHY THIS ARCHITECTURE
+
+1. **Single Source of Truth**: Backend owns all business logic
+2. **Security**: Service role + backend validation > RLS alone
+3. **Maintainability**: One place to update when schema changes
+4. **Consistency**: One pattern for all data access
+5. **Flexibility**: Can change database without frontend impact
+
+#### 🛡️ ENFORCEMENT
+
+- **Code Reviews**: Reject PRs with user token clients
+- **Testing**: Verify service role usage
+- **Monitoring**: Track database access patterns
+
+**Remember: Backend is the gatekeeper. Frontend is just the UI.**
