@@ -169,6 +169,116 @@ router.get('/:taskId/status', requireAuth, async (req: AuthenticatedRequest, res
 });
 
 /**
+ * POST /api/tasks
+ * 
+ * Universal task creation endpoint - works for ANY task type
+ * This replaces all task-specific creation edge functions
+ */
+router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { taskType, title, description, metadata, templateId } = req.body;
+    const userToken = req.userToken!;
+    const userId = req.userId!;
+    
+    logger.info('Creating universal task', { taskType, userId, templateId });
+    
+    const dbService = DatabaseService.getInstance();
+    
+    // Create task using universal pattern
+    const taskId = await dbService.createTask(userToken, {
+      task_type: taskType,
+      title: title || `${taskType} Task`,
+      description: description || `Created via universal API`,
+      status: 'pending',
+      priority: 'medium',
+      metadata: metadata || {},
+      template_id: templateId
+    });
+    
+    // Emit task creation event
+    await emitTaskEvent('task_created', {
+      taskId,
+      taskType,
+      templateId
+    }, {
+      userToken,
+      actorType: 'user',
+      reasoning: 'Universal task creation'
+    });
+    
+    logger.info('Universal task created', { taskId, taskType });
+    
+    res.status(201).json({
+      success: true,
+      taskId,
+      taskType,
+      message: 'Task created successfully'
+    });
+  } catch (error) {
+    logger.error('Failed to create task', error);
+    res.status(500).json({ error: 'Failed to create task' });
+  }
+});
+
+/**
+ * PUT /api/tasks/:taskId
+ * 
+ * Universal task update endpoint - works for ANY task type  
+ * This replaces all task-specific update edge functions
+ */
+router.put('/:taskId', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { taskId } = req.params;
+    const { status, metadata, step, formData, hasUnsavedChanges } = req.body;
+    const userToken = req.userToken!;
+    
+    logger.info('Updating universal task', { taskId, status, step });
+    
+    const dbService = DatabaseService.getInstance();
+    
+    // Verify user owns this task
+    const task = await dbService.getTask(userToken, taskId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    // Update task metadata (handles onboarding state and any other task type)
+    const updatedMetadata = {
+      ...task.metadata,
+      ...metadata,
+      ...(step && { currentStep: step }),
+      ...(formData && { formData }),
+      ...(hasUnsavedChanges !== undefined && { hasUnsavedChanges }),
+      lastUpdated: new Date().toISOString()
+    };
+    
+    await dbService.updateTask(userToken, taskId, {
+      ...(status && { status }),
+      metadata: updatedMetadata
+    });
+    
+    // Emit task update event
+    await emitTaskEvent('task_updated', {
+      taskId,
+      changes: { status, step, hasFormData: !!formData }
+    }, {
+      userToken,
+      actorType: 'user',
+      reasoning: 'Universal task update'
+    });
+    
+    res.json({
+      success: true,
+      taskId,
+      message: 'Task updated successfully'
+    });
+  } catch (error) {
+    logger.error('Failed to update task', error);
+    res.status(500).json({ error: 'Failed to update task' });
+  }
+});
+
+/**
  * GET /api/tasks
  * 
  * List all tasks for the authenticated user
@@ -181,7 +291,7 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
     logger.info('Listing tasks for user', { userId });
     
     const dbService = DatabaseService.getInstance();
-    const tasks = await dbService.getTasks(userToken);
+    const tasks = await dbService.getUserTasks(userToken);
     
     res.json({
       tasks: tasks.map((task: any) => ({
@@ -192,7 +302,8 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
         status: task.status,
         priority: task.priority,
         createdAt: task.created_at,
-        updatedAt: task.updated_at
+        updatedAt: task.updated_at,
+        metadata: task.metadata
       })),
       count: tasks.length
     });
