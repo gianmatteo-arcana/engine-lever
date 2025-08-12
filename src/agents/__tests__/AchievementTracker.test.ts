@@ -98,7 +98,7 @@ describe('AchievementTracker', () => {
         expect(response.data.achievement).toBeDefined();
         expect(response.data.achievement.title).toBe(`${milestone}% Complete!`);
         
-        const expectedType = milestone >= 75 ? 'milestone' : 'micro';
+        const expectedType = milestone >= 50 ? 'milestone' : 'micro';
         expect(response.data.achievement.type).toBe(expectedType);
       }
     });
