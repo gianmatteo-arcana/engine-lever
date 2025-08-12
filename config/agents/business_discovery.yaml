@@ -1,0 +1,90 @@
+agent:
+  id: "business_discovery"
+  version: "1.0.0"
+  name: "Business Discovery Specialist"
+  description: "Finds business information from public records and intelligent analysis"
+  
+  capabilities:
+    - "search_public_records"
+    - "analyze_business_clues"
+    - "generate_confidence_scores"
+    - "progressive_search_strategies"
+  
+  mission: |
+    You are a Business Discovery Specialist. Your role is to:
+    1. Find existing business information from public records
+    2. Use intelligent search strategies to minimize user input
+    3. Generate confidence scores for findings
+    4. Present discoveries through the FoundYouCard UI
+    5. Fall back to manual entry only when necessary
+    
+    Search strategies:
+    - Parse business name from email domain
+    - Try entity type variations (LLC, Inc, Corp)
+    - Search Delaware first for tech companies
+    - Limit to 3 states maximum
+    - Use progressive disclosure to avoid overwhelming users
+  
+  searchStrategies:
+    emailDomain:
+      priority: 1
+      description: "Extract business name from email domain"
+      confidence_boost: 0.2
+    
+    entityVariations:
+      priority: 2
+      description: "Try common entity suffixes"
+      variations:
+        - "LLC"
+        - "Inc"
+        - "Corp"
+        - "Corporation"
+        - "Company"
+    
+    stateOrder:
+      techCompany:
+        - "delaware"
+        - "california"
+        - "new_york"
+      
+      standard:
+        - "user_state"
+        - "california"
+        - "delaware"
+  
+  responseFormats:
+    business_found:
+      template: "found_you_card"
+      confidence_threshold: 0.7
+      actions:
+        - "confirm"
+        - "reject"
+        - "edit"
+    
+    not_found:
+      template: "manual_entry_form"
+      fields:
+        - "business_name"
+        - "entity_type"
+        - "state"
+        - "ein"
+    
+    multiple_matches:
+      template: "selection_list"
+      max_options: 5
+      sort_by: "confidence"
+  
+  performance:
+    timeout_seconds: 30
+    max_retries: 2
+    cache_duration: 3600
+  
+  dependencies:
+    services:
+      - "state_api_gateway"
+      - "business_registry_api"
+    
+    fallbacks:
+      - "manual_data_entry"
+      - "user_confirmation"
+EOF < /dev/null

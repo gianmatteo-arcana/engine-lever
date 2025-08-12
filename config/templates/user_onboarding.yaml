@@ -1,131 +1,138 @@
-# ============================================================================
-# COMPREHENSIVE USER ONBOARDING TASK TEMPLATE
-# EXACTLY matches Unified Onboarding PRD v4.0 (lines 52-144)
-# 
-# This template drives the universal engine to create context-aware onboarding
-# flows that adapt based on discovered user/business context
-# ============================================================================
-
 task_template:
   id: "user_onboarding"
   version: "2.0"
-  
   metadata:
     name: "New User Business Profile Setup"
-    description: "Establish complete business profile for new SmallBizAlly users"
+    description: "Establish complete business profile for SmallBizAlly services"
     category: "onboarding"
-    estimatedDuration: 180  # 3 minutes active time
-    
-  # Pure declarative goals - WHAT we want, not HOW (PRD lines 67-93)
+    estimatedDuration: 180  # seconds
+    priority: "high"
+  
   goals:
     primary:
       - id: "establish_identity"
         description: "Verify user and business identity"
         required: true
-        
-      - id: "determine_structure" 
-        description: "Understand business entity type and jurisdiction"
+        successCriteria:
+          - "User email verified"
+          - "Business name confirmed"
+          - "Business entity type determined"
+      
+      - id: "determine_structure"
+        description: "Understand business entity type and structure"
         required: true
-        
-      - id: "identify_compliance"
-        description: "Determine applicable regulations and deadlines"
+        successCriteria:
+          - "Entity type identified (LLC, Corp, etc.)"
+          - "State of formation known"
+          - "Formation date captured"
+      
+      - id: "collect_compliance_info"
+        description: "Gather necessary compliance information"
         required: true
-        
-      - id: "enable_features"
-        description: "Activate relevant platform capabilities"
+        successCriteria:
+          - "EIN collected or marked as pending"
+          - "Business address verified"
+          - "Industry classification determined"
+      
+      - id: "generate_calendar"
+        description: "Create personalized compliance calendar"
         required: true
+        successCriteria:
+          - "Relevant compliance requirements identified"
+          - "Deadlines calculated"
+          - "Calendar events created"
     
     secondary:
-      - id: "collect_operations"
-        description: "Gather business operational details"
+      - id: "import_existing_data"
+        description: "Import data from existing sources if available"
         required: false
-        
-      - id: "connect_integrations"
-        description: "Link external data sources"
+        successCriteria:
+          - "QuickBooks connection attempted"
+          - "Bank accounts linked if provided"
+      
+      - id: "setup_notifications"
+        description: "Configure notification preferences"
         required: false
+        successCriteria:
+          - "Email notifications enabled"
+          - "SMS preferences set if requested"
   
-  # Success criteria - How we know we're done (PRD lines 95-107)
-  success_criteria:
-    required:
-      - "user.authenticated == true"
-      - "business.name != null"
-      - "business.entityType != null"
-      - "business.jurisdiction != null"
-      - "complianceCalendar.generated == true"
+  phases:
+    - id: "discovery"
+      name: "Business Discovery"
+      description: "Find existing business information"
+      agents:
+        - "business_discovery"
+      maxDuration: 30
+      canSkip: false
+    
+    - id: "profile_collection"
+      name: "Profile Collection"
+      description: "Collect essential business profile data"
+      agents:
+        - "profile_collector"
+      maxDuration: 60
+      canSkip: false
+    
+    - id: "compliance_analysis"
+      name: "Compliance Analysis"
+      description: "Determine compliance requirements"
+      agents:
+        - "compliance_analyzer"
+      maxDuration: 45
+      canSkip: false
+    
+    - id: "optimization"
+      name: "Form Optimization"
+      description: "Optimize data collection experience"
+      agents:
+        - "form_optimizer"
+      maxDuration: 30
+      canSkip: true
+    
+    - id: "celebration"
+      name: "Achievement Celebration"
+      description: "Celebrate completion milestones"
+      agents:
+        - "achievement_tracker"
+      maxDuration: 15
+      canSkip: true
+  
+  requiredInputs:
+    minimal:
+      - "user_email"
+      - "business_name"
+      - "entity_type"
+      - "state"
+    
+    recommended:
+      - "ein"
+      - "formation_date"
+      - "business_address"
+      - "industry"
+      - "employee_count"
     
     optional:
-      - "business.ein != null"
-      - "integrations.quickbooks == true"
-      - "business.website != null"
+      - "website"
+      - "phone"
+      - "revenue_range"
+      - "quickbooks_connected"
   
-  # Context factors that affect execution (PRD lines 109-114)
-  context_factors:
-    user_source: ["google_oauth", "email_signup", "referral"]
-    business_stage: ["idea", "forming", "operating", "expanding"]
-    business_type: ["tech", "restaurant", "retail", "service", "other"]
-    geographic_location: ["california", "delaware", "new_york", "other"]
+  completionCriteria:
+    - "All primary goals completed"
+    - "Minimal required inputs collected"
+    - "Compliance calendar generated"
   
-  # Available data sources for agents (PRD lines 116-130)
-  data_sources:
-    immediate:
-      - google_oauth: "Name, email, profile data"
-      - ip_geolocation: "Approximate location"
-      - email_domain: "Potential business inference"
+  fallbackStrategies:
+    - trigger: "business_not_found"
+      action: "request_manual_entry"
+      message: "We couldn't find your business automatically. Please provide details manually."
     
-    external:
-      - cbc_api: "California business records"
-      - irs_database: "EIN verification"
-      - delaware_sos: "Delaware entity search"
+    - trigger: "api_unavailable"
+      action: "defer_to_later"
+      message: "Some services are temporarily unavailable. We'll retry later."
     
-    user_provided:
-      - manual_entry: "Information only user knows"
-      - document_upload: "Formation documents"
-  
-  # Constraints that shape execution (PRD lines 132-137)
-  constraints:
-    max_user_time: 180  # 3 minutes
-    max_ui_requests: 5   # Don't overwhelm user
-    progressive_disclosure: true
-    mobile_optimized: true
-  
-  # Preferences for optimization (PRD lines 139-144)
-  preferences:
-    minimize_typing: true
-    prefer_selection: true  # Buttons over text input
-    batch_questions: true   # Group related items
-    celebrate_progress: true
-      
-# ============================================================================
-# EXECUTION HINTS (Not in PRD but useful for orchestrator)
-# ============================================================================
-execution_hints:
-  # Progressive disclosure ordering
-  ui_optimization:
-    priority_fields:
-      - "user.email"  # Can unlock other data
-      - "business.name"  # Can search public records
-      - "business.entityType"  # Determines requirements
-    
-    conditional_fields:
-      ein:
-        show_when: "business.entityType IN ['LLC', 'Corporation']"
-        
-  # Data source priorities
-  data_sources:
-    user_info:
-      1: "google_oauth"  # Try first
-      2: "existing_profile"  # Check database
-      3: "user_input"  # Last resort
-      
-    business_info:
-      1: "quickbooks_import"  # If connected
-      2: "public_records"  # CA SOS search
-      3: "user_input"  # Manual entry
-      
-# ============================================================================
-# TODO [POST-MVP] ENHANCEMENTS
-# ============================================================================
-# TODO: Add webhook triggers for automated onboarding (PRD:1684)
-# TODO: Add scheduled re-verification of business data (PRD:1685)
-# TODO: Add parallel agent execution for faster completion (PRD:1679)
-# TODO: Add ML-based field prediction from partial data
+    - trigger: "user_abandoned"
+      action: "save_progress"
+      message: "Your progress has been saved. You can continue anytime."
+EOF < /dev/null

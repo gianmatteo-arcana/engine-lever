@@ -284,10 +284,41 @@ export interface PhaseResult {
  */
 export interface TaskTemplate {
   id: string;
-  name: string;
   version: string;
-  agents: string[];
-  phases?: ExecutionPhase[];
+  metadata: {
+    name: string;
+    description: string;
+    category: string;
+    estimatedDuration?: number;
+    priority?: string;
+  };
+  goals: {
+    primary: TaskGoal[];
+    secondary?: TaskGoal[];
+  };
+  phases?: Array<{
+    id: string;
+    name: string;
+    description: string;
+    agents: string[];
+    maxDuration: number;
+    canSkip: boolean;
+  }>;
+  requiredInputs?: {
+    minimal: string[];
+    recommended?: string[];
+    optional?: string[];
+  };
+  completionCriteria?: string[];
+  fallbackStrategies?: Array<{
+    trigger: string;
+    action: string;
+    message: string;
+  }>;
+  
+  // Legacy fields for compatibility
+  name?: string;
+  agents?: string[];
 }
 
 /**
