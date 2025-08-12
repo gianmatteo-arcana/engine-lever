@@ -638,7 +638,7 @@ export class ComplianceAnalyzer extends Agent {
       sequenceNumber: (context.history?.length || 0) + 1,
       actor: {
         type: 'agent',
-        id: 'entity_compliance_agent',
+        id: 'compliance_analyzer',
         version: this.config.version
       },
       operation: entry.operation || 'unknown',
@@ -646,6 +646,9 @@ export class ComplianceAnalyzer extends Agent {
       reasoning: entry.reasoning
     };
 
+    if (!context.history) {
+      context.history = [];
+    }
     context.history.push(contextEntry);
   }
 }

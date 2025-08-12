@@ -605,6 +605,9 @@ export class AchievementTracker extends Agent {
       reasoning: entry.reasoning
     };
 
+    if (!context.history) {
+      context.history = [];
+    }
     context.history.push(contextEntry);
   }
 }

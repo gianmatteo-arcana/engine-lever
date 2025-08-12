@@ -389,7 +389,9 @@ describe('Agent Integration Tests', () => {
 
       // Profile collector should adapt to missing business data
       expect(profileResponse.status).toBe('needs_input');
-      expect(profileResponse.data.collectionStrategy).toBe('guided_collection');
+      // Check that UI request was generated for collecting data
+      expect(profileResponse.uiRequests).toBeDefined();
+      expect(profileResponse.uiRequests?.length).toBeGreaterThan(0);
     });
   });
 

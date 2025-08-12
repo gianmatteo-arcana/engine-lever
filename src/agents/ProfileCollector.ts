@@ -524,7 +524,7 @@ export class ProfileCollector extends Agent {
       sequenceNumber: (context.history?.length || 0) + 1,
       actor: {
         type: 'agent',
-        id: 'profile_collection_agent',
+        id: 'profile_collector',
         version: this.config.version
       },
       operation: entry.operation || 'unknown',
@@ -532,6 +532,9 @@ export class ProfileCollector extends Agent {
       reasoning: entry.reasoning
     };
 
+    if (!context.history) {
+      context.history = [];
+    }
     context.history.push(contextEntry);
   }
 }

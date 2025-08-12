@@ -132,6 +132,9 @@ export class StateComputer {
       case 'data_collected':
       case 'user_data_provided':
       case 'public_records_found':
+      case 'business_found':
+      case 'profile_collected':
+      case 'requirements_identified':
         // Deep merge new data into state
         this.deepMerge(newState.data, event.data);
         // Update completeness based on data
