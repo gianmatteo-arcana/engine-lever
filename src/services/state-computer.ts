@@ -267,15 +267,49 @@ export class StateComputer {
       'business.entityType'
     ];
     
-    let completed = 0;
+    // Optional fields that can boost completeness
+    const optionalFields = [
+      'profile.ein',
+      'profile.employees',
+      'requirements',
+      'business.state',
+      'business.industry'
+    ];
+    
+    let requiredCompleted = 0;
     requiredFields.forEach(field => {
       const value = this.getNestedValue(data, field);
       if (value !== null && value !== undefined && value !== '') {
-        completed++;
+        requiredCompleted++;
       }
     });
     
-    return Math.round((completed / requiredFields.length) * 100);
+    let optionalCompleted = 0;
+    optionalFields.forEach(field => {
+      const value = this.getNestedValue(data, field);
+      if (value !== null && value !== undefined && value !== '') {
+        optionalCompleted++;
+      }
+    });
+    
+    // If all required fields are complete, base is 100%
+    // Optional fields can only add bonus points up to 100% total
+    if (requiredCompleted === requiredFields.length) {
+      // All required fields present = 100% complete
+      return 100;
+    }
+    
+    // Otherwise calculate proportional progress
+    // Each required field is worth more than optional fields
+    const requiredWeight = 80; // Required fields worth 80% of total
+    const optionalWeight = 20; // Optional fields worth 20% of total
+    
+    const requiredProgress = (requiredCompleted / requiredFields.length) * requiredWeight;
+    const optionalProgress = optionalFields.length > 0 
+      ? (optionalCompleted / optionalFields.length) * optionalWeight
+      : 0;
+    
+    return Math.round(requiredProgress + optionalProgress);
   }
   
   /**

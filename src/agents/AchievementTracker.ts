@@ -14,6 +14,7 @@ import {
   AgentResponse,
   UIRequest 
 } from '../types/engine-types';
+import { DatabaseService } from '../services/database';
 
 interface Achievement {
   id: string;
@@ -228,7 +229,7 @@ export class AchievementTracker extends Agent {
     // Check for milestone progress (every 25%) - fallback after specific operations
     if (currentProgress > 0 && currentProgress % 25 === 0) {
       const milestone = currentProgress === 100 ? 'completion' : 
-                       currentProgress >= 75 ? 'milestone' : 'micro';
+                       currentProgress >= 50 ? 'milestone' : 'micro';
       return {
         id: `progress_${currentProgress}`,
         type: milestone,
@@ -375,7 +376,10 @@ export class AchievementTracker extends Agent {
 
     // Adjust for user profile - first timer gets enthusiastic celebrations
     // Only when explicitly testing first timer behavior (history mostly empty)
-    if (motivationalContext.userProfile === 'first_timer' && motivationalContext.previousAchievements === 0) {
+    // BUT don't override milestone celebrations (they should stay moderate)
+    if (motivationalContext.userProfile === 'first_timer' && 
+        motivationalContext.previousAchievements === 0 &&
+        achievement.type !== 'milestone') {
       const historyLength = _taskContext?.history?.length || 0;
       // History length <= 1 accounts for the celebration initiation entry just added
       if (historyLength <= 1) {
@@ -609,5 +613,16 @@ export class AchievementTracker extends Agent {
       context.history = [];
     }
     context.history.push(contextEntry);
+
+    // Also persist to database if context has an ID
+    if (context.contextId) {
+      try {
+        const db = DatabaseService.getInstance();
+        await db.createContextHistoryEntry(context.contextId, contextEntry);
+      } catch (error) {
+        console.error('Failed to persist context entry to database:', error);
+        // Continue even if database write fails
+      }
+    }
   }
 }

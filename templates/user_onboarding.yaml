@@ -1,0 +1,309 @@
+# =============================================================================
+# USER ONBOARDING TASK TEMPLATE
+# Engine PRD Compliant - Zero Special Cases
+# =============================================================================
+# This template defines the complete onboarding workflow for new users
+# Following Engine PRD Lines 439-652 for agent specifications
+# =============================================================================
+
+id: user_onboarding
+version: "2.0"
+metadata:
+  name: User Onboarding
+  description: Complete onboarding workflow for new business owners
+  category: onboarding
+  author: Engine PRD Implementation
+  created: 2025-08-12
+  estimatedDuration: 15 # minutes
+  
+# PRD Lines 315-340: Goal-oriented task definition
+goals:
+  primary:
+    - id: establish_identity
+      description: Verify user identity and business association
+      required: true
+      validation:
+        - user_email_verified
+        - business_profile_complete
+        
+    - id: collect_compliance_info
+      description: Gather all necessary compliance information
+      required: true
+      validation:
+        - entity_type_selected
+        - state_of_formation_selected
+        - compliance_requirements_identified
+        
+    - id: setup_initial_tasks
+      description: Create personalized task list based on business needs
+      required: true
+      validation:
+        - initial_tasks_created
+        - task_priorities_set
+
+# PRD Lines 341-365: State management
+states:
+  initial: pending
+  terminal: [completed, failed, cancelled]
+  allowed:
+    - pending
+    - active
+    - processing
+    - waiting_for_input
+    - completed
+    - failed
+    - cancelled
+  transitions:
+    pending:
+      - to: active
+        trigger: task_started
+    active:
+      - to: processing
+        trigger: agent_assigned
+    processing:
+      - to: waiting_for_input
+        trigger: user_input_required
+      - to: active
+        trigger: processing_complete
+    waiting_for_input:
+      - to: processing
+        trigger: user_input_received
+      - to: cancelled
+        trigger: user_abandoned
+    active:
+      - to: completed
+        trigger: all_goals_met
+      - to: failed
+        trigger: unrecoverable_error
+
+# PRD Lines 366-438: Phase definitions
+phases:
+  - id: initialization
+    name: Task Initialization
+    description: Set up task context and initial state
+    agents: []  # No agents, system only
+    requiredData: 
+      - user_email
+      - signup_source
+    outputs:
+      - task_context_created
+      - initial_state_set
+      
+  - id: discovery
+    name: Business Discovery
+    description: Search for existing business information
+    agents: 
+      - business_discovery
+    requiredData:
+      - user_email
+    outputs:
+      - business_found_status
+      - business_profile
+      - confidence_score
+      
+  - id: profile_collection
+    name: Profile Collection
+    description: Collect user and business profile information
+    agents:
+      - profile_collector
+    requiredData:
+      - user_email
+      - business_discovery_result
+    outputs:
+      - business_name
+      - entity_type
+      - state_of_formation
+      - industry
+      
+  - id: compliance_analysis
+    name: Compliance Analysis
+    description: Identify compliance requirements based on business profile
+    agents:
+      - compliance_analyzer
+    requiredData:
+      - business_profile
+      - entity_type
+      - state_of_formation
+      - industry
+    outputs:
+      - compliance_requirements
+      - priority_tasks
+      - deadlines
+      - estimated_costs
+      
+  - id: ui_optimization
+    name: UI Optimization
+    description: Optimize forms and UI for data collection
+    agents:
+      - form_optimizer
+    requiredData:
+      - user_profile
+      - device_info
+      - progress_state
+    outputs:
+      - optimized_forms
+      - ui_improvements
+      - field_validations
+      
+  - id: completion
+    name: Task Completion
+    description: Finalize onboarding and celebrate
+    agents:
+      - achievement_tracker
+    requiredData:
+      - completed_goals
+      - task_metrics
+    outputs:
+      - achievement_unlocked
+      - celebration_triggered
+      - next_steps_identified
+
+# Agent orchestration rules
+orchestration:
+  mode: sequential  # Agents run in sequence, not parallel
+  errorHandling: continue_on_error  # Continue even if an agent fails
+  timeouts:
+    default: 30000  # 30 seconds per agent
+    business_discovery: 60000  # 1 minute for searches
+    
+  # Agent chain definition
+  agentChain:
+    - agentId: business_discovery
+      required: false  # Can skip if search fails
+      retries: 2
+      onSuccess: 
+        next: profile_collector
+      onFailure:
+        next: profile_collector  # Continue anyway
+        
+    - agentId: profile_collector
+      required: true  # Must collect profile
+      retries: 3
+      onSuccess:
+        next: compliance_analyzer
+      onFailure:
+        action: retry_or_fail
+        
+    - agentId: compliance_analyzer
+      required: true
+      retries: 2
+      onSuccess:
+        next: form_optimizer
+      onFailure:
+        next: form_optimizer  # Continue with defaults
+        
+    - agentId: form_optimizer
+      required: false
+      retries: 1
+      onSuccess:
+        next: achievement_tracker
+      onFailure:
+        next: achievement_tracker
+        
+    - agentId: achievement_tracker
+      required: false
+      retries: 1
+      onSuccess:
+        action: complete_task
+      onFailure:
+        action: complete_task  # Complete anyway
+
+# Success criteria
+successCriteria:
+  required:
+    - business_profile_complete
+    - entity_type_selected
+    - state_of_formation_selected
+  optional:
+    - ein_provided
+    - website_provided
+    - industry_selected
+  metrics:
+    minCompleteness: 80  # Minimum 80% complete
+    maxDuration: 1800000  # Maximum 30 minutes
+
+# UI configuration
+ui:
+  progressIndicator:
+    type: stepped
+    showPercentage: true
+    showTimeEstimate: true
+  
+  forms:
+    strategy: progressive_disclosure
+    validation: real_time
+    autosave: true
+    autosaveInterval: 30000  # Every 30 seconds
+    
+  templates:
+    - welcome_screen
+    - business_search_results
+    - profile_form
+    - compliance_roadmap
+    - celebration_screen
+
+# Constraints and limits
+constraints:
+  maxRetries: 5
+  maxDuration: 3600000  # 1 hour absolute maximum
+  requiredFields:
+    - business_name
+    - entity_type
+    - state_of_formation
+  dataRetention: 90  # Days to retain task data
+
+# Event hooks for extensibility
+hooks:
+  onTaskCreated:
+    - action: send_welcome_email
+    - action: track_analytics_event
+  
+  onPhaseComplete:
+    - action: update_progress_metric
+    - action: check_achievements
+  
+  onTaskComplete:
+    - action: create_initial_tasks
+    - action: send_completion_email
+    - action: track_conversion
+  
+  onTaskFailed:
+    - action: send_recovery_email
+    - action: create_support_ticket
+  
+  onUserAbandoned:
+    - action: send_re_engagement_email
+    - action: track_abandonment_reason
+
+# Monitoring and analytics
+monitoring:
+  trackEvents:
+    - task_created
+    - phase_started
+    - phase_completed
+    - agent_started
+    - agent_completed
+    - user_input_received
+    - task_completed
+    - task_failed
+    
+  metrics:
+    - completion_rate
+    - time_to_complete
+    - abandonment_rate
+    - phase_durations
+    - agent_success_rates
+    - user_satisfaction
+
+# Notes for implementation
+notes: |
+  This template follows the Engine PRD specification exactly:
+  - Zero special cases: All tasks use the same flow
+  - Event sourcing: All state changes are events
+  - Configuration-driven: Behavior defined here, not in code
+  - Agent orchestration: Agents handle specific responsibilities
+  - Progressive disclosure: UI adapts based on progress
+  
+  The template can be modified without changing any code.
+  New agent types can be added to the chain.
+  Success criteria can be adjusted per business needs.

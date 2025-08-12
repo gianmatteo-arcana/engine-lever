@@ -14,6 +14,7 @@ import {
   AgentResponse,
   UIRequest 
 } from '../types/engine-types';
+import { DatabaseService } from '../services/database';
 
 interface FormField {
   id: string;
@@ -136,7 +137,14 @@ export class FormOptimizer extends Agent {
         data: {
           optimizedForm,
           metrics,
-          deviceInfo
+          deviceInfo,
+          improvements: {
+            layout: optimizedForm.layout,
+            progressiveDisclosure: optimizedForm.sections.length > 1,
+            quickActions: optimizedForm.quickActions,
+            estimatedTimeReduction: `${metrics.reductionPercentage}%`,
+            mobileOptimized: deviceInfo.type === 'mobile'
+          }
         },
         uiRequests: [uiRequest],
         reasoning: 'Generated UX-optimized form with progressive disclosure and mobile optimization',
@@ -582,5 +590,16 @@ export class FormOptimizer extends Agent {
       context.history = [];
     }
     context.history.push(contextEntry);
+
+    // Also persist to database if context has an ID
+    if (context.contextId) {
+      try {
+        const db = DatabaseService.getInstance();
+        await db.createContextHistoryEntry(context.contextId, contextEntry);
+      } catch (error) {
+        console.error('Failed to persist context entry to database:', error);
+        // Continue even if database write fails
+      }
+    }
   }
 }
