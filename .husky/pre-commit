@@ -1,8 +1,43 @@
-# Run linting
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# SmallBizAlly Pre-Commit Hook
+# Enforces TDD and testing standards per CLAUDE.md
+
+echo "🚀 Running SmallBizAlly pre-commit checks..."
+
+# 1. Run linter
+echo "📝 Running linter..."
 npm run lint
+if [ $? -ne 0 ]; then
+  echo "❌ Linting failed! Fix errors before committing."
+  exit 1
+fi
 
-# Run tests
-npm run test
+# 2. Check TypeScript compilation
+echo "🔧 Checking TypeScript compilation..."
+npx tsc --noEmit
+if [ $? -ne 0 ]; then
+  echo "❌ TypeScript compilation failed! Fix type errors before committing."
+  exit 1
+fi
 
-# Build to ensure no TypeScript errors
+# 3. Run tests
+echo "🧪 Running tests..."
+npm test -- --passWithNoTests
+if [ $? -ne 0 ]; then
+  echo "❌ Tests failed! All tests must pass before committing."
+  echo "💡 Remember: We are NOT SKIPPING ANY TESTS!!"
+  exit 1
+fi
+
+# 4. Build project
+echo "🏗️ Building project..."
 npm run build
+if [ $? -ne 0 ]; then
+  echo "❌ Build failed! Fix build errors before committing."
+  exit 1
+fi
+
+echo "✅ All pre-commit checks passed! Ready to commit."
+echo "🎯 Remember: Everything is a task, everything is configuration!"

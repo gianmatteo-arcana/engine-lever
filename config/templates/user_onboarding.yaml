@@ -1,3 +1,7 @@
+# User Onboarding Template - Engine PRD Compliant
+# Universal task template for new user onboarding
+# Zero special cases - everything is configuration
+
 task_template:
   id: "user_onboarding"
   version: "2.0"
@@ -5,8 +9,12 @@ task_template:
     name: "New User Business Profile Setup"
     description: "Establish complete business profile for SmallBizAlly services"
     category: "onboarding"
-    estimatedDuration: 180  # seconds
+    estimatedDuration: 600  # seconds (10 minutes)
     priority: "high"
+    tags:
+      - "new-user"
+      - "profile"
+      - "compliance"
   
   goals:
     primary:

@@ -154,20 +154,42 @@ export interface RetryPolicy {
 // ============================================================================
 
 /**
- * Request for UI augmentation from agent
+ * UI Template Types for FluidUI system
+ * Engine PRD Lines 900-914
+ */
+export enum UITemplateType {
+  ActionPillGroup = 'action_pill_group',
+  FoundYouCard = 'found_you_card',
+  SmartTextInput = 'smart_text_input',
+  ProgressIndicator = 'progress_indicator',
+  DocumentUpload = 'document_upload',
+  DataSummary = 'data_summary',
+  SteppedWizard = 'stepped_wizard',
+  ApprovalRequest = 'approval_request',
+  ErrorDisplay = 'error_display',
+  SuccessScreen = 'success_screen',
+  InstructionPanel = 'instruction_panel',
+  WaitingScreen = 'waiting_screen'
+}
+
+/**
+ * Request for UI generation from agent
+ * FluidUI interprets these to create dynamic interfaces
  */
 export interface UIRequest {
-  id: string;
-  agentRole: string;
-  suggestedTemplates: string[];
-  dataNeeded: string[];
-  context: {
-    userProgress: number;
-    deviceType: 'mobile' | 'desktop' | 'tablet';
-    urgency: 'low' | 'medium' | 'high' | 'critical';
+  requestId: string;
+  templateType: UITemplateType;
+  semanticData: Record<string, any>;
+  context?: {
+    contextId?: string;
+    userProgress?: number;
+    deviceType?: 'mobile' | 'desktop' | 'tablet';
+    urgency?: 'low' | 'medium' | 'high' | 'critical';
+    [key: string]: any;
   };
-  // Component-specific data
-  [key: string]: any;
+  actions?: FluidUIAction[];
+  layoutHints?: LayoutHints;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
 }
 
 /**
