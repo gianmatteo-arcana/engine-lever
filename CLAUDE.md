@@ -487,3 +487,147 @@ Before ANY commit involving data access:
 - **Monitoring**: Track database access patterns
 
 **Remember: Backend is the gatekeeper. Frontend is just the UI.**
+
+## 🚨 CRITICAL ARCHITECTURAL RULES - LESSONS LEARNED
+
+### DATABASE ACCESS PATTERN (MANDATORY)
+```typescript
+// ✅ CORRECT: Backend uses service role only
+const dbService = DatabaseService.getInstance();
+const result = await dbService.query(sql, params);
+
+// ❌ FORBIDDEN: User token clients
+const userClient = createClient(userToken);  // NEVER
+```
+
+### AUTHENTICATION VALIDATION (MANDATORY)
+```typescript
+// ✅ CORRECT: Validate JWT and extract user context
+const userId = await validateToken(req.headers.authorization);
+// Then use service role for ALL database operations
+
+// ❌ FORBIDDEN: Pass user tokens to database
+const client = await getUserClient(token);  // NO!
+```
+
+## 🚫 FORBIDDEN PATTERNS (Auto-Reject)
+
+### Never Create These Endpoints:
+```typescript
+// ❌ FORBIDDEN: Task-specific APIs
+router.post('/api/onboarding/create');     // Use /api/tasks
+router.post('/api/soi/create');           // Use /api/tasks
+router.post('/api/compliance/create');    // Use /api/tasks
+
+// ✅ CORRECT: Universal endpoints only
+router.post('/api/tasks');  // Handles ALL task types
+```
+
+### Never Create These Database Patterns:
+```typescript
+// ❌ FORBIDDEN: Multiple database clients
+getUserClient(userToken);        // NO!
+createSupabaseClient(userAuth);  // NO!
+
+// ❌ FORBIDDEN: RLS as primary security
+// Never rely on RLS alone - always validate in backend first
+```
+
+## ✅ APPROVED PATTERNS
+
+### Universal Task Handling:
+```typescript
+// ✅ CORRECT: Single endpoint, multiple task types
+router.post('/api/tasks', async (req, res) => {
+  const { taskType, metadata } = req.body;
+  
+  // Universal logic handles all task types
+  switch(taskType) {
+    case 'onboarding':
+    case 'soi':
+    case 'compliance':
+      return createTask(taskType, metadata);
+  }
+});
+```
+
+### Service Role Pattern:
+```typescript
+// ✅ CORRECT: Service role for ALL operations
+class DatabaseService {
+  private client = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  
+  async query(sql: string, params: any[]) {
+    // Service role has full access
+    // Backend enforces user context
+  }
+}
+```
+
+### Proper Error Handling:
+```typescript
+// ✅ CORRECT: Clear error responses
+if (!backendHealthy) {
+  return res.status(503).json({
+    error: 'Service temporarily unavailable',
+    retryAfter: 30
+  });
+}
+```
+
+## 📋 BACKEND CHECKLIST
+
+Before implementing any endpoint:
+- [ ] Is this a universal endpoint? (No task-specific APIs)
+- [ ] Am I using service role only? (No user token clients)
+- [ ] Am I validating auth before database ops? (Required)
+- [ ] Will this work for ALL task types? (Universal principle)
+- [ ] Am I enforcing business rules? (Backend responsibility)
+
+## 🎯 WHY THESE RULES EXIST
+
+### Lessons from Production:
+- **User token clients cause hanging** - Proven reliability issue
+- **Task-specific endpoints violate DRY** - Maintenance nightmare
+- **RLS-only security is insufficient** - Backend must validate
+- **Multiple clients = multiple problems** - Single pattern only
+
+### Common Anti-Patterns to Avoid:
+```typescript
+// ❌ "Let's make it task-specific for clarity"
+// → Violates universal engine, creates tech debt
+
+// ❌ "User tokens are more secure"
+// → They're not, and they cause hanging
+
+// ❌ "RLS will handle permissions"
+// → Defense in depth requires backend validation
+```
+
+## 🚨 ENFORCEMENT
+
+### Code Review Rejection Criteria:
+- Any endpoint like `/api/[taskType]/create`
+- Any use of `getUserClient()` or similar
+- Any reliance on RLS without backend validation
+- Any user token passed to database operations
+
+### Validation Commands:
+```bash
+# Find forbidden patterns:
+grep -r "getUserClient" src/
+grep -r "createClient.*userToken" src/
+grep -r "/api/.*/create" src/  # Task-specific endpoints
+```
+
+## 📚 ARCHITECTURAL PRINCIPLES
+
+- **Universal Engine:** One pattern for all tasks
+- **Service Role Only:** Backend uses service credentials
+- **Backend Validation:** Never trust frontend or RLS alone
+- **Clear Errors:** Honest communication over broken features
+
+**CRITICAL:** These patterns prevent the hanging issues, maintain consistency, and ensure reliability. No exceptions.**
