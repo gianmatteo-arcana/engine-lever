@@ -452,7 +452,7 @@ describe('FormOptimizer', () => {
 
     test('should handle optimization errors', async () => {
       // Corrupt context to cause error
-      mockContext.currentState = null as any;
+      mockContext.history = null as any;
 
       const request: AgentRequest = {
         requestId: 'req_ux_21',

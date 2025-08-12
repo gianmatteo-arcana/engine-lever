@@ -42,7 +42,10 @@ export class StateComputer {
    * TODO [POST-MVP]: Add state snapshots for performance (PRD:1675)
    */
   static computeState(history: ContextEntry[]): ComputedState {
-    console.log(`[StateComputer] Computing state from ${history.length} events`);
+    // Only log in development or when explicitly enabled
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[StateComputer] Computing state from ${history.length} events`);
+    }
     
     // Initialize with default state
     let state: ComputedState = {
@@ -55,11 +58,15 @@ export class StateComputer {
     // Replay each event in sequence to build current state
     // PRD Line 45: "Current state is computed by replaying history"
     history.forEach((entry, index) => {
-      console.log(`[StateComputer] Replaying event ${index + 1}: ${entry.operation}`);
+      if (process.env.NODE_ENV !== 'test') {
+        console.log(`[StateComputer] Replaying event ${index + 1}: ${entry.operation}`);
+      }
       state = this.applyEvent(state, entry);
     });
     
-    console.log('[StateComputer] Final computed state:', state);
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('[StateComputer] Final computed state:', state);
+    }
     return state;
   }
   
@@ -198,7 +205,7 @@ export class StateComputer {
    */
   private static deepMerge(target: Record<string, any>, source: Record<string, any>): void {
     for (const key in source) {
-      if (source.hasOwnProperty(key)) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) {
         if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
           // If target doesn't have this key or it's not an object, create empty object
           if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) {

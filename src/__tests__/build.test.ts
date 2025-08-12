@@ -36,10 +36,10 @@ describe('Build Verification', () => {
     // Check critical dependencies
     expect(packageJson.dependencies).toBeDefined();
     expect(packageJson.dependencies['express']).toBeDefined();
-    expect(packageJson.dependencies['@supabase/supabase-js']).toBeDefined();
     
     // Check dev dependencies
     expect(packageJson.devDependencies).toBeDefined();
+    expect(packageJson.devDependencies['@supabase/supabase-js']).toBeDefined();
     expect(packageJson.devDependencies['typescript']).toBeDefined();
     expect(packageJson.devDependencies['@types/node']).toBeDefined();
   });

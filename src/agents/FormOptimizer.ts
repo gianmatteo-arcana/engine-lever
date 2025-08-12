@@ -144,11 +144,17 @@ export class FormOptimizer extends Agent {
       };
 
     } catch (error: any) {
-      await this.recordContextEntry(context, {
-        operation: 'ux_optimization_error',
-        data: { error: error.message, requestId },
-        reasoning: 'UX optimization failed due to technical error'
-      });
+      // Try to record error, but handle case where context might be corrupted
+      try {
+        await this.recordContextEntry(context, {
+          operation: 'ux_optimization_error',
+          data: { error: error.message, requestId },
+          reasoning: 'UX optimization failed due to technical error'
+        });
+      } catch (recordError) {
+        // Context is too corrupted to record, continue with error response
+        console.error('[FormOptimizer] Failed to record error context:', recordError);
+      }
 
       return {
         status: 'error',
@@ -369,11 +375,12 @@ export class FormOptimizer extends Agent {
       if (field.id === 'timezone') return false; // Can infer from location
       if (field.id === 'country' && !field.required) return false; // Default to US
       
-      // Keep fields with high value
-      if (field.id.includes('ein') || field.id.includes('license')) return true;
+      // Keep fields with high value - but EIN can be collected later
+      if (field.id.includes('license')) return true;
       
-      // Remove low-value optional fields
-      return Math.random() > 0.5; // Simplified logic - in reality would be smarter
+      // Remove low-value optional fields based on field priority to achieve significant optimization
+      const lowPriorityFields = ['phone', 'address', 'website', 'ein', 'industry'];
+      return !lowPriorityFields.includes(field.id);
     });
   }
 

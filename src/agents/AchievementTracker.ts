@@ -177,20 +177,7 @@ export class AchievementTracker extends Agent {
       };
     }
 
-    // Check for milestone progress (every 25%)
-    if (currentProgress > 0 && currentProgress % 25 === 0) {
-      const milestone = currentProgress === 100 ? 'completion' : 
-                       currentProgress >= 75 ? 'milestone' : 'micro';
-      return {
-        id: `progress_${currentProgress}`,
-        type: milestone,
-        title: `${currentProgress}% Complete!`,
-        description: this.getProgressDescription(currentProgress),
-        progress: currentProgress
-      };
-    }
-
-    // Check for specific operation completions
+    // Check for specific operation completions FIRST (more specific than progress)
     if (lastEntry) {
       if (lastEntry.operation === 'business_found') {
         return {
@@ -219,14 +206,27 @@ export class AchievementTracker extends Agent {
         };
       }
 
-      if (lastEntry.operation === 'form_optimization_completed') {
+      if (lastEntry.operation === 'error_resolved') {
         return {
-          id: 'form_optimized',
+          id: 'error_recovery',
           type: 'micro',
-          title: 'Smart Form Ready!',
-          description: 'We\'ve simplified your form for quick completion'
+          title: 'Back on Track!',
+          description: 'Issue resolved, continuing with your task'
         };
       }
+    }
+
+    // Check for milestone progress (every 25%) - fallback for generic progress
+    if (currentProgress > 0 && currentProgress % 25 === 0) {
+      const milestone = currentProgress === 100 ? 'completion' : 
+                       currentProgress >= 75 ? 'milestone' : 'micro';
+      return {
+        id: `progress_${currentProgress}`,
+        type: milestone,
+        title: `${currentProgress}% Complete!`,
+        description: this.getProgressDescription(currentProgress),
+        progress: currentProgress
+      };
     }
 
     // Check for error recovery

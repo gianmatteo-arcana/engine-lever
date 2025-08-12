@@ -180,7 +180,7 @@ export class ProfileCollector extends Agent {
     if (businessDiscovery.found && businessDiscovery.business) {
       defaults.businessName = businessDiscovery.business.name;
       defaults.entityType = businessDiscovery.business.entityType;
-      defaults.state = businessDiscovery.business.state;
+      defaults.state = this.normalizeState(businessDiscovery.business.state);
       defaults.confidence += businessDiscovery.confidence;
       confidenceFactors += 1;
     } else {
@@ -360,6 +360,27 @@ export class ProfileCollector extends Agent {
     const baseName = domain.split('.')[0];
     return baseName.replace(/([A-Z])/g, ' $1').trim()
                   .replace(/^\w/, c => c.toUpperCase());
+  }
+
+  private normalizeState(stateName: string): string {
+    const stateNormalization: Record<string, string> = {
+      'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR',
+      'california': 'CA', 'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE',
+      'florida': 'FL', 'georgia': 'GA', 'hawaii': 'HI', 'idaho': 'ID',
+      'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA', 'kansas': 'KS',
+      'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
+      'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS',
+      'missouri': 'MO', 'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV',
+      'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+      'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH', 'oklahoma': 'OK',
+      'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+      'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT',
+      'vermont': 'VT', 'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV',
+      'wisconsin': 'WI', 'wyoming': 'WY'
+    };
+    
+    const normalized = stateNormalization[stateName.toLowerCase()];
+    return normalized || stateName.toUpperCase(); // Return abbreviated form or original
   }
 
   private extractStateFromLocation(location: string): string {
