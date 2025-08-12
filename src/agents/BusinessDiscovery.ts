@@ -269,50 +269,35 @@ export class BusinessDiscovery extends Agent {
   }
 
   /**
-   * Search specific state records (real implementation would call APIs)
+   * Search specific state records
    */
   private async searchStateRecords(state: string, businessName: string): Promise<{
     found: boolean;
     confidence: number;
     businessData?: any;
   }> {
-    // For MVP: Use mock data that demonstrates the system working
-    // TODO: Replace with real API calls to state databases
+    // Real implementation requires API integration
+    // For now, return not found to force proper UI flow
     
-    if (state === 'california' && businessName.toLowerCase().includes('tech')) {
-      // Simulate finding a tech business in CA
-      return {
-        found: true,
-        confidence: 0.85,
-        businessData: {
-          name: businessName + ' LLC',
-          entityType: 'LLC',
-          state: 'California',
-          ein: '12-3456789',
-          formationDate: '2023-01-15',
-          status: 'Active'
-        }
-      };
-    }
-
-    if (state === 'delaware' && businessName.toLowerCase().includes('startup')) {
-      // Simulate finding a startup in Delaware
-      return {
-        found: true,
-        confidence: 0.90,
-        businessData: {
-          name: businessName + ' Inc',
-          entityType: 'Corporation',
-          state: 'Delaware',
-          ein: '98-7654321',
-          formationDate: '2022-11-10',
-          status: 'Active'
-        }
-      };
-    }
-
-    // Not found
-    return { found: false, confidence: 0 };
+    // TODO: Integrate with real state APIs:
+    // - California Secretary of State API
+    // - Delaware Division of Corporations API
+    // - Other state business registries
+    
+    // Proper implementation would:
+    // 1. Call state-specific API with businessName
+    // 2. Parse response for matching entities
+    // 3. Calculate confidence based on name match accuracy
+    // 4. Return structured business data
+    
+    console.log(`[BusinessDiscovery] Would search ${state} records for: ${businessName}`);
+    
+    // Return not found to force user input flow
+    return { 
+      found: false, 
+      confidence: 0,
+      businessData: undefined
+    };
   }
 
   /**
