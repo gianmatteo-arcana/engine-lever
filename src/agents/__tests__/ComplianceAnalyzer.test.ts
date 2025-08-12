@@ -492,7 +492,7 @@ describe('ComplianceAnalyzer', () => {
 
       expect(initiationEntry).toBeDefined();
       expect(initiationEntry?.actor.type).toBe('agent');
-      expect(initiationEntry?.actor.id).toBe('entity_compliance_agent');
+      expect(initiationEntry?.actor.id).toBe('compliance_analyzer');
       expect(initiationEntry?.data).toHaveProperty('businessProfile');
     });
 

@@ -335,7 +335,7 @@ describe('ProfileCollector', () => {
 
       expect(initiationEntry).toBeDefined();
       expect(initiationEntry?.actor.type).toBe('agent');
-      expect(initiationEntry?.actor.id).toBe('profile_collection_agent');
+      expect(initiationEntry?.actor.id).toBe('profile_collector');
       expect(initiationEntry?.reasoning).toContain('Starting profile collection');
       expect(initiationEntry?.data).toHaveProperty('requestId');
     });
