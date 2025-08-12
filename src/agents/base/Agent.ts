@@ -1,7 +1,7 @@
 /**
- * PRD-Compliant Base Agent Class
+ * Base Agent Class
  * 
- * ENGINE PRD CORE PRINCIPLES (Lines 43-51):
+ * ENGINE CORE PRINCIPLES:
  * 1. Pure Event Sourcing - All state changes are immutable events (PRD:45)
  * 2. Configuration-Driven - All behavior in YAML, hot-reloadable (PRD:46)
  * 3. Agent-Based - Every capability is an agent with specific role (PRD:47)
@@ -37,7 +37,7 @@ import {
  * Base agent class - ALL agents extend this
  * Exactly matches PRD lines 414-497
  */
-export abstract class PRDCompliantAgent {
+export abstract class Agent {
   protected config: AgentConfig;
   protected llmProvider!: LLMProvider;
   protected toolChain!: ToolChain;
@@ -191,10 +191,9 @@ Remember:
 }
 
 /**
- * Data Collection Agent - PRD Compliant Implementation
- * Exactly matches PRD example (lines 505-576)
+ * Data Collection Agent Implementation
  */
-export class DataCollectionAgent extends PRDCompliantAgent {
+export class DataCollectionAgent extends Agent {
   constructor() {
     super('data_collection_agent.yaml');
   }

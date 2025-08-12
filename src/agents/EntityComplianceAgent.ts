@@ -6,7 +6,7 @@
  * actionable compliance calendars based on business profile data
  */
 
-import { PRDCompliantAgent } from './base/PRDCompliantAgent';
+import { Agent } from './base/Agent';
 import { 
   TaskContext, 
   ContextEntry, 
@@ -61,7 +61,7 @@ interface RiskAssessment {
 /**
  * Regulatory Requirements Analyst Agent
  */
-export class EntityComplianceAgent extends PRDCompliantAgent {
+export class EntityComplianceAgent extends Agent {
   constructor() {
     super('entity_compliance_agent.yaml');
   }

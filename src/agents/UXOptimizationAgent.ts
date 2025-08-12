@@ -6,7 +6,7 @@
  * form design, progressive disclosure, and mobile optimization
  */
 
-import { PRDCompliantAgent } from './base/PRDCompliantAgent';
+import { Agent } from './base/Agent';
 import { 
   TaskContext, 
   ContextEntry, 
@@ -80,7 +80,7 @@ interface OptimizationMetrics {
 /**
  * UX Experience Optimizer Agent
  */
-export class UXOptimizationAgent extends PRDCompliantAgent {
+export class UXOptimizationAgent extends Agent {
   constructor() {
     super('ux_optimization_agent.yaml');
   }

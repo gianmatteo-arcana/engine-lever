@@ -21,9 +21,6 @@ import {
   AgentMessage,
   TaskContext,
   AgentDecision,
-  TaskPriority,
-  AgentRequest,
-  AgentResponse
 } from './base/types';
 import { logger } from '../utils/logger';
 
@@ -215,7 +212,7 @@ export class ResilientOrchestrator extends BaseAgent {
     return ['business_registry_lookup']; // Default
   }
 
-  private generateUserRequests(service: string, context: TaskContext): UserRequest[] {
+  private generateUserRequests(service: string, _context: TaskContext): UserRequest[] {
     const requests: UserRequest[] = [];
 
     switch (service) {
@@ -345,7 +342,7 @@ export class ResilientOrchestrator extends BaseAgent {
     return batches;
   }
 
-  private generateGuidedSteps(context: TaskContext): any[] {
+  private generateGuidedSteps(_context: TaskContext): any[] {
     // Generate step-by-step guidance based on template
     return [
       {

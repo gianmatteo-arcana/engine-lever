@@ -6,7 +6,7 @@
  * Uses intelligent search strategies to minimize user input
  */
 
-import { PRDCompliantAgent } from './base/PRDCompliantAgent';
+import { Agent } from './base/Agent';
 import { 
   TaskContext, 
   ContextEntry, 
@@ -43,7 +43,7 @@ interface SearchClues {
 /**
  * Business Records Detective Agent
  */
-export class BusinessDiscoveryAgent extends PRDCompliantAgent {
+export class BusinessDiscoveryAgent extends Agent {
   constructor() {
     super('business_discovery_agent.yaml');
   }

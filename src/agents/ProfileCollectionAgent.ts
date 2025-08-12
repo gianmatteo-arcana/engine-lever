@@ -6,7 +6,7 @@
  * Uses smart defaults, progressive disclosure, and optimized forms
  */
 
-import { PRDCompliantAgent } from './base/PRDCompliantAgent';
+import { Agent } from './base/Agent';
 import { 
   TaskContext, 
   ContextEntry, 
@@ -48,7 +48,7 @@ interface SmartDefaults {
 /**
  * Profile Data Collection Specialist Agent
  */
-export class ProfileCollectionAgent extends PRDCompliantAgent {
+export class ProfileCollectionAgent extends Agent {
   constructor() {
     super('profile_collection_agent.yaml');
   }

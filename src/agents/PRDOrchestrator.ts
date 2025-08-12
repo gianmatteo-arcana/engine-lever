@@ -23,7 +23,7 @@ import {
   TaskTemplate,
   AgentRequest
 } from '../types/engine-types';
-import { PRDCompliantAgent } from './base/PRDCompliantAgent';
+import { Agent } from './base/Agent';
 
 interface OrchestratorConfig {
   id: string;
@@ -49,7 +49,7 @@ interface OrchestratorConfig {
 export class PRDOrchestrator {
   private config: OrchestratorConfig;
   private llmProvider: LLMProvider;
-  private agentRegistry: Map<string, PRDCompliantAgent>;
+  private agentRegistry: Map<string, Agent>;
   private contexts: Map<string, TaskContext>;
   
   constructor() {
@@ -116,7 +116,7 @@ You coordinate agents but never execute business logic directly.`,
     
     // Register data collection agent
     try {
-      const DataCollectionAgent = require('./base/PRDCompliantAgent').DataCollectionAgent;
+      const DataCollectionAgent = require('./base/Agent').DataCollectionAgent;
       this.agentRegistry.set('data_collection_agent', new DataCollectionAgent());
     } catch (error) {
       console.error('[Orchestrator] Failed to load data collection agent:', error);

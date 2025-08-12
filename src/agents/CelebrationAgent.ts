@@ -6,7 +6,7 @@
  * and motivates users through positive reinforcement
  */
 
-import { PRDCompliantAgent } from './base/PRDCompliantAgent';
+import { Agent } from './base/Agent';
 import { 
   TaskContext, 
   ContextEntry, 
@@ -59,7 +59,7 @@ interface MotivationalContext {
 /**
  * Success Experience Creator Agent
  */
-export class CelebrationAgent extends PRDCompliantAgent {
+export class CelebrationAgent extends Agent {
   constructor() {
     super('celebration_agent.yaml');
   }

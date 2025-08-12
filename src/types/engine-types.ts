@@ -110,9 +110,9 @@ export interface AgentRequest {
     deviceType?: 'mobile' | 'desktop' | 'tablet';
     userProgress?: number;
   };
-  taskContext?: TaskContext; // Optional for PRDCompliantAgent
-  operation?: string; // Optional for PRDCompliantAgent
-  parameters?: Record<string, any>; // Optional for PRDCompliantAgent
+  taskContext?: TaskContext; // Optional for Agent base class
+  operation?: string; // Optional for Agent base class
+  parameters?: Record<string, any>; // Optional for Agent base class
   llmModel?: string; // Optional LLM model override
   timeout?: number; // milliseconds
   retryPolicy?: RetryPolicy;
@@ -128,7 +128,7 @@ export interface AgentResponse {
   reasoning?: string;
   nextAgent?: string;
   confidence?: number;
-  contextUpdate?: ContextEntry; // Optional context update for PRDCompliantAgent
+  contextUpdate?: ContextEntry; // Optional context update for Agent base class
   error?: {
     code: string;
     message: string;
