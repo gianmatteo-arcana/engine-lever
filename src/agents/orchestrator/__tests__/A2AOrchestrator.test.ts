@@ -13,8 +13,16 @@ import { OnboardingTaskContext } from '../../../types/onboarding-types';
 
 // Mock dependencies
 jest.mock('../../../services/database');
-jest.mock('../../../services/llm-provider');
-jest.mock('../../../services/real-llm-provider');
+jest.mock('../../../services/llm-provider', () => ({
+  LLMProvider: {
+    getInstance: jest.fn()
+  }
+}));
+jest.mock('../../../services/real-llm-provider', () => ({
+  RealLLMProvider: {
+    getInstance: jest.fn()
+  }
+}));
 jest.mock('../../../utils/logger');
 
 // Mock database service

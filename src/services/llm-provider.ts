@@ -118,15 +118,7 @@ export class LLMProvider {
   /**
    * Complete request using Anthropic's Claude API
    */
-  private async completeWithAnthropic(request: LLMRequest): Promise<LLMResponse> {
-    // TODO: Implement actual Anthropic API integration
-    // For now, return a mock response for testing
-    
-    if (this.config.apiKey === 'test-key') {
-      // Return mock response for testing
-      return this.getMockResponse(request);
-    }
-    
+  private async completeWithAnthropic(_request: LLMRequest): Promise<LLMResponse> {
     if (!this.config.apiKey) {
       throw new Error('Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable.');
     }
@@ -158,7 +150,7 @@ export class LLMProvider {
     };
     */
 
-    throw new Error('Anthropic API integration not yet implemented. Set ANTHROPIC_API_KEY=test-key for mock responses.');
+    throw new Error('Anthropic API integration not yet implemented.');
   }
 
   /**
@@ -167,50 +159,6 @@ export class LLMProvider {
   private async completeWithOpenAI(_request: LLMRequest): Promise<LLMResponse> {
     // TODO: Implement actual OpenAI API integration
     throw new Error('OpenAI API integration not yet implemented');
-  }
-
-  /**
-   * Get mock response for testing
-   */
-  private getMockResponse(request: LLMRequest): LLMResponse {
-    const lastMessage = request.messages[request.messages.length - 1];
-    
-    // Provide context-aware mock responses for testing
-    let content = 'Mock LLM response';
-    
-    if (lastMessage.content.toLowerCase().includes('plan')) {
-      content = JSON.stringify({
-        plan: {
-          phases: [
-            { phase: 'data_collection', description: 'Collect business information' },
-            { phase: 'validation', description: 'Validate collected data' },
-            { phase: 'submission', description: 'Submit to appropriate agencies' }
-          ],
-          requiredAgents: ['data_collection_agent', 'validation_agent'],
-          estimatedDuration: '15 minutes'
-        }
-      });
-    } else if (lastMessage.content.toLowerCase().includes('analyze')) {
-      content = JSON.stringify({
-        analysis: {
-          taskType: 'onboarding',
-          complexity: 'medium',
-          requiredSteps: 5,
-          confidence: 0.85
-        }
-      });
-    }
-
-    return {
-      content,
-      model: 'claude-3-mock',
-      usage: {
-        promptTokens: 100,
-        completionTokens: 50,
-        totalTokens: 150
-      },
-      finishReason: 'stop'
-    };
   }
 
   /**
