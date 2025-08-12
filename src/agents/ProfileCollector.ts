@@ -46,9 +46,9 @@ interface SmartDefaults {
 }
 
 /**
- * Profile Data Collection Specialist Agent
+ * Profile Collector - Collects user profile data efficiently
  */
-export class ProfileCollectionAgent extends Agent {
+export class ProfileCollector extends Agent {
   constructor() {
     super('profile_collection_agent.yaml');
   }

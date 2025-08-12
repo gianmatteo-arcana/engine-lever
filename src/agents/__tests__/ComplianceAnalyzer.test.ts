@@ -6,15 +6,15 @@
  * Uses test database and mock external APIs only
  */
 
-import { EntityComplianceAgent } from '../EntityComplianceAgent';
+import { ComplianceAnalyzer } from '../ComplianceAnalyzer';
 import { TaskContext, AgentRequest } from '../../types/engine-types';
 
-describe('EntityComplianceAgent', () => {
-  let agent: EntityComplianceAgent;
+describe('ComplianceAnalyzer', () => {
+  let agent: ComplianceAnalyzer;
   let mockContext: TaskContext;
 
   beforeEach(() => {
-    agent = new EntityComplianceAgent();
+    agent = new ComplianceAnalyzer();
     
     mockContext = {
       contextId: 'test_context_789',
@@ -612,11 +612,11 @@ describe('EntityComplianceAgent', () => {
 /**
  * Performance Tests
  */
-describe('EntityComplianceAgent Performance', () => {
-  let agent: EntityComplianceAgent;
+describe('ComplianceAnalyzer Performance', () => {
+  let agent: ComplianceAnalyzer;
 
   beforeEach(() => {
-    agent = new EntityComplianceAgent();
+    agent = new ComplianceAnalyzer();
   });
 
   test('should complete analysis within time limits', async () => {

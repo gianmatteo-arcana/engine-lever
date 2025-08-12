@@ -57,9 +57,9 @@ interface MotivationalContext {
 }
 
 /**
- * Success Experience Creator Agent
+ * Achievement Tracker - Creates delightful moments of accomplishment
  */
-export class CelebrationAgent extends Agent {
+export class AchievementTracker extends Agent {
   constructor() {
     super('celebration_agent.yaml');
   }

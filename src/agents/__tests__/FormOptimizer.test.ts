@@ -5,15 +5,15 @@
  * MANDATORY: No mock data - tests real UX optimization logic
  */
 
-import { UXOptimizationAgent } from '../UXOptimizationAgent';
+import { FormOptimizer } from '../FormOptimizer';
 import { TaskContext, AgentRequest } from '../../types/engine-types';
 
-describe('UXOptimizationAgent', () => {
-  let agent: UXOptimizationAgent;
+describe('FormOptimizer', () => {
+  let agent: FormOptimizer;
   let mockContext: TaskContext;
 
   beforeEach(() => {
-    agent = new UXOptimizationAgent();
+    agent = new FormOptimizer();
     
     mockContext = {
       contextId: 'test_context_ux',
@@ -472,11 +472,11 @@ describe('UXOptimizationAgent', () => {
 /**
  * Performance Tests
  */
-describe('UXOptimizationAgent Performance', () => {
-  let agent: UXOptimizationAgent;
+describe('FormOptimizer Performance', () => {
+  let agent: FormOptimizer;
 
   beforeEach(() => {
-    agent = new UXOptimizationAgent();
+    agent = new FormOptimizer();
   });
 
   test('should optimize within time limits', async () => {

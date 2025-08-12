@@ -41,9 +41,9 @@ interface SearchClues {
 }
 
 /**
- * Business Records Detective Agent
+ * Business Discovery - Finds business information in public records
  */
-export class BusinessDiscoveryAgent extends Agent {
+export class BusinessDiscovery extends Agent {
   constructor() {
     super('business_discovery_agent.yaml');
   }

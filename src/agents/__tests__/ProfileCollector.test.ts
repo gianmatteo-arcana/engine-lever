@@ -6,15 +6,15 @@
  * Uses test database and mock external APIs only
  */
 
-import { ProfileCollectionAgent } from '../ProfileCollectionAgent';
+import { ProfileCollector } from '../ProfileCollector';
 import { TaskContext, AgentRequest } from '../../types/engine-types';
 
-describe('ProfileCollectionAgent', () => {
-  let agent: ProfileCollectionAgent;
+describe('ProfileCollector', () => {
+  let agent: ProfileCollector;
   let mockContext: TaskContext;
 
   beforeEach(() => {
-    agent = new ProfileCollectionAgent();
+    agent = new ProfileCollector();
     
     mockContext = {
       contextId: 'test_context_456',
@@ -521,11 +521,11 @@ describe('ProfileCollectionAgent', () => {
 /**
  * Performance Tests
  */
-describe('ProfileCollectionAgent Performance', () => {
-  let agent: ProfileCollectionAgent;
+describe('ProfileCollector Performance', () => {
+  let agent: ProfileCollector;
 
   beforeEach(() => {
-    agent = new ProfileCollectionAgent();
+    agent = new ProfileCollector();
   });
 
   test('should complete profile collection within time limits', async () => {

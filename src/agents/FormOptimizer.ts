@@ -78,9 +78,9 @@ interface OptimizationMetrics {
 }
 
 /**
- * UX Experience Optimizer Agent
+ * Form Optimizer - Optimizes user experience through intelligent form design
  */
-export class UXOptimizationAgent extends Agent {
+export class FormOptimizer extends Agent {
   constructor() {
     super('ux_optimization_agent.yaml');
   }

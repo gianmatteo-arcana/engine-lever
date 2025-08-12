@@ -5,15 +5,15 @@
  * MANDATORY: No mock data - tests real celebration logic
  */
 
-import { CelebrationAgent } from '../CelebrationAgent';
+import { AchievementTracker } from '../AchievementTracker';
 import { TaskContext, AgentRequest } from '../../types/engine-types';
 
-describe('CelebrationAgent', () => {
-  let agent: CelebrationAgent;
+describe('AchievementTracker', () => {
+  let agent: AchievementTracker;
   let mockContext: TaskContext;
 
   beforeEach(() => {
-    agent = new CelebrationAgent();
+    agent = new AchievementTracker();
     
     mockContext = {
       contextId: 'test_context_celebration',
@@ -714,11 +714,11 @@ describe('CelebrationAgent', () => {
 /**
  * Performance Tests
  */
-describe('CelebrationAgent Performance', () => {
-  let agent: CelebrationAgent;
+describe('AchievementTracker Performance', () => {
+  let agent: AchievementTracker;
 
   beforeEach(() => {
-    agent = new CelebrationAgent();
+    agent = new AchievementTracker();
   });
 
   test('should complete celebration within time limits', async () => {
