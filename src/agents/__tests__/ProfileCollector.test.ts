@@ -205,7 +205,7 @@ describe('ProfileCollector', () => {
         confidence: 0.92
       };
 
-      const defaults = (agent as any).generateSmartDefaults(businessDiscovery, mockContext);
+      const defaults = (agent as any).createDefaults(businessDiscovery, mockContext);
 
       expect(defaults.businessName).toBe('Austin Creative LLC');
       expect(defaults.entityType).toBe('LLC');
@@ -216,7 +216,7 @@ describe('ProfileCollector', () => {
     test('should infer defaults from email domain when business not found', () => {
       const businessDiscovery = { found: false };
 
-      const defaults = (agent as any).generateSmartDefaults(businessDiscovery, mockContext);
+      const defaults = (agent as any).createDefaults(businessDiscovery, mockContext);
 
       expect(defaults.businessName).toBe('Innovative Design');
       expect(defaults.entityType).toBe('LLC');
@@ -229,7 +229,7 @@ describe('ProfileCollector', () => {
       mockContext.currentState.data.user.location = undefined;
       const businessDiscovery = { found: false };
 
-      const defaults = (agent as any).generateSmartDefaults(businessDiscovery, mockContext);
+      const defaults = (agent as any).createDefaults(businessDiscovery, mockContext);
 
       expect(defaults.state).toBe('CA'); // Default fallback
       expect(defaults.confidence).toBeGreaterThan(0);
@@ -241,7 +241,7 @@ describe('ProfileCollector', () => {
       const defaults = { confidence: 0.85, businessName: 'Test LLC', entityType: 'LLC', state: 'CA' };
       const existing = {};
 
-      const strategy = (agent as any).determineCollectionStrategy(defaults, existing);
+      const strategy = (agent as any).getStrategy(defaults, existing);
 
       expect(strategy).toBe('high_confidence_prefill');
     });
@@ -250,7 +250,7 @@ describe('ProfileCollector', () => {
       const defaults = { confidence: 0.6, businessName: 'Test Corp', entityType: 'Corporation' };
       const existing = {};
 
-      const strategy = (agent as any).determineCollectionStrategy(defaults, existing);
+      const strategy = (agent as any).getStrategy(defaults, existing);
 
       expect(strategy).toBe('moderate_confidence_suggest');
     });
@@ -259,7 +259,7 @@ describe('ProfileCollector', () => {
       const defaults = { confidence: 0.3 };
       const existing = { businessName: 'Existing Co', entityType: 'LLC', state: 'NY' };
 
-      const strategy = (agent as any).determineCollectionStrategy(defaults, existing);
+      const strategy = (agent as any).getStrategy(defaults, existing);
 
       expect(strategy).toBe('update_existing');
     });
@@ -268,7 +268,7 @@ describe('ProfileCollector', () => {
       const defaults = { confidence: 0.2 };
       const existing = {};
 
-      const strategy = (agent as any).determineCollectionStrategy(defaults, existing);
+      const strategy = (agent as any).getStrategy(defaults, existing);
 
       expect(strategy).toBe('guided_collection');
     });
@@ -280,7 +280,7 @@ describe('ProfileCollector', () => {
       const defaults = { confidence: 0.3, businessName: 'Test', entityType: 'LLC', state: 'CA' };
       const existing = {};
 
-      const form = (agent as any).generateOptimizedForm(strategy, defaults, existing);
+      const form = (agent as any).createForm(strategy, defaults, existing);
 
       expect(form).toHaveLength(3); // businessName, entityType, state
       
@@ -304,7 +304,7 @@ describe('ProfileCollector', () => {
       const defaults = { confidence: 0.9, businessName: 'Tech LLC', industry: 'Technology' };
       const existing = {};
 
-      const form = (agent as any).generateOptimizedForm(strategy, defaults, existing);
+      const form = (agent as any).createForm(strategy, defaults, existing);
 
       expect(form.length).toBeGreaterThan(3);
       
@@ -427,17 +427,17 @@ describe('ProfileCollector', () => {
     });
 
     test('should extract business name from domain correctly', () => {
-      expect((agent as any).extractBusinessNameFromDomain('techstartup.com')).toBe('Techstartup');
-      expect((agent as any).extractBusinessNameFromDomain('innovativedesign.io')).toBe('Innovative Design');
-      expect((agent as any).extractBusinessNameFromDomain('myCompany.net')).toBe('My Company');
+      expect((agent as any).getNameFromDomain('techstartup.com')).toBe('Techstartup');
+      expect((agent as any).getNameFromDomain('innovativedesign.io')).toBe('Innovative Design');
+      expect((agent as any).getNameFromDomain('myCompany.net')).toBe('My Company');
     });
 
     test('should extract state from location correctly', () => {
-      expect((agent as any).extractStateFromLocation('Austin, TX')).toBe('TX');
-      expect((agent as any).extractStateFromLocation('San Francisco, CA')).toBe('CA');
-      expect((agent as any).extractStateFromLocation('New York')).toBe('NY');
-      expect((agent as any).extractStateFromLocation('Seattle')).toBe('WA');
-      expect((agent as any).extractStateFromLocation('Unknown City')).toBe('CA'); // Default
+      expect((agent as any).getStateFromLocation('Austin, TX')).toBe('TX');
+      expect((agent as any).getStateFromLocation('San Francisco, CA')).toBe('CA');
+      expect((agent as any).getStateFromLocation('New York')).toBe('NY');
+      expect((agent as any).getStateFromLocation('Seattle')).toBe('WA');
+      expect((agent as any).getStateFromLocation('Unknown City')).toBe('CA'); // Default
     });
 
     test('should infer entity type based on context', () => {

@@ -127,7 +127,7 @@ describe('BusinessDiscovery', () => {
       };
 
       // Access private method for testing (in real implementation, test through public interface)
-      const variations = (agent as any).generateBusinessNameVariations(clues);
+      const variations = (agent as any).getNameVariations(clues);
 
       expect(variations).toContain('Innovatetech');
       expect(variations).toContain('Innovatetech Inc');
@@ -142,7 +142,7 @@ describe('BusinessDiscovery', () => {
         name: 'John Smith'
       };
 
-      const variations = (agent as any).generateBusinessNameVariations(clues);
+      const variations = (agent as any).getNameVariations(clues);
 
       expect(variations).toContain('Smith Consulting');
       expect(variations).toContain('Smith LLC');

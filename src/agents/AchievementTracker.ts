@@ -94,16 +94,16 @@ export class AchievementTracker extends Agent {
       });
 
       // Determine motivational context
-      const motivationalContext = this.getMotivationalContext(context, request);
+      const motivationalContext = this.getContext(context, request);
       
       // Generate celebration configuration
-      const celebrationConfig = this.generateCelebration(achievement, motivationalContext, context);
+      const celebrationConfig = this.createCelebration(achievement, motivationalContext, context);
       
       // Check for earned badges
       const earnedBadges = this.checkForBadges(achievement, context);
       
       // Generate motivational message
-      const message = this.generateMotivationalMessage(achievement, motivationalContext, celebrationConfig);
+      const message = this.createMessage(achievement, motivationalContext, celebrationConfig);
       
       // Record celebration details
       await this.recordContextEntry(context, {
@@ -118,7 +118,7 @@ export class AchievementTracker extends Agent {
       });
 
       // Generate celebration UI request
-      const uiRequest = this.generateCelebrationUI(
+      const uiRequest = this.createUI(
         achievement,
         celebrationConfig,
         message,
@@ -263,7 +263,7 @@ export class AchievementTracker extends Agent {
   /**
    * Get motivational context for personalization
    */
-  private getMotivationalContext(context: TaskContext, request: AgentRequest): MotivationalContext {
+  private getContext(context: TaskContext, request: AgentRequest): MotivationalContext {
     // const userData = context.currentState.data.user || {}; // Reserved for future use
     const businessData = context.currentState.data.business || {};
     const previousAchievements = context.history.filter(e => 
@@ -299,9 +299,9 @@ export class AchievementTracker extends Agent {
   }
 
   /**
-   * Generate celebration configuration
+   * Create celebration configuration
    */
-  private generateCelebration(
+  private createCelebration(
     achievement: Achievement, 
     motivationalContext: MotivationalContext,
     _taskContext?: TaskContext
@@ -432,9 +432,9 @@ export class AchievementTracker extends Agent {
   }
 
   /**
-   * Generate personalized motivational message
+   * Create personalized motivational message
    */
-  private generateMotivationalMessage(
+  private createMessage(
     achievement: Achievement,
     context: MotivationalContext,
     _celebration: CelebrationConfig
@@ -479,9 +479,9 @@ export class AchievementTracker extends Agent {
   }
 
   /**
-   * Generate celebration UI request
+   * Create celebration UI request
    */
-  private generateCelebrationUI(
+  private createUI(
     achievement: Achievement,
     celebration: CelebrationConfig,
     message: string,

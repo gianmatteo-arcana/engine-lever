@@ -61,8 +61,8 @@ export class ProfileCollector extends Agent {
     
     try {
       // Extract context from previous agents
-      const businessDiscoveryResult = this.extractBusinessDiscoveryResult(context);
-      const existingData = this.extractExistingProfileData(context);
+      const businessDiscoveryResult = this.getBusinessResult(context);
+      const existingData = this.getExistingData(context);
       
       // Record collection initiation
       await this.recordContextEntry(context, {
@@ -76,10 +76,10 @@ export class ProfileCollector extends Agent {
       });
 
       // Generate smart defaults
-      const smartDefaults = this.generateSmartDefaults(businessDiscoveryResult, context);
+      const smartDefaults = this.createDefaults(businessDiscoveryResult, context);
       
       // Determine collection strategy based on available data
-      const strategy = this.determineCollectionStrategy(smartDefaults, existingData);
+      const strategy = this.getStrategy(smartDefaults, existingData);
       
       await this.recordContextEntry(context, {
         operation: 'collection_strategy_determined',
@@ -92,10 +92,10 @@ export class ProfileCollector extends Agent {
       });
 
       // Generate optimized form based on strategy
-      const formDefinition = this.generateOptimizedForm(strategy, smartDefaults, existingData);
+      const formDefinition = this.createForm(strategy, smartDefaults, existingData);
       
       // Create UI request for profile collection
-      const uiRequest = this.generateProfileCollectionUI(formDefinition, smartDefaults, strategy);
+      const uiRequest = this.createUI(formDefinition, smartDefaults, strategy);
       
       return {
         status: 'needs_input',
@@ -125,9 +125,9 @@ export class ProfileCollector extends Agent {
   }
 
   /**
-   * Extract business discovery results from context
+   * Get business discovery results from context
    */
-  private extractBusinessDiscoveryResult(context: TaskContext): any {
+  private getBusinessResult(context: TaskContext): any {
     const businessFoundEntry = context.history.find(entry => 
       entry.operation === 'business_found'
     );
@@ -153,9 +153,9 @@ export class ProfileCollector extends Agent {
   }
 
   /**
-   * Extract existing profile data from context
+   * Get existing profile data from context
    */
-  private extractExistingProfileData(context: TaskContext): Partial<ProfileData> {
+  private getExistingData(context: TaskContext): Partial<ProfileData> {
     const currentData = context.currentState.data;
     const business = currentData.business || {};
     
@@ -180,9 +180,9 @@ export class ProfileCollector extends Agent {
   }
 
   /**
-   * Generate smart defaults based on available context
+   * Create smart defaults based on available context
    */
-  private generateSmartDefaults(businessDiscovery: any, context: TaskContext): SmartDefaults {
+  private createDefaults(businessDiscovery: any, context: TaskContext): SmartDefaults {
     const defaults: SmartDefaults = { confidence: 0 };
     let confidenceFactors = 0;
 
@@ -200,7 +200,7 @@ export class ProfileCollector extends Agent {
       // Infer business name from email domain
       if (userData.email && !this.isPersonalEmailDomain(userData.email)) {
         const domain = userData.email.split('@')[1];
-        defaults.businessName = this.extractBusinessNameFromDomain(domain);
+        defaults.businessName = this.getNameFromDomain(domain);
         defaults.confidence += 0.6;
         confidenceFactors += 1;
       }
@@ -220,7 +220,7 @@ export class ProfileCollector extends Agent {
 
       // Default state from location
       if (userData.location) {
-        defaults.state = this.extractStateFromLocation(userData.location);
+        defaults.state = this.getStateFromLocation(userData.location);
         if (isPersonalEmail) {
           defaults.confidence += 0.2; // Lower confidence for personal emails
         } else {
@@ -260,9 +260,9 @@ export class ProfileCollector extends Agent {
   }
 
   /**
-   * Determine collection strategy based on defaults quality
+   * Get collection strategy based on defaults quality
    */
-  private determineCollectionStrategy(defaults: SmartDefaults, existing: Partial<ProfileData>): string {
+  private getStrategy(defaults: SmartDefaults, existing: Partial<ProfileData>): string {
     if (defaults.confidence > 0.8) {
       return 'high_confidence_prefill';
     } else if (defaults.confidence > 0.5) {
@@ -275,9 +275,9 @@ export class ProfileCollector extends Agent {
   }
 
   /**
-   * Generate optimized form based on strategy
+   * Create optimized form based on strategy
    */
-  private generateOptimizedForm(strategy: string, defaults: SmartDefaults, existing: Partial<ProfileData>): FormFieldDefinition[] {
+  private createForm(strategy: string, defaults: SmartDefaults, existing: Partial<ProfileData>): FormFieldDefinition[] {
     const baseFields: FormFieldDefinition[] = [
       {
         id: 'businessName',
@@ -341,9 +341,9 @@ export class ProfileCollector extends Agent {
   }
 
   /**
-   * Generate UI request for profile collection
+   * Create UI request for profile collection
    */
-  private generateProfileCollectionUI(
+  private createUI(
     formDefinition: FormFieldDefinition[],
     defaults: SmartDefaults,
     strategy: string
@@ -392,7 +392,7 @@ export class ProfileCollector extends Agent {
     return personalDomains.includes(domain);
   }
 
-  private extractBusinessNameFromDomain(domain: string): string {
+  private getNameFromDomain(domain: string): string {
     const baseName = domain.split('.')[0];
     
     // Handle common compound word patterns
@@ -438,7 +438,7 @@ export class ProfileCollector extends Agent {
     return normalized || stateName.toUpperCase(); // Return abbreviated form or original
   }
 
-  private extractStateFromLocation(location: string): string {
+  private getStateFromLocation(location: string): string {
     const stateMap: Record<string, string> = {
       'california': 'CA', 'ca': 'CA', 'san francisco': 'CA', 'los angeles': 'CA',
       'new york': 'NY', 'ny': 'NY', 'manhattan': 'NY', 'brooklyn': 'NY',

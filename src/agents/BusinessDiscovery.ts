@@ -84,7 +84,7 @@ export class BusinessDiscovery extends Agent {
         return {
           status: 'needs_input',
           data: searchResult.businessData,
-          uiRequests: [this.generateFoundYouCardUI(searchResult.businessData, searchResult.confidence)],
+          uiRequests: [this.createFoundCard(searchResult.businessData, searchResult.confidence)],
           reasoning: 'Found business in public records, requesting user confirmation',
           nextAgent: 'profile_collection_agent'
         };
@@ -161,7 +161,7 @@ export class BusinessDiscovery extends Agent {
     };
 
     // Generate business name variations
-    const nameVariations = this.generateBusinessNameVariations(clues);
+    const nameVariations = this.getNameVariations(clues);
     
     // Determine search priority order (PRD strategy)
     const searchStates = this.prioritizeSearchStates(clues);
@@ -206,12 +206,12 @@ export class BusinessDiscovery extends Agent {
   /**
    * Generate business name variations for search
    */
-  private generateBusinessNameVariations(clues: SearchClues): string[] {
+  private getNameVariations(clues: SearchClues): string[] {
     const variations: string[] = [];
 
     // If we have a domain, use it as primary source
     if (clues.extractedDomain) {
-      const baseName = this.extractBusinessNameFromDomain(clues.extractedDomain);
+      const baseName = this.getNameFromDomain(clues.extractedDomain);
       variations.push(
         baseName,
         `${baseName} Inc`,
@@ -303,7 +303,7 @@ export class BusinessDiscovery extends Agent {
   /**
    * Generate FoundYouCard UI request
    */
-  private generateFoundYouCardUI(businessData: any, confidence: number): UIRequest {
+  private createFoundCard(businessData: any, confidence: number): UIRequest {
     return {
       id: `found_you_${Date.now()}`,
       agentRole: 'business_discovery_agent',
@@ -340,7 +340,7 @@ export class BusinessDiscovery extends Agent {
     return techTlds.some(tld => clues.extractedDomain!.endsWith(tld));
   }
 
-  private extractBusinessNameFromDomain(domain: string): string {
+  private getNameFromDomain(domain: string): string {
     // Remove TLD and convert to business name
     const baseName = domain.split('.')[0];
     // Convert camelCase/PascalCase to words and capitalize first letter
