@@ -145,7 +145,7 @@ describe('Type Safety Tests', () => {
         status: 'needs_input',
         data: {},
         uiRequests: [{
-          id: 'ui_123',
+          requestId: 'ui_123',
           agentRole: 'test_agent',
           suggestedTemplates: ['form_template'],
           dataNeeded: ['name', 'email'],
@@ -219,7 +219,7 @@ describe('Type Safety Tests', () => {
   describe('UIRequest Type Safety', () => {
     test('should enforce urgency levels', () => {
       const validUIRequest: UIRequest = {
-        id: 'ui_123',
+        requestId: 'ui_123',
         agentRole: 'profile_collection_agent',
         suggestedTemplates: ['business_form'],
         dataNeeded: ['businessName', 'entityType'],
@@ -230,10 +230,10 @@ describe('Type Safety Tests', () => {
         }
       };
 
-      expect(validUIRequest.context.urgency).toBe('high');
+      expect(validUIRequest.context?.urgency).toBe('high');
 
       const invalidUIRequest: UIRequest = {
-        id: 'ui_124',
+        requestId: 'ui_124',
         agentRole: 'test_agent',
         suggestedTemplates: [],
         dataNeeded: [],
@@ -249,10 +249,12 @@ describe('Type Safety Tests', () => {
 
     test('should enforce device types', () => {
       const invalidDevice: UIRequest = {
-        id: 'ui_125',
-        agentRole: 'test_agent',
-        suggestedTemplates: [],
-        dataNeeded: [],
+        requestId: 'ui_125',
+        templateType: 'form' as any,
+        semanticData: {
+          agentRole: 'test_agent',
+          dataNeeded: []
+        },
         context: {
           userProgress: 50,
           deviceType: 'invalid_device' as 'mobile',

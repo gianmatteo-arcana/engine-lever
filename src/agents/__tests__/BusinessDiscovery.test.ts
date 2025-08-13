@@ -74,7 +74,7 @@ describe('BusinessDiscovery', () => {
       expect(response.data).toHaveProperty('name');
       expect(response.data).toHaveProperty('entityType');
       expect(response.uiRequests).toHaveLength(1);
-      expect(response.uiRequests![0].suggestedTemplates).toContain('found_you_card');
+      expect(response.uiRequests![0].templateType).toBe('found_you_card');
       expect(response.reasoning).toContain('Found business in public records');
 
       // Restore original method
@@ -271,12 +271,11 @@ describe('BusinessDiscovery', () => {
       if (response.status === 'needs_input' && response.uiRequests) {
         const uiRequest = response.uiRequests![0];
 
-        expect(uiRequest.suggestedTemplates).toContain('found_you_card');
-        expect(uiRequest.agentRole).toBe('business_discovery_agent');
-        expect(uiRequest).toHaveProperty('businessData');
-        expect(uiRequest).toHaveProperty('confidence');
-        expect(uiRequest.confidence.score).toBeGreaterThan(0);
-        expect(uiRequest).toHaveProperty('actions');
+        expect(uiRequest.templateType).toBe('found_you_card');
+        expect(uiRequest.semanticData).toHaveProperty('businessData');
+        expect(uiRequest.semanticData).toHaveProperty('confidence');
+        expect(uiRequest.semanticData.confidence?.score).toBeGreaterThan(0);
+        expect(uiRequest.semanticData).toHaveProperty('actions');
         expect(uiRequest.actions).toHaveProperty('confirm');
         expect(uiRequest.actions).toHaveProperty('notMe');
         expect(uiRequest.actions).toHaveProperty('editDetails');

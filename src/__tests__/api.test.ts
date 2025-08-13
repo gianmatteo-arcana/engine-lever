@@ -5,22 +5,38 @@ import { AgentManager } from '../agents';
 import { extractUserContext } from '../middleware/auth';
 
 // Mock the Supabase client
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({
-    from: jest.fn().mockReturnThis(),
-    select: jest.fn().mockReturnThis(),
-    insert: jest.fn().mockReturnThis(),
-    update: jest.fn().mockReturnThis(),
-    eq: jest.fn().mockReturnThis(),
-    single: jest.fn().mockResolvedValue({ 
-      data: { 
-        id: 'task-123',
-        user_id: 'user-123',
-        status: 'pending'
-      }, 
-      error: null 
+const mockSupabaseClient = {
+  from: jest.fn().mockReturnThis(),
+  select: jest.fn().mockReturnThis(),
+  insert: jest.fn().mockReturnThis(),
+  update: jest.fn().mockReturnThis(),
+  eq: jest.fn().mockReturnThis(),
+  single: jest.fn(),
+  auth: {
+    getUser: jest.fn().mockResolvedValue({
+      data: { user: { id: '123e4567-e89b-12d3-a456-426614174000' } },
+      error: null
     })
-  }))
+  }
+};
+
+// Setup default responses
+mockSupabaseClient.single.mockResolvedValue({ 
+  data: { 
+    id: 'task-123',
+    user_id: '123e4567-e89b-12d3-a456-426614174000',
+    business_id: 'biz-123',
+    current_state: { status: 'created', phase: 'init', completeness: 0, data: {} },
+    template_id: 'soi-filing',
+    metadata: { title: 'Test Task' },
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }, 
+  error: null 
+});
+
+jest.mock('@supabase/supabase-js', () => ({
+  createClient: jest.fn(() => mockSupabaseClient)
 }));
 
 // Initialize AgentManager for tests
@@ -80,7 +96,8 @@ describe('API Routes', () => {
       const taskData = {
         businessId: 'biz-123',
         templateId: 'soi-filing',
-        priority: 'high'
+        priority: 'high',
+        metadata: { test: true }
       };
 
       const response = await request(app)

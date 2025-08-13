@@ -116,16 +116,16 @@ describe('ProfileCollector', () => {
       expect(response.uiRequests).toHaveLength(1);
       const uiRequest = response.uiRequests![0];
       
-      expect(uiRequest.title).toContain('Confirm Your Business Details');
-      expect(uiRequest.formDefinition).toBeDefined();
+      expect(uiRequest.semanticData.title).toContain('Confirm Your Business Details');
+      expect(uiRequest.semanticData.formDefinition).toBeDefined();
       
-      const businessNameField = uiRequest.formDefinition.find((f: any) => f.id === 'businessName');
+      const businessNameField = uiRequest.semanticData.formDefinition?.find((f: any) => f.id === 'businessName');
       expect(businessNameField?.defaultValue).toBe('TechStart Inc');
       
-      const entityTypeField = uiRequest.formDefinition.find((f: any) => f.id === 'entityType');
+      const entityTypeField = uiRequest.semanticData.formDefinition?.find((f: any) => f.id === 'entityType');
       expect(entityTypeField?.defaultValue).toBe('Corporation');
       
-      const stateField = uiRequest.formDefinition.find((f: any) => f.id === 'state');
+      const stateField = uiRequest.semanticData.formDefinition?.find((f: any) => f.id === 'state');
       expect(stateField?.defaultValue).toBe('DE');
     });
   });
@@ -189,7 +189,7 @@ describe('ProfileCollector', () => {
       expect(response.data.smartDefaults.businessName).toBeUndefined();
       expect(response.data.smartDefaults.entityType).toBe('Sole Proprietorship');
       expect(response.data.strategy).toBe('guided_collection');
-      expect(response.uiRequests![0].title).toContain('Tell Us About Your Business');
+      expect(response.uiRequests![0].semanticData.title).toContain('Tell Us About Your Business');
     });
   });
 
@@ -390,13 +390,13 @@ describe('ProfileCollector', () => {
       expect(response.uiRequests).toHaveLength(1);
       const uiRequest = response.uiRequests![0];
 
-      expect(uiRequest.suggestedTemplates).toContain('business_profile_form');
-      expect(uiRequest.title).toContain('Confirm');
-      expect(uiRequest.description).toContain('We found some information');
-      expect(uiRequest).toHaveProperty('progressIndicator');
-      expect(uiRequest.progressIndicator.current).toBe(2);
-      expect(uiRequest.progressIndicator.total).toBe(4);
-      expect(uiRequest.context.userProgress).toBe(45);
+      expect(uiRequest.templateType).toBe('business_profile_form');
+      expect(uiRequest.semanticData.title).toContain('Confirm');
+      expect(uiRequest.semanticData.description).toContain('We found some information');
+      expect(uiRequest.semanticData).toHaveProperty('progressIndicator');
+      expect(uiRequest.semanticData.progressIndicator?.current).toBe(2);
+      expect(uiRequest.semanticData.progressIndicator?.total).toBe(4);
+      expect(uiRequest.context?.userProgress).toBe(45);
     });
 
     test('should generate guidance-focused UI for low confidence', async () => {

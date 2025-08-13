@@ -429,11 +429,11 @@ describe('ComplianceAnalyzer', () => {
       expect(response.uiRequests).toHaveLength(1);
       const uiRequest = response.uiRequests![0];
       
-      expect(uiRequest.suggestedTemplates).toContain('compliance_roadmap');
-      expect(uiRequest.title).toBe('Your Compliance Roadmap');
-      expect(uiRequest.sections).toBeDefined();
-      expect(uiRequest.progressIndicator.current).toBe(3);
-      expect(uiRequest.progressIndicator.total).toBe(4);
+      expect(uiRequest.templateType).toBe('compliance_roadmap');
+      expect(uiRequest.semanticData.title).toBe('Your Compliance Roadmap');
+      expect(uiRequest.semanticData.sections).toBeDefined();
+      expect(uiRequest.semanticData.progressIndicator?.current).toBe(3);
+      expect(uiRequest.semanticData.progressIndicator?.total).toBe(4);
     });
 
     test('should organize requirements into sections', async () => {
@@ -447,7 +447,7 @@ describe('ComplianceAnalyzer', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const uiRequest = response.uiRequests![0];
-      const sections = uiRequest.sections;
+      const sections = uiRequest.semanticData.sections;
       
       expect(sections.find((s: any) => s.id === 'critical_requirements')).toBeDefined();
       expect(sections.find((s: any) => s.id === 'upcoming_deadlines')).toBeDefined();
@@ -468,9 +468,9 @@ describe('ComplianceAnalyzer', () => {
       const riskLevel = response.data.riskAssessment.overallRisk;
       
       if (riskLevel === 'high') {
-        expect(uiRequest.context.urgency).toBe('high');
+        expect(uiRequest.context?.urgency).toBe('high');
       } else {
-        expect(uiRequest.context.urgency).toBe('medium');
+        expect(uiRequest.context?.urgency).toBe('medium');
       }
     });
   });

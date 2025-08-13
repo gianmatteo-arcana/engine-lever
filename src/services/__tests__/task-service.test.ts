@@ -42,7 +42,7 @@ describe('TaskService - Universal Task Creation', () => {
           id: 'goal1',
           description: 'Complete test task',
           required: true,
-          successCriteria: 'task.complete == true'
+          successCriteria: ['task.complete == true']
         }
       ]
     }
@@ -70,9 +70,9 @@ describe('TaskService - Universal Task Creation', () => {
     
     // Default mock implementations
     mockConfigManager.loadTemplate.mockResolvedValue(mockTemplate);
-    mockDbService.createTaskContext.mockResolvedValue('context-123');
-    mockDbService.createContextHistoryEntry.mockResolvedValue(undefined);
-    mockDbService.getTaskContext.mockResolvedValue(null);
+    mockDbService.createContext = jest.fn().mockResolvedValue({ id: 'context-123' } as any);
+    mockDbService.addContextEvent = jest.fn().mockResolvedValue({ id: 'event-123' } as any);
+    mockDbService.getContext = jest.fn().mockResolvedValue(null);
   });
 
   describe('Singleton Pattern', () => {
@@ -149,7 +149,7 @@ describe('TaskService - Universal Task Creation', () => {
     it('should persist TaskContext to database', async () => {
       const context = await taskService.create(mockRequest);
       
-      expect(mockDbService.createTaskContext).toHaveBeenCalledWith(
+      expect(mockDbService.createContext).toHaveBeenCalledWith(
         expect.objectContaining({
           contextId: context.contextId,
           taskTemplateId: mockRequest.templateId,
@@ -189,8 +189,7 @@ describe('TaskService - Universal Task Creation', () => {
       expect(mockDbService.createContextHistoryEntry).toHaveBeenCalled();
       
       // Verify no update or delete operations
-      expect(mockDbService.updateTaskContext).not.toHaveBeenCalled();
-      expect(mockDbService.deleteTaskContext).not.toHaveBeenCalled();
+      expect(mockDbService.addContextEvent).not.toHaveBeenCalled();
     });
 
     it('should trigger orchestration after task creation', async () => {
@@ -206,18 +205,18 @@ describe('TaskService - Universal Task Creation', () => {
     });
 
     it('should handle missing template gracefully', async () => {
-      mockConfigManager.loadTemplate.mockResolvedValue(null);
+      mockConfigManager.loadTemplate.mockResolvedValue(null as any);
       
       await expect(taskService.create(mockRequest))
         .rejects.toThrow('Template not found: test_template');
       
       // Verify no partial data persisted
-      expect(mockDbService.createTaskContext).not.toHaveBeenCalled();
+      expect(mockDbService.createContext).not.toHaveBeenCalled();
       expect(mockDbService.createContextHistoryEntry).not.toHaveBeenCalled();
     });
 
     it('should handle database errors with proper rollback', async () => {
-      mockDbService.createTaskContext.mockRejectedValue(new Error('DB Error'));
+      mockDbService.createContext = jest.fn().mockRejectedValue(new Error('DB Error'));
       
       await expect(taskService.create(mockRequest))
         .rejects.toThrow('DB Error');
@@ -254,7 +253,7 @@ describe('TaskService - Universal Task Creation', () => {
       expect(new Set(contextIds).size).toBe(10);
       
       // Verify all persisted
-      expect(mockDbService.createTaskContext).toHaveBeenCalledTimes(10);
+      expect(mockDbService.createContext).toHaveBeenCalledTimes(10);
     });
   });
 
@@ -369,7 +368,7 @@ describe('TaskService - Universal Task Creation', () => {
     it('should handle network timeouts gracefully', async () => {
       jest.useFakeTimers();
       
-      mockDbService.createTaskContext.mockImplementation(() => 
+      mockDbService.createContext.mockImplementation(() => 
         new Promise((resolve) => setTimeout(resolve, 10000))
       );
       
@@ -485,7 +484,7 @@ describe('TaskService - Universal Task Creation', () => {
       
       // Verify same flow used
       expect(mockConfigManager.loadTemplate).toHaveBeenCalledTimes(2);
-      expect(mockDbService.createTaskContext).toHaveBeenCalledTimes(2);
+      expect(mockDbService.createContext).toHaveBeenCalledTimes(2);
       expect(mockDbService.createContextHistoryEntry).toHaveBeenCalledTimes(4); // 2 per task
     });
 

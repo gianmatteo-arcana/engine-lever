@@ -7,7 +7,7 @@ import { A2ATask } from '../../base/BaseA2AAgent';
 import { DatabaseService } from '../../../services/database';
 import { logger } from '../../../utils/logger';
 import { TaskContext } from '../../../types/engine-types';
-import { OnboardingTaskContext } from '../../../types/onboarding-types';
+// import { OnboardingTaskContext } from '../../../types/onboarding-types'; // Type not found
 
 // Mock dependencies
 jest.mock('../../../services/database');
@@ -156,10 +156,9 @@ describe('DataCollectionAgent', () => {
         input: null, // Invalid input
         tenantContext: {
           businessId: 'business-123',
-          sessionUserId: 'user-123',
-          dataScope: 'business',
+          tenantId: 'tenant-123',
+          userId: 'user-123',
           allowedAgents: ['data_collection_agent'],
-          isolationLevel: 'strict',
           userToken: 'test-token'
         }
       };
@@ -188,10 +187,9 @@ describe('DataCollectionAgent', () => {
         },
         tenantContext: {
           businessId: 'business-123',
-          sessionUserId: 'user-123',
-          dataScope: 'business',
+          tenantId: 'tenant-123',
+          userId: 'user-123',
           allowedAgents: ['data_collection_agent'],
-          isolationLevel: 'strict',
           userToken: 'test-token'
         }
       };
@@ -218,10 +216,9 @@ describe('DataCollectionAgent', () => {
         },
         tenantContext: {
           businessId: 'business-123',
-          sessionUserId: 'user-123',
-          dataScope: 'business',
+          tenantId: 'tenant-123',
+          userId: 'user-123',
           allowedAgents: ['data_collection_agent'],
-          isolationLevel: 'strict',
           userToken: 'test-token'
         }
       };
@@ -254,10 +251,9 @@ describe('DataCollectionAgent', () => {
         },
         tenantContext: {
           businessId: 'business-123',
-          sessionUserId: 'user-123',
-          dataScope: 'business',
+          tenantId: 'tenant-123',
+          userId: 'user-123',
           allowedAgents: ['data_collection_agent'],
-          isolationLevel: 'strict',
           userToken: 'test-token'
         }
       };
@@ -283,10 +279,9 @@ describe('DataCollectionAgent', () => {
         },
         tenantContext: {
           businessId: 'business-123',
-          sessionUserId: 'user-123',
-          dataScope: 'business',
+          tenantId: 'tenant-123',
+          userId: 'user-123',
           allowedAgents: ['data_collection_agent'],
-          isolationLevel: 'strict',
           userToken: 'test-token'
         }
       };
@@ -316,10 +311,9 @@ describe('DataCollectionAgent', () => {
         },
         tenantContext: {
           businessId: 'business-123',
-          sessionUserId: 'user-123',
-          dataScope: 'business',
+          tenantId: 'tenant-123',
+          userId: 'user-123',
           allowedAgents: ['data_collection_agent'],
-          isolationLevel: 'strict',
           userToken: 'test-token'
         }
       };
@@ -359,10 +353,9 @@ describe('DataCollectionAgent', () => {
         input: {},
         tenantContext: {
           businessId: 'business-123',
-          sessionUserId: 'user-123',
-          dataScope: 'business',
+          tenantId: 'tenant-123',
+          userId: 'user-123',
           allowedAgents: ['data_collection_agent'],
-          isolationLevel: 'strict',
           userToken: 'test-token'
         }
       };

@@ -2,7 +2,7 @@
  * Unit tests for BaseA2AAgent
  */
 
-import { BaseA2AAgent, A2ATask, A2ATaskResult, TenantAccessError } from '../BaseA2AAgent';
+import { BaseA2AAgent, A2ATask, A2ATaskResult, TenantAccessError, UIAugmentationRequest, UIAugmentationResponse } from '../BaseA2AAgent';
 import { DatabaseService } from '../../../services/database';
 import { logger } from '../../../utils/logger';
 
@@ -75,11 +75,10 @@ describe('BaseA2AAgent', () => {
       type: 'test_success',
       input: { test: true },
       tenantContext: {
+        tenantId: 'tenant-123',
         businessId: 'business-123',
-        sessionUserId: 'user-123',
-        dataScope: 'business',
+        userId: 'user-123',
         allowedAgents: ['test_agent'],
-        isolationLevel: 'strict',
         userToken: 'test-jwt-token'
       }
     };
@@ -158,6 +157,7 @@ describe('BaseA2AAgent', () => {
         type: 'test_ui_request',
         metadata: {
           uiAugmentation: {
+            type: 'form',
             agentRole: 'test_agent',
             requestId: 'req-123',
             timestamp: new Date().toISOString(),
@@ -166,12 +166,6 @@ describe('BaseA2AAgent', () => {
               urgency: 'medium',
               category: 'test',
               allowSkip: false
-            },
-            requirementLevel: {
-              minimumRequired: ['field1'],
-              recommended: [],
-              optional: [],
-              conditionallyRequired: []
             },
             presentation: {
               title: 'Test Request'
@@ -227,7 +221,8 @@ describe('BaseA2AAgent', () => {
       const mockAugmentation = { id: 'aug-123' } as any;
       mockDbService.createUIAugmentation.mockResolvedValue(mockAugmentation);
 
-      const request = {
+      const request: UIAugmentationRequest = {
+        type: 'form',
         agentRole: 'test_agent',
         requestId: 'req-123',
         timestamp: new Date().toISOString(),
@@ -236,12 +231,6 @@ describe('BaseA2AAgent', () => {
           urgency: 'low' as const,
           category: 'test',
           allowSkip: true
-        },
-        requirementLevel: {
-          minimumRequired: [],
-          recommended: [],
-          optional: [],
-          conditionallyRequired: []
         },
         presentation: { title: 'Test' },
         context: {},
@@ -266,14 +255,17 @@ describe('BaseA2AAgent', () => {
     it('should update UI augmentation status', async () => {
       mockDbService.updateUIAugmentationStatus.mockResolvedValue(undefined);
 
-      const response = {
-        requestId: 'req-123',
-        taskId: 'task-123',
-        agentRole: 'test_agent',
-        timestamp: new Date().toISOString(),
+      const response: UIAugmentationResponse = {
+        status: 'completed',
         formData: { field1: 'value1' },
-        actionTaken: { type: 'submit' as const },
-        validationStatus: { isValid: true }
+        data: {
+          requestId: 'req-123',
+          taskId: 'task-123',
+          agentRole: 'test_agent',
+          timestamp: new Date().toISOString(),
+          actionTaken: { type: 'submit' as const },
+          validationStatus: { isValid: true }
+        }
       };
 
       await testAgent.handleUIResponse('aug-123', response);

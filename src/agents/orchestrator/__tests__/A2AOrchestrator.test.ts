@@ -9,7 +9,7 @@ import { LLMProvider } from '../../../services/llm-provider';
 import { RealLLMProvider } from '../../../services/real-llm-provider';
 import { logger } from '../../../utils/logger';
 import { TaskContext } from '../../../types/engine-types';
-import { OnboardingTaskContext } from '../../../types/onboarding-types';
+// import { OnboardingTaskContext } from '../../../types/onboarding-types'; // Type not found
 
 // Mock dependencies
 jest.mock('../../../services/database');
@@ -94,10 +94,9 @@ describe('A2AOrchestrator', () => {
       taskType: 'onboarding',
       tenantContext: {
         businessId: 'business-123',
-        sessionUserId: 'user-123',
-        dataScope: 'business',
+        tenantId: 'tenant-123',
+        userId: 'user-123',
         allowedAgents: ['orchestrator'],
-        isolationLevel: 'strict',
         userToken: 'test-token'
       },
       status: 'active',
@@ -149,7 +148,7 @@ describe('A2AOrchestrator', () => {
 
       mockDbService.getUserClient.mockReturnValue({} as any);
 
-      const result = await orchestrator.executeTask(mockTask);
+      const result = await orchestrator.processTask(mockTask);
 
       expect(result.status).toBe('complete');
       expect(result.result).toBeDefined();
@@ -185,7 +184,7 @@ describe('A2AOrchestrator', () => {
       mockLLM.complete.mockRejectedValue(new Error('LLM service unavailable'));
       mockDbService.getUserClient.mockReturnValue({} as any);
 
-      const result = await orchestrator.executeTask(mockTask);
+      const result = await orchestrator.processTask(mockTask);
 
       expect(result.status).toBe('error');
       expect(result.error?.code).toBe('PLANNING_FAILED');
@@ -201,7 +200,7 @@ describe('A2AOrchestrator', () => {
 
       mockDbService.getUserClient.mockReturnValue({} as any);
 
-      const result = await orchestrator.executeTask(mockTask);
+      const result = await orchestrator.processTask(mockTask);
 
       expect(result.status).toBe('complete');
       expect(result.result.plan.phases).toHaveLength(3); // Default plan has 3 phases
@@ -219,10 +218,9 @@ describe('A2AOrchestrator', () => {
       },
       tenantContext: {
         businessId: 'business-123',
-        sessionUserId: 'user-123',
-        dataScope: 'business',
+        tenantId: 'tenant-123',
+        userId: 'user-123',
         allowedAgents: ['orchestrator'],
-        isolationLevel: 'strict',
         userToken: 'test-token'
       }
     };
@@ -243,7 +241,7 @@ describe('A2AOrchestrator', () => {
 
       mockDbService.getUserClient.mockReturnValue({} as any);
 
-      const result = await orchestrator.executeTask(mockTask);
+      const result = await orchestrator.processTask(mockTask);
 
       expect(result.status).toBe('complete');
       expect(result.result.delegations).toHaveLength(1);
@@ -255,7 +253,7 @@ describe('A2AOrchestrator', () => {
       mockDbService.getActiveOrchestrationPlan.mockResolvedValue(null);
       mockDbService.getUserClient.mockReturnValue({} as any);
 
-      const result = await orchestrator.executeTask(mockTask);
+      const result = await orchestrator.processTask(mockTask);
 
       expect(result.status).toBe('error');
       expect(result.error?.code).toBe('DELEGATION_FAILED');
@@ -277,7 +275,7 @@ describe('A2AOrchestrator', () => {
 
       mockDbService.getUserClient.mockReturnValue({} as any);
 
-      const result = await orchestrator.executeTask(mockTask);
+      const result = await orchestrator.processTask(mockTask);
 
       expect(result.status).toBe('error');
       expect(result.error?.code).toBe('NO_AGENTS_AVAILABLE');
@@ -291,10 +289,9 @@ describe('A2AOrchestrator', () => {
       input: {},
       tenantContext: {
         businessId: 'business-123',
-        sessionUserId: 'user-123',
-        dataScope: 'business',
+        tenantId: 'tenant-123',
+        userId: 'user-123',
         allowedAgents: ['orchestrator'],
-        isolationLevel: 'strict',
         userToken: 'test-token'
       }
     };
@@ -317,7 +314,7 @@ describe('A2AOrchestrator', () => {
 
       mockDbService.getUserClient.mockReturnValue({} as any);
 
-      const result = await orchestrator.executeTask(mockTask);
+      const result = await orchestrator.processTask(mockTask);
 
       expect(result.status).toBe('complete');
       expect(result.result.progress.completedAgents).toBe(1);
@@ -338,7 +335,7 @@ describe('A2AOrchestrator', () => {
 
       mockDbService.getUserClient.mockReturnValue({} as any);
 
-      const result = await orchestrator.executeTask(mockTask);
+      const result = await orchestrator.processTask(mockTask);
 
       expect(result.status).toBe('complete');
       expect(result.result.progress.percentComplete).toBe(100);
@@ -358,10 +355,9 @@ describe('A2AOrchestrator', () => {
       },
       tenantContext: {
         businessId: 'business-123',
-        sessionUserId: 'user-123',
-        dataScope: 'business',
+        tenantId: 'tenant-123',
+        userId: 'user-123',
         allowedAgents: ['orchestrator'],
-        isolationLevel: 'strict',
         userToken: 'test-token'
       }
     };
@@ -379,7 +375,7 @@ describe('A2AOrchestrator', () => {
 
       mockDbService.getUserClient.mockReturnValue({} as any);
 
-      const result = await orchestrator.executeTask(mockTask);
+      const result = await orchestrator.processTask(mockTask);
 
       expect(result.status).toBe('complete');
       expect(result.result.recoveryStrategy.recommendation).toBe('retry');
@@ -390,7 +386,7 @@ describe('A2AOrchestrator', () => {
       mockLLM.complete.mockRejectedValue(new Error('LLM error'));
       mockDbService.getUserClient.mockReturnValue({} as any);
 
-      const result = await orchestrator.executeTask(mockTask);
+      const result = await orchestrator.processTask(mockTask);
 
       expect(result.status).toBe('error');
       expect(result.error?.code).toBe('RECOVERY_FAILED');
@@ -408,14 +404,13 @@ describe('A2AOrchestrator', () => {
           sessionUserId: 'user-123',
           dataScope: 'business',
           allowedAgents: ['orchestrator'],
-          isolationLevel: 'strict',
-          userToken: 'test-token'
+            userToken: 'test-token'
         }
       };
 
       mockDbService.getUserClient.mockReturnValue({} as any);
 
-      const result = await orchestrator.executeTask(mockTask);
+      const result = await orchestrator.processTask(mockTask);
 
       expect(result.status).toBe('error');
       expect(result.error?.code).toBe('AGENT_EXECUTION_ERROR');

@@ -271,10 +271,10 @@ describe('UIStrategyEngine', () => {
         context
       );
 
-      expect(uiRequest.id).toMatch(/^ui_\d+_[a-z0-9]+$/);
-      expect(uiRequest.agentRole).toBe('business_discovery');
-      expect(uiRequest.dataNeeded).toEqual(['businessName', 'entityType']);
-      expect(uiRequest.suggestedTemplates).toContain('found_you_card');
+      expect(uiRequest.requestId).toMatch(/^ui_\d+_[a-z0-9]+$/);
+      expect(uiRequest.semanticData.agentRole).toBe('business_discovery');
+      expect(uiRequest.semanticData.dataNeeded).toEqual(['businessName', 'entityType']);
+      expect(uiRequest.templateType).toBe('found_you_card');
       expect(uiRequest.context).toBeDefined();
     });
 
@@ -293,7 +293,7 @@ describe('UIStrategyEngine', () => {
 
       expect((uiRequest.context as any).uiStrategy).toBeDefined();
       expect((uiRequest.context as any).components).toBeDefined();
-      expect(uiRequest.context.userProgress).toBe(25);
+      expect(uiRequest.context?.userProgress).toBe(25);
     });
 
     it('should suggest agent-specific templates', () => {
@@ -309,7 +309,7 @@ describe('UIStrategyEngine', () => {
         context
       );
 
-      expect(complianceRequest.suggestedTemplates).toContain('compliance_roadmap');
+      expect(complianceRequest.templateType).toBe('compliance_roadmap');
       expect(complianceRequest.suggestedTemplates).toContain('requirement_list');
 
       const celebrationRequest = engine.createUIRequest(
