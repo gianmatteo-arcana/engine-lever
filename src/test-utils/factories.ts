@@ -67,39 +67,39 @@ export class TaskTemplateFactory {
   static create(overrides: Partial<TaskTemplate> = {}): TaskTemplate {
     return {
       id: 'test_template',
-      name: 'Test Template',
       version: '1.0.0',
-      description: 'Test template for unit tests',
-      category: 'testing',
-      steps: [
+      metadata: {
+        name: 'Test Template',
+        description: 'Test template for unit tests',
+        category: 'testing',
+        estimatedDuration: 300,
+        priority: 'medium'
+      },
+      goals: {
+        primary: []
+      },
+      phases: [
         {
-          id: 'step1',
+          id: 'initial_step',
           name: 'Initial Step',
-          agent: 'TestAgent',
-          config: {
-            action: 'collect_data',
-            required: true
-          },
-          dependencies: []
+          description: 'Initial processing step',
+          agents: ['TestAgent'],
+          maxDuration: 300,
+          canSkip: false
         },
         {
-          id: 'step2',
+          id: 'process_step',
           name: 'Process Step',
-          agent: 'ProcessAgent',
-          config: {
-            action: 'process_data'
-          },
-          dependencies: ['step1']
+          description: 'Main processing step',
+          agents: ['ProcessAgent'],
+          maxDuration: 600,
+          canSkip: false
         }
       ],
       completionCriteria: [
         'task.status == "completed"',
         'task.data.processed == true'
       ],
-      metadata: {
-        created: new Date().toISOString(),
-        author: 'test-suite'
-      },
       ...overrides
     };
   }
@@ -107,29 +107,35 @@ export class TaskTemplateFactory {
   static createOnboardingTemplate(): TaskTemplate {
     return this.create({
       id: 'user_onboarding',
-      name: 'User Onboarding',
-      category: 'onboarding',
-      steps: [
+      metadata: {
+        name: 'User Onboarding',
+        description: 'User onboarding flow',
+        category: 'onboarding'
+      },
+      phases: [
         {
-          id: 'auth',
+          id: 'authentication',
           name: 'Authentication',
-          agent: 'AuthenticationAgent',
-          config: { provider: 'google' },
-          dependencies: []
+          description: 'User authentication phase',
+          agents: ['AuthenticationAgent'],
+          maxDuration: 300,
+          canSkip: false
         },
         {
           id: 'business_discovery',
           name: 'Business Discovery',
-          agent: 'BusinessDiscoveryAgent',
-          config: { searchDepth: 'deep' },
-          dependencies: ['auth']
+          description: 'Business discovery phase',
+          agents: ['BusinessDiscoveryAgent'],
+          maxDuration: 600,
+          canSkip: false
         },
         {
           id: 'profile_collection',
           name: 'Profile Collection',
-          agent: 'ProfileCollectorAgent',
-          config: { fields: ['ein', 'business_type'] },
-          dependencies: ['business_discovery']
+          description: 'Profile collection phase',
+          agents: ['ProfileCollectorAgent'],
+          maxDuration: 600,
+          canSkip: false
         }
       ]
     });
@@ -138,29 +144,35 @@ export class TaskTemplateFactory {
   static createSOITemplate(): TaskTemplate {
     return this.create({
       id: 'soi_filing',
-      name: 'Statement of Information Filing',
-      category: 'compliance',
-      steps: [
+      metadata: {
+        name: 'Statement of Information Filing',
+        description: 'File Statement of Information',
+        category: 'compliance'
+      },
+      phases: [
         {
-          id: 'data_collection',
+          id: 'collect_soi_data',
           name: 'Collect SOI Data',
-          agent: 'DataCollectionAgent',
-          config: { form: 'ca_soi' },
-          dependencies: []
+          description: 'Collect Statement of Information data',
+          agents: ['DataCollectionAgent'],
+          maxDuration: 600,
+          canSkip: false
         },
         {
-          id: 'validation',
+          id: 'validate_data',
           name: 'Validate Data',
-          agent: 'ValidationAgent',
-          config: { rules: 'ca_soi_rules' },
-          dependencies: ['data_collection']
+          description: 'Validate collected data',
+          agents: ['ValidationAgent'],
+          maxDuration: 300,
+          canSkip: false
         },
         {
-          id: 'submission',
+          id: 'submit_to_state',
           name: 'Submit to State',
-          agent: 'SubmissionAgent',
-          config: { portal: 'ca_sos' },
-          dependencies: ['validation']
+          description: 'Submit to state portal',
+          agents: ['SubmissionAgent'],
+          maxDuration: 900,
+          canSkip: false
         }
       ]
     });
@@ -256,7 +268,7 @@ export class ActorFactory {
 
   static createExternal(service: string): Actor {
     return this.create({
-      type: 'external',
+      type: 'system' as const,
       id: service,
       version: 'api'
     });
@@ -271,22 +283,20 @@ export class AgentRequestFactory {
   static create(overrides: Partial<AgentRequest> = {}): AgentRequest {
     return {
       requestId: `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      contextId: 'ctx-test-123',
-      agentId: 'TestAgent',
-      operation: 'test_operation',
-      input: {
+      agentRole: 'TestAgent',
+      instruction: 'test_operation',
+      data: {
         test: true,
         data: 'test-data'
       },
-      context: TaskContextFactory.create(),
+      context: { urgency: 'medium' as const },
       ...overrides
     };
   }
 
-  static createWithContext(context: TaskContext): AgentRequest {
+  static createWithContext(_context: TaskContext): AgentRequest {
     return this.create({
-      contextId: context.contextId,
-      context
+      context: { urgency: 'medium' as const }
     });
   }
 }
@@ -298,14 +308,12 @@ export class AgentRequestFactory {
 export class AgentResponseFactory {
   static create(overrides: Partial<AgentResponse> = {}): AgentResponse {
     return {
-      requestId: 'req-test-123',
-      agentId: 'TestAgent',
-      status: 'success',
-      output: {
+      status: 'completed' as const,
+      data: {
         result: 'test-result',
         processed: true
       },
-      uiRequest: null,
+      uiRequests: [],
       reasoning: 'Test operation completed successfully',
       ...overrides
     };
@@ -313,15 +321,15 @@ export class AgentResponseFactory {
 
   static createWithUI(uiRequest: UIRequest): AgentResponse {
     return this.create({
-      uiRequest,
-      status: 'ui_required'
+      uiRequests: [uiRequest],
+      status: 'needs_input' as const
     });
   }
 
   static createError(error: string): AgentResponse {
     return this.create({
       status: 'error',
-      output: { error },
+      data: { error },
       reasoning: `Operation failed: ${error}`
     });
   }

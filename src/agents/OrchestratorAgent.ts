@@ -19,11 +19,13 @@
  */
 
 import { BaseAgent } from './base/BaseAgent';
+import { AgentRole } from './base/types';
 import { LLMProvider } from '../services/llm-provider-interface';
 import { ConfigurationManager } from '../services/configuration-manager';
 import { DatabaseService } from '../services/database';
 import { StateComputer } from '../services/state-computer';
 import { logger } from '../utils/logger';
+import { ExtendedAgentCapabilities } from '../types/compatibility-layer';
 import {
   TaskContext,
   TaskTemplate,
@@ -87,12 +89,26 @@ export class OrchestratorAgent extends BaseAgent {
   private pendingUIRequests: Map<string, UIRequest[]>;
   
   private constructor() {
-    super({
-      id: 'orchestrator_agent',
-      name: 'Universal Task Orchestrator',
-      role: 'orchestrator',
-      version: '1.0.0'
-    });
+    super(
+      {
+        role: 'orchestrator' as AgentRole,
+        name: 'Universal Task Orchestrator',
+        description: 'Orchestrates all task execution through universal patterns',
+        expertise: ['task planning', 'agent coordination', 'progressive disclosure'],
+        responsibilities: ['plan execution', 'agent delegation', 'user interaction minimization'],
+        limitations: ['requires agent availability', 'depends on LLM for planning']
+      },
+      {
+        canInitiateTasks: true,
+        canDelegateTasks: true,
+        requiredTools: [],
+        maxConcurrentTasks: 10,
+        supportedMessageTypes: ['task_request', 'status_update', 'coordination'],
+        canPlan: true,
+        canDelegate: true,
+        canLearn: true
+      } as ExtendedAgentCapabilities
+    );
     
     this.config = this.loadConfig();
     this.llmProvider = new LLMProvider();
@@ -237,7 +253,7 @@ export class OrchestratorAgent extends BaseAgent {
         await this.recordContextEntry(context, {
           operation: 'phase_completed',
           data: { 
-            phaseId: phase.id,
+            phaseId: (phase as any).id || phase.name,
             result: phaseResult,
             duration: phaseResult.duration
           },
@@ -256,7 +272,7 @@ export class OrchestratorAgent extends BaseAgent {
       }
       
       // 7. Mark task complete
-      await this.completeTask(context);
+      await this.completeTaskContext(context);
       
       logger.info('Task orchestration completed', {
         contextId: context.contextId,
@@ -264,9 +280,10 @@ export class OrchestratorAgent extends BaseAgent {
       });
       
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error('Orchestration failed', {
         contextId: context.contextId,
-        error: error.message
+        error: errorMessage
       });
       
       // Apply resilience strategy
@@ -301,10 +318,7 @@ export class OrchestratorAgent extends BaseAgent {
     
     const llmResponse = await this.llmProvider.complete({
       model: 'gpt-4',
-      messages: [
-        { role: 'system', content: this.config.mission },
-        { role: 'user', content: planPrompt }
-      ],
+      prompt: `${this.config.mission}\n\n${planPrompt}`,
       temperature: 0.3,
       responseFormat: 'json'
     });
@@ -324,7 +338,7 @@ export class OrchestratorAgent extends BaseAgent {
   ): Promise<any> {
     logger.info('Executing phase', {
       contextId: context.contextId,
-      phaseId: phase.id,
+      phaseId: (phase as any).id || phase.name,
       phaseName: phase.name
     });
     
@@ -333,7 +347,7 @@ export class OrchestratorAgent extends BaseAgent {
     const uiRequests: UIRequest[] = [];
     
     // Execute agents for this phase
-    for (const agentId of phase.agentIds) {
+    for (const agentId of (phase.agents || [])) {
       const agent = this.agentRegistry.get(agentId);
       
       if (!agent) {
@@ -347,22 +361,26 @@ export class OrchestratorAgent extends BaseAgent {
         results.push(agentResult);
         
         // Collect any UI requests
-        if (agentResult.uiRequest) {
-          uiRequests.push(agentResult.uiRequest);
+        if ((agentResult as any).uiRequest) {
+          uiRequests.push((agentResult as any).uiRequest);
+        } else if (agentResult.uiRequests) {
+          uiRequests.push(...agentResult.uiRequests);
         }
       } else {
         // Apply fallback strategy
         const fallbackResult = await this.applyFallbackStrategy(context, agent, phase);
         results.push(fallbackResult);
         
-        if (fallbackResult.uiRequest) {
-          uiRequests.push(fallbackResult.uiRequest);
+        if ((fallbackResult as any).uiRequest) {
+          uiRequests.push((fallbackResult as any).uiRequest);
+        } else if (fallbackResult.uiRequests) {
+          uiRequests.push(...fallbackResult.uiRequests);
         }
       }
     }
     
     return {
-      phaseId: phase.id,
+      phaseId: (phase as any).id || phase.name,
       status: 'completed',
       results,
       uiRequests,
@@ -381,11 +399,11 @@ export class OrchestratorAgent extends BaseAgent {
     // Create agent request
     const request: AgentRequest = {
       requestId: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      contextId: context.contextId,
-      agentId: agent.agentId,
-      operation: phase.operation || 'execute',
-      input: phase.input || {},
-      context: context
+      agentRole: agent.role,
+      instruction: (phase as any).operation || 'execute',
+      data: (phase as any).input || {},
+      context: { urgency: 'medium' as const },
+      taskContext: context
     };
     
     // In real implementation, this would call the actual agent
@@ -397,12 +415,10 @@ export class OrchestratorAgent extends BaseAgent {
     
     // Simulate agent response
     return {
-      requestId: request.requestId,
-      agentId: agent.agentId,
-      status: 'completed',
-      output: {
+      status: 'completed' as const,
+      data: {
         message: `Agent ${agent.agentId} completed successfully`,
-        data: {}
+        agentId: agent.agentId
       },
       reasoning: `Executed ${agent.role} for ${phase.name}`
     };
@@ -428,11 +444,11 @@ export class OrchestratorAgent extends BaseAgent {
       case 'user_input':
         // Request data from user
         return {
-          requestId: `fallback_${Date.now()}`,
-          agentId: agent.agentId,
-          status: 'needs_input',
-          output: {},
-          uiRequest: this.createUserInputRequest(agent, phase),
+          status: 'needs_input' as const,
+          data: {
+            agentId: agent.agentId
+          },
+          uiRequests: [this.createUserInputRequest(agent, phase)],
           reasoning: `Agent ${agent.agentId} unavailable, requesting user input`
         };
         
@@ -449,12 +465,11 @@ export class OrchestratorAgent extends BaseAgent {
       default:
         // Defer this step for later
         return {
-          requestId: `deferred_${Date.now()}`,
-          agentId: agent.agentId,
-          status: 'delegated',
-          output: {
+          status: 'delegated' as const,
+          data: {
             message: `Step deferred: ${agent.role} unavailable`,
-            canProceed: true
+            canProceed: true,
+            agentId: agent.agentId
           },
           reasoning: `Deferring ${agent.role} due to unavailability`
         };
@@ -491,7 +506,7 @@ export class OrchestratorAgent extends BaseAgent {
       },
       context: {
         agentId: agent.agentId,
-        phaseId: phase.id,
+        phaseId: (phase as any).id || phase.name,
         fallbackReason: 'service_unavailable'
       }
     };
@@ -545,10 +560,7 @@ export class OrchestratorAgent extends BaseAgent {
     try {
       const response = await this.llmProvider.complete({
         model: 'gpt-4',
-        messages: [
-          { role: 'system', content: 'You optimize UI request ordering for minimal user interruption.' },
-          { role: 'user', content: optimizationPrompt }
-        ],
+        prompt: `You optimize UI request ordering for minimal user interruption.\n\n${optimizationPrompt}`,
         temperature: 0.3,
         responseFormat: 'json'
       });
@@ -622,7 +634,7 @@ export class OrchestratorAgent extends BaseAgent {
   /**
    * Complete task
    */
-  private async completeTask(context: TaskContext): Promise<void> {
+  private async completeTaskContext(context: TaskContext): Promise<void> {
     await this.recordContextEntry(context, {
       operation: 'task_completed',
       data: {
@@ -773,14 +785,11 @@ export class OrchestratorAgent extends BaseAgent {
     
     const response = await this.llmProvider.complete({
       model: 'gpt-4',
-      messages: [
-        { role: 'system', content: 'You provide clear, helpful guidance for manual task completion.' },
-        { role: 'user', content: prompt }
-      ],
+      prompt: `You provide clear, helpful guidance for manual task completion.\n\n${prompt}`,
       temperature: 0.5
     });
     
-    return response.content.split('\n').filter(line => line.trim());
+    return response.content.split('\n').filter((line: string) => line.trim());
   }
   
   /**
@@ -843,8 +852,40 @@ export class OrchestratorAgent extends BaseAgent {
     } catch (error) {
       logger.error('Failed to persist context entry', {
         contextId: context.contextId,
-        error: error.message
+        error: (error as Error).message
       });
     }
+  }
+  
+  /**
+   * Required abstract methods from BaseAgent
+   */
+  protected async handleMessage(message: any): Promise<any> {
+    // Delegate to orchestrateTask for universal handling
+    if (message.type === 'task' && message.context) {
+      await this.orchestrateTask(message.context);
+    }
+    return { success: true };
+  }
+  
+  protected async handleTask(task: any): Promise<any> {
+    // Delegate to orchestrateTask for universal handling
+    if (task.context) {
+      await this.orchestrateTask(task.context);
+    }
+    return { success: true };
+  }
+  
+  protected async makeDecision(context: any): Promise<any> {
+    // Use LLM for decision making
+    return this.createExecutionPlan(context);
+  }
+  
+  protected async executeAction(action: any): Promise<any> {
+    // Execute agent actions
+    if (action.agent && action.phase) {
+      return this.executeAgent(action.context, action.agent, action.phase);
+    }
+    return { success: true };
   }
 }

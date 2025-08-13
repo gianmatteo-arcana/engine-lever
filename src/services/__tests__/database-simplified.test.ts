@@ -30,7 +30,8 @@ describe('DatabaseService - Core Functionality', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.SUPABASE_URL = 'https://test.supabase.co';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
+    process.env.SUPABASE_ANON_KEY = 'test-anon-key';
     
     // Reset singleton
     (DatabaseService as any).instance = undefined;
@@ -40,6 +41,7 @@ describe('DatabaseService - Core Functionality', () => {
   afterEach(() => {
     delete process.env.SUPABASE_URL;
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    delete process.env.SUPABASE_ANON_KEY;
   });
 
   describe('Singleton Pattern', () => {
@@ -51,9 +53,13 @@ describe('DatabaseService - Core Functionality', () => {
 
     it('should throw without configuration', () => {
       delete process.env.SUPABASE_URL;
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+      delete process.env.SUPABASE_ANON_KEY;
       (DatabaseService as any).instance = undefined;
       
-      expect(() => DatabaseService.getInstance()).toThrow('Supabase configuration missing');
+      // Test getUserClient which requires configuration
+      const newService = DatabaseService.getInstance();
+      expect(() => newService.getUserClient('test-token')).toThrow('Supabase configuration missing');
     });
   });
 

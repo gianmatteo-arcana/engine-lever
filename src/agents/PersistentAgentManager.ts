@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
 import { AgentRole, AgentMessage, TaskContext, TaskPriority } from './base/types';
 import { BaseAgent } from './base/BaseAgent';
-import { OrchestratorAgent } from './orchestrator';
+import { OrchestratorAgent } from './OrchestratorAgent';
 import { LegalComplianceAgent } from './legal-compliance';
 import { DataCollectionAgent } from './data-collection';
 import { PaymentAgent } from './payment';
@@ -57,7 +57,7 @@ export class PersistentAgentManager extends EventEmitter {
       // Database service is already a singleton, no need to initialize
 
       // Initialize all agents
-      this.agents.set(AgentRole.ORCHESTRATOR, new OrchestratorAgent());
+      this.agents.set(AgentRole.ORCHESTRATOR, OrchestratorAgent.getInstance());
       this.agents.set(AgentRole.LEGAL_COMPLIANCE, new LegalComplianceAgent());
       this.agents.set(AgentRole.DATA_COLLECTION, new DataCollectionAgent());
       this.agents.set(AgentRole.PAYMENT, new PaymentAgent());

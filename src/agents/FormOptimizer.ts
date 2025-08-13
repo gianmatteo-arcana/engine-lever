@@ -15,6 +15,7 @@ import {
   UIRequest 
 } from '../types/engine-types';
 import { DatabaseService } from '../services/database';
+// import { FluidUIActions } from '../types/compatibility-layer';
 
 interface FormField {
   id: string;
@@ -519,40 +520,56 @@ export class FormOptimizer extends Agent {
     deviceInfo: any
   ): UIRequest {
     return {
-      id: `optimized_form_${Date.now()}`,
-      agentRole: 'ux_optimization_agent',
-      suggestedTemplates: ['optimized_profile_form'],
-      dataNeeded: form.fields.map(f => f.id),
+      requestId: `optimized_form_${Date.now()}`,
+      templateType: 'optimized_profile_form' as any,
+      semanticData: {
+        agentRole: 'ux_optimization_agent',
+        suggestedTemplates: ['optimized_profile_form'],
+        dataNeeded: form.fields.map(f => f.id),
+        title: 'Almost There!',
+        description: `Just ${form.fields.filter(f => f.required).length} quick questions to get you started`,
+        form,
+        metrics,
+        quickActions: form.quickActions,
+        progressIndicator: form.progressIndicator,
+        timeEstimate: {
+          seconds: form.estimatedTime,
+          display: form.estimatedTime < 60 ? 
+            `${form.estimatedTime} seconds` : 
+            `${Math.ceil(form.estimatedTime / 60)} minutes`
+        },
+        motivationalMessage: this.getMotivationalMessage(metrics.reductionPercentage),
+        actions: {
+          submit: {
+            type: 'submit' as const,
+            label: 'Submit',
+            primary: true,
+            handler: () => ({ action: 'submit_optimized_form' })
+          },
+          useQuickAction: {
+            type: 'custom' as const,
+            label: 'Quick Action',
+            handler: () => ({ action: 'apply_quick_action' })
+          },
+          skip: {
+            type: 'custom' as const,
+            label: 'Skip Optional',
+            handler: () => ({ action: 'skip_optional_fields' })
+          }
+        },
+        mobileOptimizations: deviceInfo.isMobile ? {
+          layout: form.mobileLayout,
+          enableSwipeNavigation: true,
+          showFloatingProgress: true,
+          autoFocusFirstField: true
+        } : undefined
+      },
       context: {
         userProgress: 75,
         deviceType: deviceInfo.type,
         urgency: 'medium'
-      },
-      title: 'Almost There!',
-      description: `Just ${form.fields.filter(f => f.required).length} quick questions to get you started`,
-      form,
-      metrics,
-      quickActions: form.quickActions,
-      progressIndicator: form.progressIndicator,
-      timeEstimate: {
-        seconds: form.estimatedTime,
-        display: form.estimatedTime < 60 ? 
-          `${form.estimatedTime} seconds` : 
-          `${Math.ceil(form.estimatedTime / 60)} minutes`
-      },
-      motivationalMessage: this.getMotivationalMessage(metrics.reductionPercentage),
-      actions: {
-        submit: () => ({ action: 'submit_optimized_form' }),
-        useQuickAction: (actionId: string) => ({ action: 'apply_quick_action', actionId }),
-        skip: () => ({ action: 'skip_optional_fields' })
-      },
-      mobileOptimizations: deviceInfo.isMobile ? {
-        layout: form.mobileLayout,
-        enableSwipeNavigation: true,
-        showFloatingProgress: true,
-        autoFocusFirstField: true
-      } : undefined
-    };
+      }
+    } as any;
   }
 
   /**

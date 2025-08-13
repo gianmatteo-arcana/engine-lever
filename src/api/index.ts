@@ -4,7 +4,6 @@ import { AgentManager, convertPriority, TaskPriority } from '../agents';
 import { TemplateExecutor } from '../templates/executor';
 import { z } from 'zod';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
-import { onboardingRoutes } from './onboarding';
 import tasksRoutes from './tasks';
 
 const router = Router();
@@ -300,8 +299,7 @@ router.get('/queues/status', (req, res) => {
   });
 });
 
-// Mount onboarding routes
-router.use('/onboarding', onboardingRoutes);
+// Onboarding routes removed - using universal task routes
 
 // Generic tasks endpoints (ENGINE PRD compliant)
 router.use('/tasks', tasksRoutes);

@@ -51,8 +51,8 @@ const UIResponseSchema = z.object({
 router.post('/create', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.userId!;
-    const userToken = req.userToken!;
-    const tenantId = req.tenantId || userId; // Default tenant to user
+    const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
+    const tenantId = userId; // Default tenant to user
     
     const input = CreateTaskSchema.parse(req.body);
     
@@ -120,7 +120,7 @@ router.post('/create', requireAuth, async (req: AuthenticatedRequest, res) => {
 router.post('/:contextId/ui-response', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { contextId } = req.params;
-    const _userToken = req.userToken!;
+    const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
     
     const input = UIResponseSchema.parse(req.body);
     
@@ -165,12 +165,12 @@ router.post('/:contextId/ui-response', requireAuth, async (req: AuthenticatedReq
 router.get('/:contextId', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { contextId } = req.params;
-    const userToken = req.userToken!;
+    const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
     
     logger.info('Getting task context', { contextId });
     
     const taskService = TaskService.getInstance();
-    const context = await taskService.getTask(contextId, userToken);
+    const context = await taskService.getTask(contextId);
     
     if (!context) {
       return res.status(404).json({ error: 'Task not found' });
@@ -198,7 +198,7 @@ router.get('/:contextId', requireAuth, async (req: AuthenticatedRequest, res) =>
 router.get('/:taskId/context-history', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { taskId } = req.params;
-    const userToken = req.userToken!;
+    const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
     
     logger.info('Fetching context history', { taskId });
     
@@ -250,7 +250,7 @@ router.post('/:taskId/events', requireAuth, async (req: AuthenticatedRequest, re
   try {
     const { taskId } = req.params;
     const { eventType, data, reasoning } = req.body;
-    const userToken = req.userToken!;
+    const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
     
     logger.info('Emitting task event', { taskId, eventType });
     
@@ -291,7 +291,7 @@ router.post('/:taskId/events', requireAuth, async (req: AuthenticatedRequest, re
 router.get('/:taskId/status', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { taskId } = req.params;
-    const userToken = req.userToken!;
+    const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
     
     logger.info('Getting task status', { taskId });
     
@@ -351,7 +351,7 @@ router.get('/:taskId/status', requireAuth, async (req: AuthenticatedRequest, res
 router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { taskType, title, description, metadata, templateId } = req.body;
-    const userToken = req.userToken!;
+    const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
     const userId = req.userId!;
     
     logger.info('Creating universal task', { taskType, userId, templateId });
@@ -404,7 +404,7 @@ router.put('/:taskId', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { taskId } = req.params;
     const { status, metadata, step, formData, hasUnsavedChanges } = req.body;
-    const userToken = req.userToken!;
+    const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
     
     logger.info('Updating universal task', { taskId, status, step });
     
@@ -459,7 +459,7 @@ router.put('/:taskId', requireAuth, async (req: AuthenticatedRequest, res) => {
  */
 router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const userToken = req.userToken!;
+    const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
     const userId = req.userId!;
     
     logger.info('Listing tasks for user', { userId });

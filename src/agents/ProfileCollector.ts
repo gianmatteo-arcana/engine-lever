@@ -12,9 +12,11 @@ import {
   ContextEntry, 
   AgentRequest, 
   AgentResponse,
-  UIRequest 
+  UIRequest,
+  UITemplateType
 } from '../types/engine-types';
 import { DatabaseService } from '../services/database';
+// import { FluidUIActions } from '../types/compatibility-layer';
 
 interface ProfileData {
   businessName: string;
@@ -352,36 +354,52 @@ export class ProfileCollector extends Agent {
     const isHighConfidence = defaults.confidence > 0.8;
     
     return {
-      id: `profile_collection_${Date.now()}`,
-      agentRole: 'profile_collection_agent',
-      suggestedTemplates: ['profile_form', 'business_profile_form'],
-      dataNeeded: formDefinition.map(field => field.id),
+      requestId: `profile_collection_${Date.now()}`,
+      templateType: UITemplateType.SteppedWizard,
+      semanticData: {
+        agentRole: 'profile_collection_agent',
+        suggestedTemplates: ['profile_form', 'business_profile_form'],
+        dataNeeded: formDefinition.map(field => field.id),
+        title: isHighConfidence ? 'Confirm Your Business Details' : 'Tell Us About Your Business',
+        description: isHighConfidence 
+          ? 'We found some information about your business. Please confirm or update the details below.'
+          : 'Help us understand your business better by providing some basic information.',
+        formDefinition,
+        smartDefaults: defaults,
+        strategy,
+        actions: {
+          submit: {
+            type: 'submit' as const,
+            label: 'Submit',
+            primary: true,
+            handler: () => ({ action: 'submit_profile', strategy })
+          },
+          skip: {
+            type: 'custom' as const,
+            label: 'Skip Optional',
+            handler: () => ({ action: 'skip_optional_fields' })
+          },
+          help: {
+            type: 'custom' as const,
+            label: 'Help',
+            handler: () => ({ action: 'show_help' })
+          }
+        } as any,
+        progressIndicator: {
+          current: 2,
+          total: 4,
+          label: 'Business Profile'
+        },
+        validation: {
+          realTime: true,
+          showErrors: 'onBlur',
+          blockSubmissionOnErrors: true
+        }
+      },
       context: {
         userProgress: 45,
         deviceType: 'mobile',
         urgency: 'medium'
-      },
-      title: isHighConfidence ? 'Confirm Your Business Details' : 'Tell Us About Your Business',
-      description: isHighConfidence 
-        ? 'We found some information about your business. Please confirm or update the details below.'
-        : 'Help us understand your business better by providing some basic information.',
-      formDefinition,
-      smartDefaults: defaults,
-      strategy,
-      actions: {
-        submit: () => ({ action: 'submit_profile', strategy }),
-        skip: () => ({ action: 'skip_optional_fields' }),
-        help: () => ({ action: 'show_help' })
-      },
-      progressIndicator: {
-        current: 2,
-        total: 4,
-        label: 'Business Profile'
-      },
-      validation: {
-        realTime: true,
-        showErrors: 'onBlur',
-        blockSubmissionOnErrors: true
       }
     };
   }

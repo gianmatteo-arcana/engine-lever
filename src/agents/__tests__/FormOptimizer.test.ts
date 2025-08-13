@@ -8,6 +8,32 @@
 import { FormOptimizer } from '../FormOptimizer';
 import { TaskContext, AgentRequest } from '../../types/engine-types';
 
+// Mock dependencies
+jest.mock('../../services/database', () => ({
+  DatabaseService: {
+    getInstance: jest.fn().mockReturnValue({
+      createContextHistoryEntry: jest.fn().mockResolvedValue({ id: 'entry_123' }),
+      upsertAgentContext: jest.fn().mockResolvedValue({}),
+      createUIAugmentation: jest.fn().mockResolvedValue({ id: 'ui_123' }),
+      createSystemAuditEntry: jest.fn().mockResolvedValue({}),
+      getTaskAgentContexts: jest.fn().mockResolvedValue([])
+    })
+  }
+}));
+
+jest.mock('../../services/llm-provider', () => ({
+  LLMProvider: {
+    getInstance: jest.fn().mockReturnValue({
+      complete: jest.fn().mockResolvedValue({
+        content: 'Mock LLM response for form optimization',
+        model: 'mock-model',
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
+      }),
+      isConfigured: jest.fn().mockReturnValue(true)
+    })
+  }
+}));
+
 describe('FormOptimizer', () => {
   let agent: FormOptimizer;
   let mockContext: TaskContext;
@@ -351,8 +377,8 @@ describe('FormOptimizer', () => {
       expect(response.uiRequests!.length).toBe(1);
       
       const uiRequest = response.uiRequests![0];
-      expect(uiRequest.suggestedTemplates).toContain('optimized_profile_form');
-      expect(uiRequest.title).toBe('Almost There!');
+      expect(uiRequest.semanticData.suggestedTemplates).toContain('optimized_profile_form');
+      expect(uiRequest.semanticData.title).toBe('Almost There!');
     });
 
     test('should include motivational message based on optimization', async () => {
@@ -366,8 +392,8 @@ describe('FormOptimizer', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const uiRequest = response.uiRequests![0];
-      expect(uiRequest.motivationalMessage).toBeDefined();
-      expect(uiRequest.motivationalMessage).toContain('simplified');
+      expect(uiRequest.semanticData.motivationalMessage).toBeDefined();
+      expect(uiRequest.semanticData.motivationalMessage).toContain('simplified');
     });
 
     test('should include mobile optimizations in UI request', async () => {
@@ -384,9 +410,9 @@ describe('FormOptimizer', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const uiRequest = response.uiRequests![0];
-      expect(uiRequest.mobileOptimizations).toBeDefined();
-      expect(uiRequest.mobileOptimizations.enableSwipeNavigation).toBe(true);
-      expect(uiRequest.mobileOptimizations.showFloatingProgress).toBe(true);
+      expect(uiRequest.semanticData.mobileOptimizations).toBeDefined();
+      expect(uiRequest.semanticData.mobileOptimizations.enableSwipeNavigation).toBe(true);
+      expect(uiRequest.semanticData.mobileOptimizations.showFloatingProgress).toBe(true);
     });
   });
 

@@ -92,8 +92,11 @@ export class FluidUIInterpreter {
         requiredData: ['actions'],
         optionalData: ['title', 'description'],
         layout: {
-          width: 'full',
-          alignment: 'center'
+          desktop: {
+            columns: 1,
+            layout: 'flex' as const
+          },
+          spacing: 'normal' as const
         }
       },
       
@@ -107,9 +110,11 @@ export class FluidUIInterpreter {
         requiredData: ['businessInfo'],
         optionalData: ['confidence', 'sources', 'actions'],
         layout: {
-          width: 'medium',
-          alignment: 'center',
-          spacing: 'comfortable'
+          desktop: {
+            columns: 2,
+            layout: 'flex' as const
+          },
+          spacing: 'relaxed' as const
         }
       },
       
@@ -123,11 +128,14 @@ export class FluidUIInterpreter {
         requiredData: ['fields'],
         optionalData: ['title', 'description', 'guidance'],
         validation: [
-          { type: 'required', fields: ['*'] }
+          { type: 'required' as const, field: '*', message: 'This field is required' }
         ],
         layout: {
-          width: 'medium',
-          alignment: 'left'
+          desktop: {
+            columns: 2,
+            layout: 'flex' as const
+          },
+          spacing: 'normal' as const
         }
       },
       
@@ -141,8 +149,11 @@ export class FluidUIInterpreter {
         requiredData: ['current', 'total'],
         optionalData: ['label', 'sublabel'],
         layout: {
-          width: 'full',
-          alignment: 'center'
+          desktop: {
+            columns: 1,
+            layout: 'flex' as const
+          },
+          spacing: 'normal' as const
         }
       },
       
@@ -156,8 +167,11 @@ export class FluidUIInterpreter {
         requiredData: ['purpose'],
         optionalData: ['acceptedFormats', 'maxSize', 'guidance'],
         layout: {
-          width: 'medium',
-          alignment: 'center'
+          desktop: {
+            columns: 2,
+            layout: 'flex' as const
+          },
+          spacing: 'normal' as const
         }
       },
       
@@ -171,8 +185,11 @@ export class FluidUIInterpreter {
         requiredData: ['data'],
         optionalData: ['title', 'sections', 'actions'],
         layout: {
-          width: 'large',
-          alignment: 'left'
+          desktop: {
+            columns: 3,
+            layout: 'flex' as const
+          },
+          spacing: 'normal' as const
         }
       },
       
@@ -187,9 +204,11 @@ export class FluidUIInterpreter {
         requiredData: ['steps'],
         optionalData: ['currentStep', 'title', 'description'],
         layout: {
-          width: 'large',
-          alignment: 'center',
-          fullHeight: true
+          desktop: {
+            columns: 3,
+            layout: 'stack' as const
+          },
+          spacing: 'relaxed' as const
         }
       },
       
@@ -203,9 +222,11 @@ export class FluidUIInterpreter {
         requiredData: ['item', 'actions'],
         optionalData: ['urgency', 'deadline', 'consequences'],
         layout: {
-          width: 'medium',
-          alignment: 'center',
-          priority: 'high'
+          desktop: {
+            columns: 2,
+            layout: 'flex' as const
+          },
+          spacing: 'normal' as const
         }
       },
       
@@ -219,9 +240,11 @@ export class FluidUIInterpreter {
         requiredData: ['error'],
         optionalData: ['suggestion', 'actions', 'supportLink'],
         layout: {
-          width: 'medium',
-          alignment: 'center',
-          variant: 'error'
+          desktop: {
+            columns: 2,
+            layout: 'flex' as const
+          },
+          spacing: 'compact' as const
         }
       },
       
@@ -235,9 +258,11 @@ export class FluidUIInterpreter {
         requiredData: ['message'],
         optionalData: ['title', 'nextSteps', 'summary'],
         layout: {
-          width: 'full',
-          alignment: 'center',
-          fullHeight: true
+          desktop: {
+            columns: 1,
+            layout: 'stack' as const
+          },
+          spacing: 'relaxed' as const
         }
       },
       
@@ -251,8 +276,11 @@ export class FluidUIInterpreter {
         requiredData: ['instructions'],
         optionalData: ['title', 'supportLinks', 'estimatedTime'],
         layout: {
-          width: 'large',
-          alignment: 'left'
+          desktop: {
+            columns: 3,
+            layout: 'flex' as const
+          },
+          spacing: 'normal' as const
         }
       },
       
@@ -266,9 +294,11 @@ export class FluidUIInterpreter {
         requiredData: ['message'],
         optionalData: ['estimatedTime', 'currentStep', 'details'],
         layout: {
-          width: 'full',
-          alignment: 'center',
-          fullHeight: true
+          desktop: {
+            columns: 1,
+            layout: 'stack' as const
+          },
+          spacing: 'relaxed' as const
         }
       }
     };
@@ -474,7 +504,7 @@ export class FluidUIInterpreter {
     } catch (error) {
       return {
         valid: false,
-        errors: [`Validation error: ${error.message}`]
+        errors: [`Validation error: ${(error as Error).message}`]
       };
     }
   }

@@ -15,6 +15,7 @@ import {
   UIRequest 
 } from '../types/engine-types';
 import { DatabaseService } from '../services/database';
+// import { FluidUIActions } from '../types/compatibility-layer';
 
 interface BusinessSearchResult {
   found: boolean;
@@ -309,27 +310,41 @@ export class BusinessDiscovery extends Agent {
    */
   private createFoundCard(businessData: any, confidence: number): UIRequest {
     return {
-      id: `found_you_${Date.now()}`,
-      agentRole: 'business_discovery_agent',
-      suggestedTemplates: ['found_you_card'],
-      dataNeeded: [],
+      requestId: `found_you_${Date.now()}`,
+      templateType: 'found_you_card' as any,
+      semanticData: {
+        agentRole: 'business_discovery_agent',
+        businessData,
+        confidence: {
+          score: confidence,
+          source: businessData.state + ' Secretary of State',
+          lastUpdated: new Date().toISOString()
+        },
+        actions: {
+          confirm: {
+            type: 'submit' as const,
+            label: 'Confirm',
+            primary: true,
+            handler: () => ({ action: 'confirm_business', businessData })
+          },
+          notMe: {
+            type: 'cancel' as const,
+            label: 'Not My Business',
+            handler: () => ({ action: 'reject_business' })
+          },
+          editDetails: {
+            type: 'custom' as const,
+            label: 'Edit Details',
+            handler: () => ({ action: 'edit_business_details', businessData })
+          }
+        }
+      },
       context: {
         userProgress: 25,
-        deviceType: 'mobile', // TODO: Get from request
+        deviceType: 'mobile',
         urgency: 'high'
-      },
-      businessData,
-      confidence: {
-        score: confidence,
-        source: businessData.state + ' Secretary of State',
-        lastUpdated: new Date().toISOString()
-      },
-      actions: {
-        confirm: () => ({ action: 'confirm_business', businessData }),
-        notMe: () => ({ action: 'reject_business' }),
-        editDetails: () => ({ action: 'edit_business_details', businessData })
       }
-    };
+    } as any;
   }
 
   // Helper methods

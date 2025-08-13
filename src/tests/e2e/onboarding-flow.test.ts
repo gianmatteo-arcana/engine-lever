@@ -71,7 +71,7 @@ class UserInteractionSimulator {
     const response: any = {};
     
     // Simulate user filling out the requested fields
-    for (const field of uiRequest.dataNeeded) {
+    for (const field of uiRequest.semanticData.dataNeeded || []) {
       if (this.responses.has(field)) {
         response[field] = this.responses.get(field);
       } else {

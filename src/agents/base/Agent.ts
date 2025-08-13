@@ -30,6 +30,7 @@ import {
   AgentRequest, 
   AgentResponse,
   UIRequest,
+  UITemplateType,
   AgentConfig
 } from '../../types/engine-types';
 
@@ -255,40 +256,39 @@ export class DataCollectionAgent extends Agent {
         reasoning: 'No public records found, need user to provide business details'
       },
       uiRequests: [{
-        id: this.generateId(),
-        agentRole: 'data_collection',
-        suggestedTemplates: ['business_info_form'],
-        dataNeeded: ['entityType', 'formationDate'],
+        requestId: this.generateId(),
+        templateType: UITemplateType.SmartTextInput,
+        semanticData: {
+          title: 'Complete Business Information',
+          description: 'We need some basic information about your business entity',
+          fields: [
+            {
+              id: 'entityType',
+              label: 'Entity Type',
+              type: 'select',
+              required: true,
+              options: [
+                { value: 'LLC', label: 'Limited Liability Company (LLC)' },
+                { value: 'Corporation', label: 'Corporation' },
+                { value: 'Sole Proprietorship', label: 'Sole Proprietorship' }
+              ]
+            },
+            {
+              id: 'formationDate',
+              label: 'Formation Date',
+              type: 'date',
+              required: false,
+              help: 'When was your business formed?'
+            }
+          ],
+          purpose: 'Complete business information',
+          allowSkip: false
+        },
         context: {
           userProgress: 35,
           deviceType: 'desktop',
           urgency: 'medium'
-        },
-        timestamp: new Date().toISOString(),
-        metadata: {
-          purpose: 'Complete business information',
-          urgency: 'normal',
-          category: 'business_identity',
-          allowSkip: false
-        },
-        fields: [
-          {
-            field: 'entityType',
-            dataType: 'enum',
-            semanticType: 'entity_type',
-            required: true,
-            constraints: {
-              options: ['LLC', 'Corporation', 'Sole Proprietorship']
-            }
-          },
-          {
-            field: 'formationDate',
-            dataType: 'date',
-            semanticType: 'formation_date',
-            required: false
-          }
-        ],
-        reason: 'Need business entity details to proceed'
+        }
       }]
     };
   }

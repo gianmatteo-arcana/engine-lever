@@ -15,6 +15,7 @@ import {
   UIRequest 
 } from '../types/engine-types';
 import { DatabaseService } from '../services/database';
+// import { FluidUIActions } from '../types/compatibility-layer';
 
 interface BusinessProfile {
   name: string;
@@ -168,7 +169,7 @@ export class ComplianceAnalyzer extends Agent {
       formationDate: profileData.formationDate || business.formationDate,
       employeeCount: business.employeeCount || 1,
       website: profileData.website || business.website
-    };
+    } as any;
   }
 
   /**
@@ -438,7 +439,7 @@ export class ComplianceAnalyzer extends Agent {
         totalEstimatedCost: totalCost,
         nextDeadline
       }
-    };
+    } as any;
   }
 
   /**
@@ -485,7 +486,7 @@ export class ComplianceAnalyzer extends Agent {
       criticalIssues,
       mediumIssues,
       recommendations
-    };
+    } as any;
   }
 
   /**
@@ -497,7 +498,7 @@ export class ComplianceAnalyzer extends Agent {
     profile: BusinessProfile
   ): UIRequest {
     return {
-      id: `compliance_roadmap_${Date.now()}`,
+      requestId: `compliance_roadmap_${Date.now()}`,
       agentRole: 'entity_compliance_agent',
       suggestedTemplates: ['compliance_roadmap'],
       dataNeeded: ['priority_confirmation', 'deadline_adjustments'],
@@ -534,16 +535,29 @@ export class ComplianceAnalyzer extends Agent {
         }
       ],
       actions: {
-        accept: () => ({ action: 'accept_roadmap', calendar }),
-        customize: () => ({ action: 'customize_priorities' }),
-        help: () => ({ action: 'explain_requirements' })
-      },
+        accept: {
+          type: 'submit' as const,
+          label: 'Accept',
+          primary: true,
+          handler: () => ({ action: 'accept_roadmap', calendar })
+        },
+        customize: {
+          type: 'custom' as const,
+          label: 'Customize',
+          handler: () => ({ action: 'customize_priorities' })
+        },
+        help: {
+          type: 'custom' as const,
+          label: 'Help',
+          handler: () => ({ action: 'explain_requirements' })
+        }
+      } as any,
       progressIndicator: {
         current: 3,
         total: 4,
         label: 'Compliance Planning'
       }
-    };
+    } as any;
   }
 
   // Helper methods

@@ -12,11 +12,37 @@
 import { logger } from '../../utils/logger';
 import { DatabaseService } from '../../services/database';
 import { TaskContext } from '../../types/engine-types';
-import { 
-  TenantContext, 
-  UIAugmentationRequest,
-  UIAugmentationResponse 
-} from '../../types/onboarding-types';
+// Temporary types until fully migrated to universal types
+export interface TenantContext {
+  tenantId: string;
+  companyId?: string;
+  businessId?: string;
+  userId?: string;
+  userToken?: string;
+  allowedAgents?: string[];
+}
+
+export interface UIAugmentationRequest {
+  requestId?: string;
+  type: string;
+  template?: string;
+  data?: any;
+  presentation?: any;
+  actionPills?: any;
+  formSections?: any;
+  context?: any;
+  responseConfig?: any;
+  tenantContext?: any;
+  agentRole?: string;
+  timestamp?: string;
+  metadata?: any;
+}
+
+export interface UIAugmentationResponse {
+  status: string;
+  data?: any;
+  formData?: any;
+}
 
 // A2A Task interface (compatible with future A2A protocol)
 export interface A2ATask {
@@ -189,8 +215,8 @@ export abstract class BaseA2AAgent {
    */
   protected validateTenantAccess(context: TenantContext): boolean {
     // Check if agent is in allowed list
-    if (!context.allowedAgents.includes(this.agentRole)) {
-      logger.warn(`Agent ${this.agentRole} not in allowed list for tenant ${context.businessId}`);
+    if (context.allowedAgents && !context.allowedAgents.includes(this.agentRole)) {
+      logger.warn(`Agent ${this.agentRole} not in allowed list for tenant ${context.businessId || context.tenantId}`);
       return false;
     }
 
@@ -253,7 +279,7 @@ export abstract class BaseA2AAgent {
     const augmentation = await this.dbService.createUIAugmentation({
       task_id: taskId,
       agent_role: this.agentRole,
-      request_id: request.requestId,
+      request_id: request.requestId || `req_${Date.now()}`,
       sequence_number: Date.now(), // Simple sequence for now
       presentation: request.presentation,
       action_pills: request.actionPills,

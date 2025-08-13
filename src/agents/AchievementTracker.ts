@@ -12,9 +12,11 @@ import {
   ContextEntry, 
   AgentRequest, 
   AgentResponse,
-  UIRequest 
+  UIRequest,
+  UITemplateType 
 } from '../types/engine-types';
 import { DatabaseService } from '../services/database';
+// import { FluidUIActions } from '../types/compatibility-layer';
 
 interface Achievement {
   id: string;
@@ -516,37 +518,50 @@ export class AchievementTracker extends Agent {
     context: MotivationalContext
   ): UIRequest {
     return {
-      id: `celebration_${Date.now()}`,
-      agentRole: 'celebration_agent',
-      suggestedTemplates: ['progress_celebration'],
-      dataNeeded: [],
+      requestId: `celebration_${Date.now()}`,
+      templateType: UITemplateType.SuccessScreen,
+      semanticData: {
+        title: achievement.title,
+        description: achievement.description,
+        message,
+        celebration: {
+          type: celebration.type,
+          duration: celebration.duration,
+          intensity: celebration.intensity,
+          elements: celebration.elements
+        },
+        badges: badges.map(b => ({
+          ...b,
+          animation: 'fadeInScale'
+        })),
+        actions: {
+          continue: {
+            type: 'navigate' as const,
+            label: 'Continue',
+            primary: true,
+            handler: () => ({ action: 'continue_after_celebration' })
+          },
+          share: {
+            type: 'custom' as const,
+            label: 'Share',
+            handler: () => ({ action: 'share_achievement', achievement })
+          },
+          viewBadges: {
+            type: 'navigate' as const,
+            label: 'View All Badges',
+            handler: () => ({ action: 'view_all_badges' })
+          }
+        } as any,
+        nextAction: celebration.nextAction,
+        timing: {
+          autoAdvance: achievement.type === 'micro' ? 1000 : celebration.duration * 1000,
+          skipEnabled: celebration.type === 'micro'
+        }
+      },
       context: {
         userProgress: achievement.progress || 50,
         deviceType: context.device,
         urgency: 'low'
-      },
-      title: achievement.title,
-      description: achievement.description,
-      message,
-      celebration: {
-        type: celebration.type,
-        duration: celebration.duration,
-        intensity: celebration.intensity,
-        elements: celebration.elements
-      },
-      badges: badges.map(b => ({
-        ...b,
-        animation: 'fadeInScale'
-      })),
-      actions: {
-        continue: () => ({ action: 'continue_after_celebration' }),
-        share: () => ({ action: 'share_achievement', achievement }),
-        viewBadges: () => ({ action: 'view_all_badges' })
-      },
-      nextAction: celebration.nextAction,
-      timing: {
-        autoAdvance: achievement.type === 'micro' ? 1000 : celebration.duration * 1000,
-        skipEnabled: celebration.type === 'micro'
       }
     };
   }

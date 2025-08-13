@@ -331,7 +331,7 @@ describe('AchievementTracker', () => {
 
       const response = await agent.processRequest(request, mockContext);
 
-      const message = response.uiRequests![0].message;
+      const message = response.uiRequests![0].semanticData.message;
       expect(message).toContain("You're doing great");
     });
   });
@@ -448,7 +448,7 @@ describe('AchievementTracker', () => {
 
       const response = await agent.processRequest(request, mockContext);
 
-      const message = response.uiRequests![0].message;
+      const message = response.uiRequests![0].semanticData.message;
       expect(message).toBeTruthy();
       
       // Check if time-based message is included
@@ -472,7 +472,7 @@ describe('AchievementTracker', () => {
 
       const response = await agent.processRequest(request, mockContext);
 
-      const message = response.uiRequests![0].message;
+      const message = response.uiRequests![0].semanticData.message;
       // Business is Technology industry
       expect(message).toContain('Building something amazing');
     });
@@ -490,7 +490,7 @@ describe('AchievementTracker', () => {
 
       const response = await agent.processRequest(request, mockContext);
 
-      const message = response.uiRequests![0].message;
+      const message = response.uiRequests![0].semanticData.message;
       expect(message).toContain('Ready to serve success');
     });
   });
@@ -512,9 +512,9 @@ describe('AchievementTracker', () => {
       expect(response.uiRequests!.length).toBe(1);
       
       const uiRequest = response.uiRequests![0];
-      expect(uiRequest.suggestedTemplates).toContain('progress_celebration');
-      expect(uiRequest.title).toBe('50% Complete!');
-      expect(uiRequest.context.urgency).toBe('low');
+      expect(uiRequest.templateType).toBe('success_screen');
+      expect(uiRequest.semanticData.title).toBe('50% Complete!');
+      expect(uiRequest.context?.urgency).toBe('low');
     });
 
     test('should include celebration elements in UI request', async () => {
@@ -530,10 +530,10 @@ describe('AchievementTracker', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const uiRequest = response.uiRequests![0];
-      expect(uiRequest.celebration).toBeDefined();
-      expect(uiRequest.celebration.type).toBe('completion');
-      expect(uiRequest.celebration.elements).toBeDefined();
-      expect(Array.isArray(uiRequest.celebration.elements)).toBe(true);
+      expect(uiRequest.semanticData.celebration).toBeDefined();
+      expect(uiRequest.semanticData.celebration.type).toBe('completion');
+      expect(uiRequest.semanticData.celebration.elements).toBeDefined();
+      expect(Array.isArray(uiRequest.semanticData.celebration.elements)).toBe(true);
     });
 
     test('should set auto-advance timing', async () => {
@@ -549,9 +549,9 @@ describe('AchievementTracker', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const uiRequest = response.uiRequests![0];
-      expect(uiRequest.timing).toBeDefined();
-      expect(uiRequest.timing.autoAdvance).toBe(1000); // 1 second for micro
-      expect(uiRequest.timing.skipEnabled).toBe(true);
+      expect(uiRequest.semanticData.timing).toBeDefined();
+      expect(uiRequest.semanticData.timing.autoAdvance).toBe(1000); // 1 second for micro
+      expect(uiRequest.semanticData.timing.skipEnabled).toBe(true);
     });
 
     test('should include badge animations', async () => {
@@ -568,8 +568,8 @@ describe('AchievementTracker', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const uiRequest = response.uiRequests![0];
-      if (uiRequest.badges && uiRequest.badges.length > 0) {
-        expect(uiRequest.badges[0].animation).toBe('fadeInScale');
+      if (uiRequest.semanticData.badges && uiRequest.semanticData.badges.length > 0) {
+        expect(uiRequest.semanticData.badges[0].animation).toBe('fadeInScale');
       }
     });
   });

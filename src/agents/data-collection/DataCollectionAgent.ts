@@ -12,9 +12,12 @@ import { BaseA2AAgent, A2ATask, A2ATaskResult } from '../base/BaseA2AAgent';
 import { logger } from '../../utils/logger';
 import { TaskContext } from '../../types/engine-types';
 import { 
-  UIAugmentationRequest,
-  FormField
-} from '../../types/onboarding-types';
+  UIAugmentationRequest
+} from '../base/BaseA2AAgent';
+import { ExtendedValidationRule, ExtendedFormField } from '../../types/compatibility-layer';
+
+// Use extended form field from compatibility layer
+type FormField = ExtendedFormField;
 
 interface BusinessData {
   businessName?: string;
@@ -423,7 +426,7 @@ export class DataCollectionAgent extends BaseA2AAgent {
         successMessage: 'Business information collected successfully',
         targetContextPath: 'sharedContext.business'
       }
-    };
+    } as any;
   }
 
   /**
@@ -440,8 +443,8 @@ export class DataCollectionAgent extends BaseA2AAgent {
           placeholder: 'Enter your business name',
           helpText: 'Legal name as registered with the state'
         },
+        required: true,
         validation: {
-          required: true,
           minLength: 2,
           maxLength: 200
         }
@@ -460,7 +463,7 @@ export class DataCollectionAgent extends BaseA2AAgent {
           required: true,
           pattern: '^\\d{2}-\\d{7}$',
           errorMessage: 'EIN must be in format XX-XXXXXXX'
-        }
+        } as ExtendedValidationRule
       },
       entityType: {
         id: 'entityType',

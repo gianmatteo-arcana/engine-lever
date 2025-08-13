@@ -5,7 +5,7 @@
  * based on context, confidence levels, and user progression
  */
 
-import { UIRequest } from '../types/engine-types';
+import { UIRequest, UITemplateType } from '../types/engine-types';
 
 export interface UIStrategyContext {
   userProgress: number;
@@ -222,19 +222,22 @@ export class UIStrategyEngine {
     const suggestedTemplates = this.getSuggestedTemplates(strategy, agentRole);
 
     return {
-      id: `ui_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      agentRole,
-      suggestedTemplates,
-      dataNeeded,
-      context: {
-        ...context,
-        uiStrategy: strategy,
+      requestId: `ui_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      templateType: UITemplateType.SmartTextInput,
+      semanticData: {
+        agentRole,
+        suggestedTemplates,
+        dataNeeded,
         components: components.map(c => ({
           type: c.type,
           config: c.config
         }))
-      } as any
-    };
+      },
+      context: {
+        ...context,
+        uiStrategy: strategy
+      }
+    } as UIRequest;
   }
 
   /**
@@ -367,7 +370,7 @@ export class UIStrategyEngine {
 
     // Analyze field completion
     const providedFields = Object.keys(response || {});
-    const requestedFields = uiRequest.dataNeeded;
+    const requestedFields = (uiRequest.semanticData as any)?.dataNeeded || [];
     const completionRate = providedFields.length / requestedFields.length;
 
     if (completionRate < 0.5) {
