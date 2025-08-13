@@ -208,10 +208,17 @@ export interface AuditLogRecord {
 export class DatabaseService {
   private serviceClient: SupabaseClient | null = null; // Service role client for system operations
   private userClients: Map<string, SupabaseClient> = new Map(); // User-scoped clients
-  private static instance: DatabaseService;
+  private userToken?: string; // Optional user token for request-scoped operations
+  private static instance: DatabaseService; // Keep for backward compatibility (deprecated)
 
-  private constructor() {}
+  constructor(userToken?: string) {
+    this.userToken = userToken;
+  }
 
+  /**
+   * @deprecated Use dependency injection instead
+   * Kept for backward compatibility during migration
+   */
   public static getInstance(): DatabaseService {
     if (!DatabaseService.instance) {
       DatabaseService.instance = new DatabaseService();

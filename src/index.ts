@@ -13,6 +13,8 @@ import { persistentAgentManager } from './agents/PersistentAgentManager';
 import { MCPServer } from './mcp-server';
 import { QueueManager } from './queues';
 import { initializeTaskEvents } from './services/task-events';
+import { requestContextMiddleware } from './services/request-context';
+import { initializeServices } from './services/dependency-injection';
 
 dotenv.config();
 
@@ -33,6 +35,9 @@ const allowedOrigins = [
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
+
+// Request context middleware - MUST be early in the chain
+app.use(requestContextMiddleware());
 
 // CORS configuration with proper OPTIONS handling
 app.use(cors({
@@ -148,6 +153,10 @@ process.on('SIGINT', gracefulShutdown);
 async function startServer() {
   try {
     logger.info('🚀 Starting Biz Buddy Backend Services...');
+    
+    // Initialize dependency injection container
+    initializeServices();
+    logger.info('✅ Dependency injection container initialized');
     
     // Initialize task events service
     initializeTaskEvents();

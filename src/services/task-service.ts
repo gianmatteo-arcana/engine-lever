@@ -44,14 +44,18 @@ export interface TaskResponse {
  * NO SPECIAL CASES - Same flow for everything
  */
 export class TaskService {
-  private static instance: TaskService;
+  private static instance: TaskService; // Keep for backward compatibility (deprecated)
   private dbService: DatabaseService;
   private userToken: string | null = null;
 
-  private constructor() {
-    this.dbService = DatabaseService.getInstance();
+  constructor(dbService?: DatabaseService) {
+    this.dbService = dbService || DatabaseService.getInstance();
   }
 
+  /**
+   * @deprecated Use dependency injection instead
+   * Kept for backward compatibility during migration
+   */
   public static getInstance(): TaskService {
     if (!TaskService.instance) {
       TaskService.instance = new TaskService();
