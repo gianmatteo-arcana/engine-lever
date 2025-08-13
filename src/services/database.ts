@@ -888,8 +888,9 @@ export class DatabaseService {
       title: task.title || 'Task',
       description: task.description,
       task_type: task.task_type || context.template_id,
-      status: context.current_state.status === 'created' ? 'pending' : 
-              context.current_state.status === 'active' ? 'in_progress' : 'completed',
+      status: context.current_state.status === 'created' ? 'pending' as const : 
+              context.current_state.status === 'active' ? 'in_progress' as const : 
+              context.current_state.status === 'completed' ? 'completed' as const : 'pending' as const,
       priority: task.priority || 'medium',
       metadata: context.metadata || {},
       created_at: context.created_at,
@@ -922,8 +923,9 @@ export class DatabaseService {
       title: context.metadata?.title || 'Task',
       description: context.metadata?.description,
       task_type: context.template_id,
-      status: context.current_state.status === 'created' ? 'pending' : 
-              context.current_state.status === 'active' ? 'in_progress' : 'completed',
+      status: context.current_state.status === 'created' ? 'pending' as const : 
+              context.current_state.status === 'active' ? 'in_progress' as const : 
+              context.current_state.status === 'completed' ? 'completed' as const : 'pending' as const,
       priority: 'medium',
       metadata: context.metadata || {},
       created_at: context.created_at,
