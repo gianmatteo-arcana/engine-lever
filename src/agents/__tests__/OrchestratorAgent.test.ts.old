@@ -188,11 +188,11 @@ describe('OrchestratorAgent - Universal Task Orchestration', () => {
       await orchestrator.orchestrateTask(context);
       
       const promptCall = mockLLMProvider.complete.mock.calls[0][0];
-      const userMessage = promptCall.messages.find(m => m.role === 'user');
+      const userMessage = promptCall.prompt?.includes('Available Agents');
       
-      expect(userMessage?.content).toContain('Available Agents');
-      expect(userMessage?.content).toContain('business_discovery');
-      expect(userMessage?.content).toContain('profile_collector');
+      expect(userMessage).toBeTruthy();
+      expect(promptCall.prompt).toContain('business_discovery');
+      expect(promptCall.prompt).toContain('profile_collector');
     });
   });
   
@@ -231,7 +231,7 @@ describe('OrchestratorAgent - Universal Task Orchestration', () => {
       // Verify batching occurred
       if (sendSpy.mock.calls.length > 0) {
         const batch = sendSpy.mock.calls[0][1];
-        expect(batch.length).toBeLessThanOrEqual(3); // Min batch size from config
+        expect((batch as any[]).length).toBeLessThanOrEqual(3); // Min batch size from config
       }
     });
     
@@ -356,7 +356,7 @@ describe('OrchestratorAgent - Universal Task Orchestration', () => {
       // Verify all entries have reasoning
       context.history.forEach(entry => {
         expect(entry.reasoning).toBeDefined();
-        expect(entry.reasoning.length).toBeGreaterThan(0);
+        expect(entry.reasoning!.length).toBeGreaterThan(0);
       });
       
       // Verify key operations recorded
@@ -412,7 +412,7 @@ describe('OrchestratorAgent - Universal Task Orchestration', () => {
               id: 'goal1',
               description: 'Complete task',
               required: true,
-              successCriteria: 'completeness >= 100'
+              successCriteria: ['completeness >= 100']
             }
           ]
         }

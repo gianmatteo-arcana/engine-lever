@@ -8,6 +8,7 @@
 
 import { DatabaseService } from './database';
 import { StateComputer } from './state-computer';
+import { ConfigurationManager } from './configuration-manager';
 import { logger } from '../utils/logger';
 import {
   TaskContext,
@@ -46,10 +47,12 @@ export interface TaskResponse {
 export class TaskService {
   private static instance: TaskService; // Keep for backward compatibility (deprecated)
   private dbService: DatabaseService;
+  private configManager: ConfigurationManager;
   private userToken: string | null = null;
 
-  constructor(dbService?: DatabaseService) {
+  constructor(dbService?: DatabaseService, configManager?: ConfigurationManager) {
     this.dbService = dbService || DatabaseService.getInstance();
+    this.configManager = configManager || new ConfigurationManager();
   }
 
   /**
@@ -298,8 +301,28 @@ export class TaskService {
    */
   private async loadTemplate(templateId: string): Promise<TaskTemplate | null> {
     try {
-      // For now, load from database templates
-      // TODO: Add ConfigurationManager for YAML loading
+      // Use ConfigurationManager to load templates from YAML files
+      const template = await this.configManager.loadTemplate(templateId);
+      
+      if (!template) {
+        // Fallback: Try loading from database if not found in config files
+        logger.info('Template not found in config, trying database', { templateId });
+        return await this.loadTemplateFromDatabase(templateId);
+      }
+
+      return template;
+    } catch (error) {
+      logger.error('Error loading template', { templateId, error });
+      return null;
+    }
+  }
+
+  /**
+   * Fallback method to load template from database
+   * Used when template is not found in configuration files
+   */
+  private async loadTemplateFromDatabase(templateId: string): Promise<TaskTemplate | null> {
+    try {
       const userClient = this.dbService.getUserClient(this.userToken || '');
       
       const { data, error } = await userClient
@@ -310,14 +333,13 @@ export class TaskService {
         .single();
 
       if (error || !data) {
-        logger.warn('Template not found', { templateId });
+        logger.warn('Template not found in database', { templateId });
         return null;
       }
 
       return this.mapToTaskTemplate(data);
-
     } catch (error) {
-      logger.error('Error loading template', { templateId, error });
+      logger.error('Error loading template from database', { templateId, error });
       return null;
     }
   }

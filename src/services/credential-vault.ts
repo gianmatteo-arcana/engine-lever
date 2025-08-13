@@ -3,6 +3,18 @@
  * Lines 1334-1385 of Engine PRD
  * 
  * Secure storage for tenant credentials
+ * 
+ * TODO: Implement the following improvements:
+ * - [ ] Add key rotation mechanism for periodic encryption key updates
+ * - [ ] Implement credential versioning for rollback capability
+ * - [ ] Add support for different encryption algorithms
+ * - [ ] Implement credential sharing between tenants (with permissions)
+ * - [ ] Add support for temporary credentials with expiration
+ * - [ ] Implement bulk operations for performance
+ * - [ ] Add support for credential templates
+ * - [ ] Implement automatic credential rotation for supported services
+ * - [ ] Add monitoring and alerting for failed access attempts
+ * - [ ] Implement rate limiting for credential access
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -15,6 +27,13 @@ import * as crypto from 'crypto';
 export class CredentialVault {
   private supabase: any;
   private encryptionKey: string;
+  private cache: Map<string, { data: any; timestamp: number }> = new Map();
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  
+  // TODO: Add these properties for future enhancements
+  // private keyVersion: number = 1;
+  // private rateLimiter: RateLimiter;
+  // private metricsCollector: MetricsCollector;
   
   constructor() {
     // Initialize Supabase client
@@ -23,17 +42,47 @@ export class CredentialVault {
     
     this.supabase = createClient(supabaseUrl, supabaseKey);
     this.encryptionKey = process.env.ENCRYPTION_KEY || 'default-encryption-key-for-dev';
+    
+    // Validate encryption key format (must be 32 bytes / 64 hex chars for AES-256)
+    if (this.encryptionKey.length < 32) {
+      // Pad the key if it's too short (for dev only)
+      if (process.env.NODE_ENV !== 'production') {
+        this.encryptionKey = this.encryptionKey.padEnd(64, '0');
+      } else {
+        throw new Error('Encryption key is invalid - must be at least 32 bytes');
+      }
+    }
   }
   
   /**
    * Store encrypted credentials for a tenant
    * PRD lines 1337-1352
+   * 
+   * TODO: Enhancements needed:
+   * - [ ] Add credential format validation per service type
+   * - [ ] Implement credential strength checking
+   * - [ ] Add support for credential metadata (created by, purpose, etc.)
+   * - [ ] Implement credential change history
    */
   async store(
     tenantId: string,
     service: string,
     credentials: any
   ): Promise<void> {
+    // Validate inputs
+    if (!tenantId || typeof tenantId !== 'string') {
+      throw new Error('Valid tenant ID is required');
+    }
+    if (!service || typeof service !== 'string') {
+      throw new Error('Valid service name is required');
+    }
+    if (!credentials || typeof credentials !== 'object') {
+      throw new Error('Valid credentials object is required');
+    }
+    
+    // TODO: Add service-specific credential validation
+    // Example: if (service === 'stripe') validateStripeCredentials(credentials);
+    
     const encrypted = await this.encrypt(credentials);
     
     const { error } = await this.supabase
@@ -51,16 +100,39 @@ export class CredentialVault {
     if (error) {
       throw new Error(`Failed to store credentials: ${error.message}`);
     }
+    
+    // Create audit trail
+    await this.createAuditTrail('store', tenantId, service);
   }
   
   /**
    * Retrieve decrypted credentials for a tenant
    * PRD lines 1354-1369
+   * 
+   * TODO: Enhancements needed:
+   * - [ ] Add support for credential refresh if expired
+   * - [ ] Implement fallback to previous version if current fails
+   * - [ ] Add support for partial credential retrieval (e.g., only API key)
+   * - [ ] Implement read-through cache with automatic refresh
    */
   async get(
     tenantId: string,
     service: string
   ): Promise<any | null> {
+    // Validate inputs
+    if (!tenantId || !service) {
+      throw new Error('Both tenantId and service are required');
+    }
+    
+    // Check cache first
+    const cacheKey = `${tenantId}:${service}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+      // Log access for audit
+      await this.logAccess(tenantId, service, 'cache_hit');
+      return cached.data;
+    }
+    
     const { data, error } = await this.supabase
       .from('tenant_credentials')
       .select('encrypted_credentials')
@@ -69,10 +141,19 @@ export class CredentialVault {
       .single();
     
     if (error || !data) {
+      await this.logAccess(tenantId, service, 'not_found');
       return null;
     }
     
-    return await this.decrypt(data.encrypted_credentials);
+    const decrypted = await this.decrypt(data.encrypted_credentials);
+    
+    // Cache the result
+    this.cache.set(cacheKey, { data: decrypted, timestamp: Date.now() });
+    
+    // Log access for audit
+    await this.logAccess(tenantId, service, 'retrieved');
+    
+    return decrypted;
   }
   
   /**
@@ -141,6 +222,12 @@ export class CredentialVault {
     if (error) {
       throw new Error(`Failed to delete credentials: ${error.message}`);
     }
+    
+    // Clear cache
+    this.cache.delete(`${tenantId}:${service}`);
+    
+    // Create audit trail
+    await this.createAuditTrail('delete', tenantId, service);
   }
   
   /**
@@ -157,5 +244,113 @@ export class CredentialVault {
     }
     
     return data?.map((row: any) => row.service_name) || [];
+  }
+  
+  /**
+   * Log access attempts for audit trail
+   */
+  private async logAccess(tenantId: string, service: string, action: string): Promise<void> {
+    try {
+      await this.supabase
+        .from('credential_access_log')
+        .insert({
+          tenant_id: tenantId,
+          service_name: service,
+          action,
+          timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+      // Silently fail audit logging to not break main functionality
+      console.error('Failed to log credential access:', error);
+    }
+  }
+  
+  /**
+   * Create audit trail for operations
+   */
+  private async createAuditTrail(operation: string, tenantId: string, service: string): Promise<void> {
+    try {
+      // TODO: Add more audit details like user agent, IP address, etc.
+      await this.supabase
+        .from('credential_audit')
+        .insert({
+          operation,
+          tenant_id: tenantId,
+          service_name: service,
+          timestamp: new Date().toISOString(),
+          // TODO: Add these fields
+          // action: `credential_${operation}`,
+          // actor_id: this.getCurrentUserId(),
+          // ip_address: this.getClientIP(),
+        });
+    } catch (error) {
+      // Silently fail audit logging
+      console.error('Failed to create audit trail:', error);
+    }
+  }
+  
+  /**
+   * Validate credentials format based on service type
+   * TODO: Implement service-specific validation rules
+   */
+  public validateCredentialsFormat(service: string, credentials: any): boolean {
+    // TODO: Implement validation logic for each service type
+    // For now, just ensure it's an object with at least one key
+    if (!credentials || typeof credentials !== 'object') {
+      return false;
+    }
+    
+    const keys = Object.keys(credentials);
+    if (keys.length === 0) {
+      return false;
+    }
+    
+    // TODO: Add service-specific validation
+    switch (service) {
+      case 'stripe':
+        // return 'apiKey' in credentials && 'secretKey' in credentials;
+        break;
+      case 'quickbooks':
+        // return 'clientId' in credentials && 'clientSecret' in credentials;
+        break;
+      default:
+        // Generic validation - at least one non-empty string value
+        return keys.some(key => 
+          credentials[key] && typeof credentials[key] === 'string'
+        );
+    }
+    
+    return true;
+  }
+  
+  /**
+   * Clear cache for a specific tenant/service or all
+   * TODO: Add selective cache clearing
+   */
+  public clearCache(tenantId?: string, service?: string): void {
+    if (tenantId && service) {
+      this.cache.delete(`${tenantId}:${service}`);
+    } else if (tenantId) {
+      // Clear all entries for a tenant
+      for (const key of this.cache.keys()) {
+        if (key.startsWith(`${tenantId}:`)) {
+          this.cache.delete(key);
+        }
+      }
+    } else {
+      // Clear entire cache
+      this.cache.clear();
+    }
+  }
+  
+  /**
+   * Get cache statistics
+   * TODO: Add more detailed metrics
+   */
+  public getCacheStats(): { size: number; entries: number } {
+    return {
+      size: this.cache.size,
+      entries: this.cache.size
+    };
   }
 }

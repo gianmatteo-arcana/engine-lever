@@ -33,7 +33,7 @@ describe('DataCollectionAgent', () => {
     mockDbService = mockDbServiceInstance;
   });
 
-  const createMockTaskContext = (businessData = {}): OnboardingTaskContext => ({
+  const createMockTaskContext = (businessData = {}): TaskContext => ({
     // Base TaskContext fields
     contextId: 'task-123',
     taskTemplateId: 'user_onboarding',
@@ -43,7 +43,7 @@ describe('DataCollectionAgent', () => {
       status: 'gathering_user_info',
       phase: 'data_collection',
       completeness: 25,
-      data: {}
+      data: businessData
     },
     history: [],
     templateSnapshot: {
@@ -57,29 +57,6 @@ describe('DataCollectionAgent', () => {
       goals: {
         primary: []
       }
-    },
-    // OnboardingTaskContext specific fields
-    taskId: 'task-123',
-    taskType: 'onboarding',
-    tenantContext: {
-      businessId: 'business-123',
-      sessionUserId: 'user-123',
-      dataScope: 'business',
-      allowedAgents: ['data_collection_agent'],
-      isolationLevel: 'strict',
-      userToken: 'test-token'
-    },
-    status: 'active',
-    currentPhase: 'data_collection',
-    completedPhases: [],
-    sharedContext: {
-      user: {
-        firstName: 'John',
-        lastName: 'Doe',
-        email: 'john@example.com'
-      },
-      business: businessData,
-      metadata: {}
     }
   });
 
@@ -94,7 +71,10 @@ describe('DataCollectionAgent', () => {
           phaseGoals: ['collect_business_name', 'collect_ein', 'collect_entity_type']
         },
         tenantContext: {
-          ...taskContext.tenantContext,
+          businessId: 'business-123',
+          tenantId: 'tenant-123',
+          userId: 'user-123',
+          allowedAgents: ['data_collection_agent'],
           userToken: 'test-token'
         }
       };
@@ -135,7 +115,10 @@ describe('DataCollectionAgent', () => {
           phaseGoals: ['collect_business_name', 'collect_ein', 'collect_entity_type']
         },
         tenantContext: {
-          ...taskContext.tenantContext,
+          businessId: 'business-123',
+          tenantId: 'tenant-123',
+          userId: 'user-123',
+          allowedAgents: ['data_collection_agent'],
           userToken: 'test-token'
         }
       };
@@ -381,7 +364,10 @@ describe('DataCollectionAgent', () => {
           phaseGoals: ['onboarding_start', 'collect_officers']
         },
         tenantContext: {
-          ...taskContext.tenantContext,
+          businessId: 'business-123',
+          tenantId: 'tenant-123',
+          userId: 'user-123',
+          allowedAgents: ['data_collection_agent'],
           userToken: 'test-token'
         }
       };

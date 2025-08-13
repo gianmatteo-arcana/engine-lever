@@ -8,6 +8,16 @@
 
 import { ProfileCollector } from '../ProfileCollector';
 import { TaskContext, AgentRequest } from '../../types/engine-types';
+import { DatabaseService } from '../../services/database';
+
+// Mock the database service
+jest.mock('../../services/database', () => ({
+  DatabaseService: {
+    getInstance: jest.fn(() => ({
+      createContextHistoryEntry: jest.fn().mockResolvedValue({})
+    }))
+  }
+}));
 
 describe('ProfileCollector', () => {
   let agent: ProfileCollector;
@@ -390,7 +400,7 @@ describe('ProfileCollector', () => {
       expect(response.uiRequests).toHaveLength(1);
       const uiRequest = response.uiRequests![0];
 
-      expect(uiRequest.templateType).toBe('business_profile_form');
+      expect(uiRequest.templateType).toBe('stepped_wizard');
       expect(uiRequest.semanticData.title).toContain('Confirm');
       expect(uiRequest.semanticData.description).toContain('We found some information');
       expect(uiRequest.semanticData).toHaveProperty('progressIndicator');
@@ -412,9 +422,9 @@ describe('ProfileCollector', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const uiRequest = response.uiRequests![0];
-      expect(uiRequest.title).toContain('Tell Us About');
-      expect(uiRequest.description).toContain('Help us understand');
-      expect(uiRequest.actions).toHaveProperty('help');
+      expect(uiRequest.semanticData.title).toContain('Tell Us About');
+      expect(uiRequest.semanticData.description).toContain('Help us understand');
+      expect(uiRequest.semanticData.actions).toHaveProperty('help');
     });
   });
 

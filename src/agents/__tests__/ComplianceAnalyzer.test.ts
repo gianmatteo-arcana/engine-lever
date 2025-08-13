@@ -8,6 +8,16 @@
 
 import { ComplianceAnalyzer } from '../ComplianceAnalyzer';
 import { TaskContext, AgentRequest } from '../../types/engine-types';
+import { DatabaseService } from '../../services/database';
+
+// Mock the database service
+jest.mock('../../services/database', () => ({
+  DatabaseService: {
+    getInstance: jest.fn(() => ({
+      createContextHistoryEntry: jest.fn().mockResolvedValue({})
+    }))
+  }
+}));
 
 describe('ComplianceAnalyzer', () => {
   let agent: ComplianceAnalyzer;

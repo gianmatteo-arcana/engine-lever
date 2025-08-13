@@ -169,7 +169,8 @@ export enum UITemplateType {
   ErrorDisplay = 'error_display',
   SuccessScreen = 'success_screen',
   InstructionPanel = 'instruction_panel',
-  WaitingScreen = 'waiting_screen'
+  WaitingScreen = 'waiting_screen',
+  ComplianceRoadmap = 'compliance_roadmap'
 }
 
 /**

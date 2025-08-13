@@ -12,7 +12,8 @@ import {
   ContextEntry, 
   AgentRequest, 
   AgentResponse,
-  UIRequest 
+  UIRequest,
+  UITemplateType 
 } from '../types/engine-types';
 import { DatabaseService } from '../services/database';
 // import { FluidUIActions } from '../types/compatibility-layer';
@@ -499,63 +500,66 @@ export class ComplianceAnalyzer extends Agent {
   ): UIRequest {
     return {
       requestId: `compliance_roadmap_${Date.now()}`,
-      agentRole: 'entity_compliance_agent',
-      suggestedTemplates: ['compliance_roadmap'],
-      dataNeeded: ['priority_confirmation', 'deadline_adjustments'],
+      templateType: UITemplateType.ComplianceRoadmap,
+      semanticData: {
+        agentRole: 'entity_compliance_agent',
+        suggestedTemplates: ['compliance_roadmap'],
+        dataNeeded: ['priority_confirmation', 'deadline_adjustments'],
+        title: 'Your Compliance Roadmap',
+        description: `We've identified ${calendar.requirements.length} requirements for your ${profile.entityType} in ${profile.state}. Let's prioritize what's most important.`,
+        complianceCalendar: calendar,
+        riskAssessment,
+        businessProfile: profile,
+        sections: [
+          {
+            id: 'critical_requirements',
+            title: 'Critical Requirements',
+            items: calendar.requirements.filter(r => r.priority === 'critical'),
+            urgency: 'high'
+          },
+          {
+            id: 'upcoming_deadlines',
+            title: 'Next 90 Days',
+            items: calendar.requirements.filter(r => 
+              new Date(r.deadline).getTime() - new Date().getTime() < 90 * 24 * 60 * 60 * 1000
+            ),
+            urgency: 'medium'
+          },
+          {
+            id: 'annual_planning',
+            title: 'Annual Planning',
+            items: calendar.requirements.filter(r => r.frequency === 'annual'),
+            urgency: 'low'
+          }
+        ],
+        actions: {
+          accept: {
+            type: 'submit',
+            label: 'Accept',
+            primary: true,
+            handler: () => ({ action: 'accept_roadmap', calendar })
+          },
+          customize: {
+            type: 'custom',
+            label: 'Customize',
+            handler: () => ({ action: 'customize_priorities' })
+          },
+          help: {
+            type: 'custom',
+            label: 'Help',
+            handler: () => ({ action: 'explain_requirements' })
+          }
+        },
+        progressIndicator: {
+          current: 3,
+          total: 4,
+          label: 'Compliance Planning'
+        }
+      },
       context: {
         userProgress: 65,
         deviceType: 'mobile',
         urgency: riskAssessment.overallRisk === 'high' ? 'high' : 'medium'
-      },
-      title: 'Your Compliance Roadmap',
-      description: `We've identified ${calendar.requirements.length} requirements for your ${profile.entityType} in ${profile.state}. Let's prioritize what's most important.`,
-      complianceCalendar: calendar,
-      riskAssessment,
-      businessProfile: profile,
-      sections: [
-        {
-          id: 'critical_requirements',
-          title: 'Critical Requirements',
-          items: calendar.requirements.filter(r => r.priority === 'critical'),
-          urgency: 'high'
-        },
-        {
-          id: 'upcoming_deadlines',
-          title: 'Next 90 Days',
-          items: calendar.requirements.filter(r => 
-            new Date(r.deadline).getTime() - new Date().getTime() < 90 * 24 * 60 * 60 * 1000
-          ),
-          urgency: 'medium'
-        },
-        {
-          id: 'annual_planning',
-          title: 'Annual Planning',
-          items: calendar.requirements.filter(r => r.frequency === 'annual'),
-          urgency: 'low'
-        }
-      ],
-      actions: {
-        accept: {
-          type: 'submit' as const,
-          label: 'Accept',
-          primary: true,
-          handler: () => ({ action: 'accept_roadmap', calendar })
-        },
-        customize: {
-          type: 'custom' as const,
-          label: 'Customize',
-          handler: () => ({ action: 'customize_priorities' })
-        },
-        help: {
-          type: 'custom' as const,
-          label: 'Help',
-          handler: () => ({ action: 'explain_requirements' })
-        }
-      } as any,
-      progressIndicator: {
-        current: 3,
-        total: 4,
-        label: 'Compliance Planning'
       }
     } as any;
   }

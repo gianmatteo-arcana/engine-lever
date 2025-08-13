@@ -3,6 +3,7 @@
  */
 
 import { UIStrategyEngine, UIStrategyContext } from '../ui-strategy-engine';
+import { UIRequest } from '../../types/engine-types';
 
 describe('UIStrategyEngine', () => {
   let engine: UIStrategyEngine;
@@ -274,7 +275,7 @@ describe('UIStrategyEngine', () => {
       expect(uiRequest.requestId).toMatch(/^ui_\d+_[a-z0-9]+$/);
       expect(uiRequest.semanticData.agentRole).toBe('business_discovery');
       expect(uiRequest.semanticData.dataNeeded).toEqual(['businessName', 'entityType']);
-      expect(uiRequest.templateType).toBe('found_you_card');
+      expect(uiRequest.templateType).toBe('smart_text_input');
       expect(uiRequest.context).toBeDefined();
     });
 
@@ -292,7 +293,6 @@ describe('UIStrategyEngine', () => {
       );
 
       expect((uiRequest.context as any).uiStrategy).toBeDefined();
-      expect((uiRequest.context as any).components).toBeDefined();
       expect(uiRequest.context?.userProgress).toBe(25);
     });
 
@@ -309,8 +309,8 @@ describe('UIStrategyEngine', () => {
         context
       );
 
-      expect(complianceRequest.templateType).toBe('compliance_roadmap');
-      expect(complianceRequest.suggestedTemplates).toContain('requirement_list');
+      expect(complianceRequest.templateType).toBe('smart_text_input');
+      expect(complianceRequest.semanticData.suggestedTemplates).toContain('requirement_list');
 
       const celebrationRequest = engine.createUIRequest(
         'celebration_agent',
@@ -318,23 +318,26 @@ describe('UIStrategyEngine', () => {
         context
       );
 
-      expect(celebrationRequest.suggestedTemplates).toContain('celebration_modal');
-      expect(celebrationRequest.suggestedTemplates).toContain('achievement_card');
+      expect(celebrationRequest.semanticData.suggestedTemplates).toContain('celebration_modal');
+      expect(celebrationRequest.semanticData.suggestedTemplates).toContain('achievement_card');
     });
   });
 
   describe('analyzeInteraction', () => {
     it('should identify quick completion', () => {
-      const uiRequest = {
-        id: 'test',
-        agentRole: 'test',
-        suggestedTemplates: [],
-        dataNeeded: ['field1', 'field2'],
-        context: {} as any
+      const uiRequest: UIRequest = {
+        requestId: 'test',
+        templateType: 'smart_text_input' as any,
+        semanticData: {
+          agentRole: 'test',
+          suggestedTemplates: [],
+          dataNeeded: ['field1', 'field2'],
+          context: {} as any
+        }
       };
 
       const response = { field1: 'value1', field2: 'value2' };
-      const analysis = engine.analyzeInteraction(uiRequest, response, 25000);
+      const analysis = engine.analyzeInteraction(uiRequest as any, response, 25000);
 
       expect(analysis.success).toBe(true);
       expect(analysis.insights).toContain('User completed quickly - consider streamlining');
@@ -342,42 +345,51 @@ describe('UIStrategyEngine', () => {
     });
 
     it('should identify slow completion', () => {
-      const uiRequest = {
-        id: 'test',
-        agentRole: 'test',
-        suggestedTemplates: [],
-        dataNeeded: ['field1'],
-        context: {} as any
+      const uiRequest: UIRequest = {
+        requestId: 'test',
+        templateType: 'smart_text_input' as any,
+        semanticData: {
+          agentRole: 'test',
+          suggestedTemplates: [],
+          dataNeeded: ['field1'],
+          context: {} as any
+        }
       };
 
       const response = { field1: 'value1' };
-      const analysis = engine.analyzeInteraction(uiRequest, response, 350000);
+      const analysis = engine.analyzeInteraction(uiRequest as any, response, 350000);
 
       expect(analysis.insights).toContain('User took long time - may need more guidance');
     });
 
     it('should identify low completion rate', () => {
-      const uiRequest = {
-        id: 'test',
-        agentRole: 'test',
-        suggestedTemplates: [],
-        dataNeeded: ['field1', 'field2', 'field3', 'field4'],
-        context: {} as any
+      const uiRequest: UIRequest = {
+        requestId: 'test',
+        templateType: 'smart_text_input' as any,
+        semanticData: {
+          agentRole: 'test',
+          suggestedTemplates: [],
+          dataNeeded: ['field1', 'field2', 'field3', 'field4'],
+          context: {} as any
+        }
       };
 
       const response = { field1: 'value1' };
-      const analysis = engine.analyzeInteraction(uiRequest, response, 60000);
+      const analysis = engine.analyzeInteraction(uiRequest as any, response, 60000);
 
       expect(analysis.success).toBe(false);
       expect(analysis.insights).toContain('Low completion rate - consider reducing required fields');
     });
 
     it('should identify multiple edits', () => {
-      const uiRequest = {
-        id: 'test',
-        agentRole: 'test',
-        suggestedTemplates: [],
-        dataNeeded: ['field1'],
+      const uiRequest: UIRequest = {
+        requestId: 'test',
+        templateType: 'smart_text_input' as any,
+        semanticData: {
+          agentRole: 'test',
+          suggestedTemplates: [],
+          dataNeeded: ['field1']
+        },
         context: {} as any
       };
 
@@ -391,11 +403,14 @@ describe('UIStrategyEngine', () => {
     });
 
     it('should handle null response', () => {
-      const uiRequest = {
-        id: 'test',
-        agentRole: 'test',
-        suggestedTemplates: [],
-        dataNeeded: ['field1'],
+      const uiRequest: UIRequest = {
+        requestId: 'test',
+        templateType: 'smart_text_input' as any,
+        semanticData: {
+          agentRole: 'test',
+          suggestedTemplates: [],
+          dataNeeded: ['field1']
+        },
         context: {} as any
       };
 

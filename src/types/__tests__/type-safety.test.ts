@@ -12,6 +12,7 @@ import {
   AgentResponse,
   ContextEntry,
   UIRequest,
+  UITemplateType,
   TaskTemplate,
   TaskGoal,
   ValidationRule,
@@ -146,9 +147,12 @@ describe('Type Safety Tests', () => {
         data: {},
         uiRequests: [{
           requestId: 'ui_123',
-          agentRole: 'test_agent',
-          suggestedTemplates: ['form_template'],
-          dataNeeded: ['name', 'email'],
+          templateType: UITemplateType.SmartTextInput,
+          semanticData: {
+            agentRole: 'test_agent',
+            suggestedTemplates: ['form_template'],
+            dataNeeded: ['name', 'email']
+          },
           context: {
             userProgress: 50,
             deviceType: 'desktop',
@@ -220,9 +224,12 @@ describe('Type Safety Tests', () => {
     test('should enforce urgency levels', () => {
       const validUIRequest: UIRequest = {
         requestId: 'ui_123',
-        agentRole: 'profile_collection_agent',
-        suggestedTemplates: ['business_form'],
-        dataNeeded: ['businessName', 'entityType'],
+        templateType: UITemplateType.SmartTextInput,
+        semanticData: {
+          agentRole: 'profile_collection_agent',
+          suggestedTemplates: ['business_form'],
+          dataNeeded: ['businessName', 'entityType']
+        },
         context: {
           userProgress: 75,
           deviceType: 'mobile',
@@ -234,9 +241,12 @@ describe('Type Safety Tests', () => {
 
       const invalidUIRequest: UIRequest = {
         requestId: 'ui_124',
-        agentRole: 'test_agent',
-        suggestedTemplates: [],
-        dataNeeded: [],
+        templateType: UITemplateType.SmartTextInput,
+        semanticData: {
+          agentRole: 'test_agent',
+          suggestedTemplates: [],
+          dataNeeded: []
+        },
         context: {
           userProgress: 50,
           deviceType: 'desktop',

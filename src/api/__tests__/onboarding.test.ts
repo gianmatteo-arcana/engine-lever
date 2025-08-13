@@ -6,12 +6,12 @@ import request from 'supertest';
 import express from 'express';
 import { onboardingRoutes } from '../onboarding';
 import { DatabaseService } from '../../services/database';
-import { A2AOrchestrator } from '../../agents/orchestrator/A2AOrchestrator';
+import { OrchestratorAgent } from '../../agents/OrchestratorAgent';
 import { logger } from '../../utils/logger';
 
 // Mock dependencies
 jest.mock('../../services/database');
-jest.mock('../../agents/orchestrator/A2AOrchestrator');
+jest.mock('../../agents/OrchestratorAgent');
 jest.mock('../../utils/logger');
 
 // Mock middleware
@@ -47,7 +47,7 @@ const mockOrchestrator = {
   executeTask: jest.fn()
 };
 
-(A2AOrchestrator as jest.Mock).mockImplementation(() => mockOrchestrator);
+(OrchestratorAgent.getInstance as jest.Mock) = jest.fn(() => mockOrchestrator);
 
 describe.skip('Onboarding API - Routes not implemented', () => {
   beforeEach(() => {
