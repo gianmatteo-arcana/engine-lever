@@ -170,7 +170,7 @@ export function initializeServices(): void {
   // Task Service - Request scoped
   DIContainer.register(
     ServiceTokens.TASK,
-    (context) => new TaskService(),
+    (_context) => new TaskService(),
     ServiceLifecycle.REQUEST
   );
 

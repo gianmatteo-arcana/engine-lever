@@ -214,6 +214,7 @@ export class InputValidator {
     sanitized = sanitized.substring(0, maxLength);
     
     // Remove control characters except newlines and tabs
+    // eslint-disable-next-line no-control-regex
     sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
     
     return sanitized;
@@ -230,7 +231,7 @@ export class InputValidator {
     const sanitized: any = Array.isArray(input) ? [] : {};
 
     for (const key in input) {
-      if (input.hasOwnProperty(key)) {
+      if (Object.prototype.hasOwnProperty.call(input, key)) {
         const sanitizedKey = this.sanitizeString(key, 100);
         
         if (typeof input[key] === 'string') {

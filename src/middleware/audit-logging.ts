@@ -78,7 +78,7 @@ function redactSensitiveData(obj: any): any {
   const redacted: any = Array.isArray(obj) ? [] : {};
   
   for (const key in obj) {
-    if (obj.hasOwnProperty(key)) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
       const lowerKey = key.toLowerCase();
       
       // Check if field is sensitive
@@ -154,7 +154,7 @@ export function auditLogger(options: {
     const context = RequestContextService.getContext();
     
     // Capture original end function
-    const originalEnd = res.end;
+    // const _originalEnd = res.end; // Not needed with finish event
     const originalJson = res.json;
     
     // Prepare audit entry
@@ -227,7 +227,7 @@ async function logAuditEntry(
   // Log to database
   if (logToDatabase) {
     try {
-      const dbService = getDatabaseService();
+      const _dbService = getDatabaseService();
       
       // Store in audit_logs table
       // TODO: Implement proper audit log storage

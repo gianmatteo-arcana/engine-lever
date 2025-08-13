@@ -98,8 +98,8 @@ function extractApiKey(req: Request): string | null {
  */
 async function validateApiKey(key: string): Promise<ApiKeyValidation> {
   try {
-    const hashedKey = hashApiKey(key);
-    const dbService = getDatabaseService();
+    const _hashedKey = hashApiKey(key);
+    const _dbService = getDatabaseService();
     
     // TODO: Implement API key validation with database
     // For now, return invalid for all keys until database schema is updated
@@ -345,10 +345,10 @@ export class ApiKeyManager {
     metadata?: Record<string, any>;
   }): Promise<{ key: string; id: string }> {
     const key = generateApiKey();
-    const hashedKey = hashApiKey(key);
-    const dbService = getDatabaseService();
+    const _hashedKey = hashApiKey(key);
+    const _dbService = getDatabaseService();
     
-    const expiresAt = options.expiresIn 
+    const _expiresAt = options.expiresIn 
       ? new Date(Date.now() + options.expiresIn * 60 * 60 * 1000)
       : null;
     
@@ -384,7 +384,7 @@ export class ApiKeyManager {
    * Revoke an API key
    */
   static async revokeApiKey(keyId: string): Promise<void> {
-    const dbService = getDatabaseService();
+    const _dbService = getDatabaseService();
     
     // TODO: Implement API key revocation in database
     // await dbService.query(
@@ -398,8 +398,8 @@ export class ApiKeyManager {
   /**
    * List API keys for a business
    */
-  static async listApiKeys(businessId: string): Promise<ApiKey[]> {
-    const dbService = getDatabaseService();
+  static async listApiKeys(_businessId: string): Promise<ApiKey[]> {
+    const _dbService = getDatabaseService();
     
     // TODO: Implement API key listing from database
     // const result = await dbService.query(

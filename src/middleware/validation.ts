@@ -7,7 +7,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z, ZodError, ZodSchema } from 'zod';
 import { RequestContextService } from '../services/request-context';
 import { InputValidator } from '../services/secure-database';
-import { logger } from '../utils/logger';
+// import { logger } from '../utils/logger'; // TODO: Use for error logging
 
 /**
  * Common validation schemas
@@ -279,7 +279,7 @@ function sanitizeObject(obj: any): any {
   if (obj && typeof obj === 'object') {
     const sanitized: any = {};
     for (const key in obj) {
-      if (obj.hasOwnProperty(key)) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
         // Sanitize key and value
         const sanitizedKey = InputValidator.sanitizeString(key, 100);
         sanitized[sanitizedKey] = sanitizeObject(obj[key]);

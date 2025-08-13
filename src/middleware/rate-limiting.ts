@@ -41,7 +41,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { RequestContextService } from '../services/request-context';
-import { logger } from '../utils/logger';
+// import { logger } from '../utils/logger'; // TODO: Use for error logging
 
 /**
  * Rate limiting configuration
@@ -59,7 +59,8 @@ interface RateLimitConfig {
  * In-memory store for rate limiting (development only)
  * TODO: Replace with Redis for production
  */
-class InMemoryRateLimitStore {
+// TODO: Uncomment when implementing rate limiting
+/* class InMemoryRateLimitStore {
   private store: Map<string, { count: number; resetTime: number }> = new Map();
 
   increment(key: string, windowMs: number): { count: number; remaining: number; resetTime: number } {
@@ -95,15 +96,16 @@ class InMemoryRateLimitStore {
   }
 
   // TODO: Add cleanup job to remove expired entries periodically
-}
+} */
 
-const store = new InMemoryRateLimitStore();
+// const _store = new InMemoryRateLimitStore(); // TODO: Use when implementing rate limiting
 
 /**
  * Default key generator (uses IP address)
  * TODO: Enhance to use user ID when authenticated
  */
-function defaultKeyGenerator(req: Request): string {
+// TODO: Uncomment when implementing rate limiting
+/* function defaultKeyGenerator(req: Request): string {
   // TODO: Better IP extraction (handle proxies, load balancers)
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   const userId = (req as any).userId;
@@ -113,19 +115,20 @@ function defaultKeyGenerator(req: Request): string {
   }
   
   return `ip:${ip}`;
-}
+} */
 
 /**
  * Rate limiting middleware factory
  * TODO: Implement full rate limiting logic
  */
-export function rateLimiter(config: Partial<RateLimitConfig> = {}) {
-  const {
-    windowMs = 60000, // 1 minute default
-    maxRequests = 100,
-    message = 'Too many requests, please try again later',
-    keyGenerator = defaultKeyGenerator
-  } = config;
+export function rateLimiter(_config: Partial<RateLimitConfig> = {}) {
+  // TODO: Implement rate limiting logic
+  // const {
+  //   windowMs = 60000, // 1 minute default
+  //   maxRequests = 100,
+  //   message = 'Too many requests, please try again later',
+  //   keyGenerator = defaultKeyGenerator
+  // } = config;
 
   return (req: Request, res: Response, next: NextFunction) => {
     // TODO: Implement rate limiting logic

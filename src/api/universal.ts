@@ -10,7 +10,7 @@ import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { getDatabaseService } from '../services/dependency-injection';
 import { RequestContextService } from '../services/request-context';
 import { StateComputer } from '../services/state-computer';
-import { logger } from '../utils/logger';
+// import { logger } from '../utils/logger'; // TODO: Use for debugging
 import { validators } from '../middleware/validation';
 import { limiters } from '../middleware/rate-limiting';
 import { auditLogger } from '../middleware/audit-logging';
@@ -262,8 +262,8 @@ router.get('/contexts/:contextId/events',
   ...validators.contextId,
   async (req: AuthenticatedRequest, res) => {
   try {
-    const { contextId } = req.params;
-    const dbService = getDatabaseService();
+    const { contextId: _contextId } = req.params;
+    const _dbService = getDatabaseService();
     
     // Get events - using context history for now
     // TODO: Create proper getEventsByContextId method
