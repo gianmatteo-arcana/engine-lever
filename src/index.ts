@@ -15,6 +15,9 @@ import { QueueManager } from './queues';
 import { initializeTaskEvents } from './services/task-events';
 import { requestContextMiddleware } from './services/request-context';
 import { initializeServices } from './services/dependency-injection';
+import { applySecurityValidations } from './middleware/validation';
+import { complianceAuditLogger, securityAuditLogger, performanceAuditLogger } from './middleware/audit-logging';
+import { productionSecurityHeaders, developmentSecurityHeaders, cacheControlHeaders } from './middleware/security-headers';
 
 dotenv.config();
 
@@ -36,8 +39,26 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
+// Apply environment-specific security headers
+if (process.env.NODE_ENV === 'production') {
+  app.use(productionSecurityHeaders());
+} else {
+  app.use(developmentSecurityHeaders());
+}
+
+// Cache control headers
+app.use(cacheControlHeaders());
+
 // Request context middleware - MUST be early in the chain
 app.use(requestContextMiddleware());
+
+// Apply global security validations
+app.use(applySecurityValidations());
+
+// Audit logging
+app.use(complianceAuditLogger());
+app.use(securityAuditLogger());
+app.use(performanceAuditLogger(500)); // Log requests over 500ms
 
 // CORS configuration with proper OPTIONS handling
 app.use(cors({

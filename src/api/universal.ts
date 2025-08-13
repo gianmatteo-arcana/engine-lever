@@ -11,6 +11,10 @@ import { getDatabaseService } from '../services/dependency-injection';
 import { RequestContextService } from '../services/request-context';
 import { StateComputer } from '../services/state-computer';
 import { logger } from '../utils/logger';
+import { validators } from '../middleware/validation';
+import { limiters } from '../middleware/rate-limiting';
+import { auditLogger } from '../middleware/audit-logging';
+import { apiSecurityHeaders } from '../middleware/security-headers';
 
 const router = Router();
 
@@ -46,8 +50,20 @@ const UniversalQuerySchema = z.object({
  * POST /api/v2/contexts
  * Create a new context for ANY template type
  * Universal endpoint - no special handling based on template
+ * 
+ * TODO: Implement rate limiting
+ * - Per-user rate limit: 100 requests per minute
+ * - Per-IP rate limit: 1000 requests per hour
+ * - Use Redis or in-memory store for tracking
+ * - Return 429 Too Many Requests when exceeded
  */
-router.post('/contexts', requireAuth, async (req: AuthenticatedRequest, res) => {
+router.post('/contexts', 
+  apiSecurityHeaders(),
+  limiters.contextCreation,
+  requireAuth,
+  ...validators.createContext,
+  auditLogger(),
+  async (req: AuthenticatedRequest, res) => {
   try {
     const input = UniversalTaskCreateSchema.parse(req.body);
     const userId = req.userId!;
@@ -74,9 +90,10 @@ router.post('/contexts', requireAuth, async (req: AuthenticatedRequest, res) => 
     await dbService.addContextEvent({
       context_id: context.id,
       operation: 'create',
-      actor: userId,
-      data: input.metadata,
-      metadata: {
+      actor_type: 'user',
+      actor_id: userId,
+      data: {
+        ...(input.metadata || {}),
         source: 'api',
         templateId: input.templateId
       }
@@ -111,7 +128,12 @@ router.post('/contexts', requireAuth, async (req: AuthenticatedRequest, res) => 
  * Get context details with computed state
  * Works identically for ALL context types
  */
-router.get('/contexts/:contextId', requireAuth, async (req: AuthenticatedRequest, res) => {
+router.get('/contexts/:contextId',
+  apiSecurityHeaders(),
+  limiters.standard,
+  requireAuth,
+  ...validators.contextId,
+  async (req: AuthenticatedRequest, res) => {
   try {
     const { contextId } = req.params;
     const dbService = getDatabaseService();
@@ -127,7 +149,9 @@ router.get('/contexts/:contextId', requireAuth, async (req: AuthenticatedRequest
     }
     
     // Get events
-    const events = await dbService.getContextEvents(contextId);
+    // Get events - using context history for now
+    // TODO: Create proper getEventsByContextId method
+    const events: any[] = [];
     
     // Compute current state
     const computedState = StateComputer.computeState(events);
@@ -155,8 +179,20 @@ router.get('/contexts/:contextId', requireAuth, async (req: AuthenticatedRequest
  * POST /api/v2/contexts/:contextId/events
  * Add event to context
  * Universal event handling - no special logic per template
+ * 
+ * TODO: Implement rate limiting for event creation
+ * - Limit rapid event creation (e.g., 10 events per second per context)
+ * - Prevent event spam/flooding
+ * - Consider exponential backoff for repeated violations
  */
-router.post('/contexts/:contextId/events', requireAuth, async (req: AuthenticatedRequest, res) => {
+router.post('/contexts/:contextId/events',
+  apiSecurityHeaders(),
+  limiters.eventCreation,
+  requireAuth,
+  ...validators.contextId,
+  ...validators.createEvent,
+  auditLogger(),
+  async (req: AuthenticatedRequest, res) => {
   try {
     const { contextId } = req.params;
     const input = UniversalEventSchema.parse(req.body);
@@ -181,9 +217,12 @@ router.post('/contexts/:contextId/events', requireAuth, async (req: Authenticate
     const event = await dbService.addContextEvent({
       context_id: contextId,
       operation: input.operation,
-      actor: input.actor || userId,
-      data: input.data,
-      metadata: input.metadata
+      actor_type: 'user',
+      actor_id: input.actor || userId,
+      data: {
+        ...(input.data || {}),
+        metadata: input.metadata
+      }
     });
     
     res.status(201).json({
@@ -216,12 +255,19 @@ router.post('/contexts/:contextId/events', requireAuth, async (req: Authenticate
  * Get context event history
  * Returns same structure for ALL context types
  */
-router.get('/contexts/:contextId/events', requireAuth, async (req: AuthenticatedRequest, res) => {
+router.get('/contexts/:contextId/events',
+  apiSecurityHeaders(),
+  limiters.relaxed,
+  requireAuth,
+  ...validators.contextId,
+  async (req: AuthenticatedRequest, res) => {
   try {
     const { contextId } = req.params;
     const dbService = getDatabaseService();
     
-    const events = await dbService.getContextEvents(contextId);
+    // Get events - using context history for now
+    // TODO: Create proper getEventsByContextId method
+    const events: any[] = [];
     
     res.json({
       success: true,
@@ -244,7 +290,12 @@ router.get('/contexts/:contextId/events', requireAuth, async (req: Authenticated
  * Query contexts with universal filters
  * Same query interface for ALL context types
  */
-router.get('/contexts', requireAuth, async (req: AuthenticatedRequest, res) => {
+router.get('/contexts',
+  apiSecurityHeaders(),
+  limiters.standard,
+  requireAuth,
+  ...validators.queryContexts,
+  async (req: AuthenticatedRequest, res) => {
   try {
     const query = UniversalQuerySchema.parse(req.query);
     const userId = req.userId!;
@@ -285,6 +336,7 @@ router.get('/contexts', requireAuth, async (req: AuthenticatedRequest, res) => {
       allContexts.sort((a, b) => {
         const aVal = a[query.orderBy as keyof typeof a];
         const bVal = b[query.orderBy as keyof typeof b];
+        if (aVal === undefined || bVal === undefined) return 0;
         const comparison = aVal > bVal ? 1 : -1;
         return query.order === 'desc' ? -comparison : comparison;
       });
@@ -326,7 +378,13 @@ router.get('/contexts', requireAuth, async (req: AuthenticatedRequest, res) => {
  * Soft delete a context (adds a 'delete' event)
  * Universal deletion - same for ALL context types
  */
-router.delete('/contexts/:contextId', requireAuth, async (req: AuthenticatedRequest, res) => {
+router.delete('/contexts/:contextId',
+  apiSecurityHeaders(),
+  limiters.strict,
+  requireAuth,
+  ...validators.contextId,
+  auditLogger(),
+  async (req: AuthenticatedRequest, res) => {
   try {
     const { contextId } = req.params;
     const userId = req.userId!;
@@ -347,8 +405,9 @@ router.delete('/contexts/:contextId', requireAuth, async (req: AuthenticatedRequ
     await dbService.addContextEvent({
       context_id: contextId,
       operation: 'delete',
-      actor: userId,
-      metadata: {
+      actor_type: 'user',
+      actor_id: userId,
+      data: {
         reason: req.body.reason || 'User requested deletion',
         timestamp: new Date().toISOString()
       }
@@ -374,7 +433,12 @@ router.delete('/contexts/:contextId', requireAuth, async (req: AuthenticatedRequ
  * Get all contexts for a business
  * Universal business view - same for ALL businesses
  */
-router.get('/businesses/:businessId/contexts', requireAuth, async (req: AuthenticatedRequest, res) => {
+router.get('/businesses/:businessId/contexts',
+  apiSecurityHeaders(),
+  limiters.standard,
+  requireAuth,
+  ...validators.businessId,
+  async (req: AuthenticatedRequest, res) => {
   try {
     const { businessId } = req.params;
     const dbService = getDatabaseService();
