@@ -1,7 +1,24 @@
 # SmallBizAlly Backend - Claude Code Workflow Guide
 
+## 🛑 STOP! MANDATORY FIRST STEPS
+
+### **BEFORE ANY WORK, YOU MUST:**
+
+1. **READ ARCHITECTURE_GUIDELINES.md** - Contains all forbidden patterns and mandatory principles
+2. **RUN ASSESSMENT PROTOCOL** - Check for existing implementations BEFORE creating new ones
+3. **VERIFY NO DUPLICATES** - We already have ONE OrchestratorAgent, ONE TaskService, etc.
+
+```bash
+# RUN THESE COMMANDS FIRST IN EVERY SESSION:
+find src -name "*.ts" -type f | grep -E "(orchestrat|agent|service)" | head -20
+grep -r "class.*Agent" src/ --include="*.ts" | head -20
+ls -la src/agents/
+ls -la src/services/
+```
+
 ## ⚡ Quick Start: Schema Change Workflow
 **MUST READ**: [DEVELOPMENT_WORKFLOW.md](./DEVELOPMENT_WORKFLOW.md) - The 5-step cycle for any schema changes
+**CRITICAL**: [ARCHITECTURE_GUIDELINES.md](./ARCHITECTURE_GUIDELINES.md) - Mandatory architectural principles
 
 ## 🎯 Product Vision
 SmallBizAlly is an agentic AI platform that automates business compliance through specialized AI agents, task templates, and MCP (Model Context Protocol) tool orchestration.
