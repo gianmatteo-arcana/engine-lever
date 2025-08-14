@@ -1,0 +1,110 @@
+name: Issue & PR Automation - Backend
+
+on:
+  pull_request:
+    types: [opened, closed]
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  auto-issue-management:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Extract Issue Numbers from PR
+        if: github.event.pull_request.merged == true
+        id: extract-issues
+        run: |
+          # Extract issue numbers from PR body using regex
+          ISSUES=$(echo "${{ github.event.pull_request.body }}" | grep -oE "(closes|fixes|resolves) #[0-9]+" | grep -oE "#[0-9]+" | tr '\n' ' ')
+          echo "issues=$ISSUES" >> $GITHUB_OUTPUT
+          
+      - name: Update Linked Issues on PR Merge
+        if: github.event.pull_request.merged == true && steps.extract-issues.outputs.issues != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for issue in ${{ steps.extract-issues.outputs.issues }}; do
+            issue_num=${issue#\#}
+            
+            # Add comprehensive resolution comment
+            gh issue comment $issue_num --body "## ✅ RESOLVED in Backend PR #${{ github.event.pull_request.number }}
+
+            **Backend API changes** automatically resolved when PR #${{ github.event.pull_request.number }} was merged.
+            
+            ### 📋 Backend Resolution Details
+            - **PR Title**: ${{ github.event.pull_request.title }}
+            - **Merged At**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+            - **Merged By**: @${{ github.event.pull_request.merged_by.login }}
+            - **Branch**: \`${{ github.event.pull_request.head.ref }}\`
+            - **Repository**: Backend API (Railway)
+            
+            ### 🔍 Backend Changes Summary
+            ${{ github.event.pull_request.body }}
+            
+            ### 🎯 Backend Status
+            Backend API issue automatically resolved and closed. ✨
+            
+            **Note**: If this issue spans multiple repositories, check related PRs in frontend and E2E repos."
+            
+            echo "Updated issue #$issue_num with backend resolution details"
+          done
+
+      - name: Auto-Label Backend Issues
+        if: github.event_name == 'issues' && github.event.action == 'opened'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE_LOWER=$(echo "${{ github.event.issue.title }}" | tr '[:upper:]' '[:lower:]')
+          BODY_LOWER=$(echo "${{ github.event.issue.body }}" | tr '[:upper:]' '[:lower:]')
+          
+          # Auto-label based on backend-specific keywords
+          if echo "$TITLE_LOWER $BODY_LOWER" | grep -qE "(api|endpoint|route|middleware|auth|jwt)"; then
+            gh issue edit ${{ github.event.issue.number }} --add-label "backend,api"
+          fi
+          
+          if echo "$TITLE_LOWER $BODY_LOWER" | grep -qE "(security|authentication|authorization|jwt|token)"; then
+            gh issue edit ${{ github.event.issue.number }} --add-label "security,backend"
+          fi
+          
+          if echo "$TITLE_LOWER $BODY_LOWER" | grep -qE "(database|sql|query|orm|prisma)"; then
+            gh issue edit ${{ github.event.issue.number }} --add-label "database,backend"
+          fi
+          
+          if echo "$TITLE_LOWER $BODY_LOWER" | grep -qE "(performance|slow|timeout|memory|cpu)"; then
+            gh issue edit ${{ github.event.issue.number }} --add-label "performance,backend"
+          fi
+
+      - name: Create Backend Deployment Tasks
+        if: github.event.pull_request.merged == true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if this was a backend API change requiring deployment
+          if git diff --name-only HEAD~1 HEAD | grep -qE "(src/|package\.json|Dockerfile|railway\.json)"; then
+            gh issue create \
+              --title "🚀 DEPLOYMENT: Backend API changes from PR #${{ github.event.pull_request.number }}" \
+              --body "## Backend Deployment Required
+
+              PR #${{ github.event.pull_request.number }} included backend API changes that may require deployment verification.
+              
+              ### 📋 Next Steps
+              - [ ] Verify Railway deployment completed successfully
+              - [ ] Run backend health checks and API tests
+              - [ ] Check integration with frontend if API changes involved
+              - [ ] Monitor error rates and performance metrics
+              
+              ### 🔗 Related
+              - Original Backend PR: #${{ github.event.pull_request.number }}
+              - Changed files: $(git diff --name-only HEAD~1 HEAD | head -5 | tr '\n' ', ')
+              
+              ### 🎯 Deployment Checklist
+              - [ ] Railway deployment status: ✅ / ❌
+              - [ ] API health check: ✅ / ❌  
+              - [ ] Frontend integration: ✅ / ❌
+              - [ ] Error monitoring: ✅ / ❌
+              
+              **Auto-created by GitHub Actions** 🤖" \
+              --label "deployment,backend,auto-created"
+          fi
