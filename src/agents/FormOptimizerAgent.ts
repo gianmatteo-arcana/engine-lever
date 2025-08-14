@@ -6,7 +6,7 @@
  * form design, progressive disclosure, and mobile optimization
  */
 
-import { Agent } from './base/Agent';
+import { BaseAgent } from './base/BaseAgent';
 import { 
   TaskContext, 
   ContextEntry, 
@@ -82,9 +82,9 @@ interface OptimizationMetrics {
 /**
  * Form Optimizer - Optimizes user experience through intelligent form design
  */
-export class FormOptimizer extends Agent {
-  constructor() {
-    super('ux_optimization_agent.yaml');
+export class FormOptimizerAgent extends BaseAgent {
+  constructor(businessId: string, userId?: string) {
+    super('ux_optimization_agent.yaml', businessId, userId);
   }
 
   /**
@@ -596,11 +596,16 @@ export class FormOptimizer extends Agent {
       actor: {
         type: 'agent',
         id: 'ux_optimization_agent',
-        version: this.config.version
+        version: (this as any).specializedTemplate?.agent?.version || '1.0.0'
       },
       operation: entry.operation || 'unknown',
       data: entry.data || {},
-      reasoning: entry.reasoning
+      reasoning: entry.reasoning || 'UX optimization action',
+      trigger: entry.trigger || {
+        type: 'agent_request',
+        source: 'form_optimizer',
+        details: {}
+      }
     };
 
     if (!context.history) {

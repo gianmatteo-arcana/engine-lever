@@ -7,9 +7,9 @@
 
 import { DatabaseService } from '../../services/database';
 import { StateComputer, ComputedState } from '../../services/state-computer';
-import { BusinessDiscovery } from '../../agents/BusinessDiscovery';
-import { ProfileCollector } from '../../agents/ProfileCollector';
-import { ComplianceAnalyzer } from '../../agents/ComplianceAnalyzer';
+import { BusinessDiscoveryAgent } from '../../agents/BusinessDiscoveryAgent';
+import { ProfileCollectorAgent } from '../../agents/ProfileCollectorAgent';
+import { ComplianceAnalyzerAgent } from '../../agents/ComplianceAnalyzerAgent';
 import { 
   TaskContext,
   AgentRequest,
@@ -467,7 +467,7 @@ describe('Dev Toolkit Integration', () => {
         templateSnapshot: {} as any
       };
       
-      const agent = new BusinessDiscovery();
+      const agent = new BusinessDiscoveryAgent('test_business_dev', 'test_user_dev');
       const startTime = Date.now();
       
       // Make request

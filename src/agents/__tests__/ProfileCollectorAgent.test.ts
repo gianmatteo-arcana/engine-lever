@@ -6,7 +6,7 @@
  * Uses test database and mock external APIs only
  */
 
-import { ProfileCollector } from '../ProfileCollector';
+import { ProfileCollectorAgent } from '../ProfileCollectorAgent';
 import { TaskContext, AgentRequest } from '../../types/engine-types';
 import { DatabaseService } from '../../services/database';
 
@@ -20,11 +20,13 @@ jest.mock('../../services/database', () => ({
 }));
 
 describe('ProfileCollector', () => {
-  let agent: ProfileCollector;
+  let agent: ProfileCollectorAgent;
   let mockContext: TaskContext;
 
   beforeEach(() => {
-    agent = new ProfileCollector();
+    const testBusinessId = 'test_business_profile';
+    const testUserId = 'test_user_profile';
+    agent = new ProfileCollectorAgent(testBusinessId, testUserId);
     
     mockContext = {
       contextId: 'test_context_456',
@@ -532,10 +534,12 @@ describe('ProfileCollector', () => {
  * Performance Tests
  */
 describe('ProfileCollector Performance', () => {
-  let agent: ProfileCollector;
+  let agent: ProfileCollectorAgent;
 
   beforeEach(() => {
-    agent = new ProfileCollector();
+    const testBusinessId = 'test_business_profile';
+    const testUserId = 'test_user_profile';
+    agent = new ProfileCollectorAgent(testBusinessId, testUserId);
   });
 
   test('should complete profile collection within time limits', async () => {

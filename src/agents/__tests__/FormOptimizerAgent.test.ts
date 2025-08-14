@@ -5,7 +5,7 @@
  * MANDATORY: No mock data - tests real UX optimization logic
  */
 
-import { FormOptimizer } from '../FormOptimizer';
+import { FormOptimizerAgent } from '../FormOptimizerAgent';
 import { TaskContext, AgentRequest } from '../../types/engine-types';
 
 // Mock dependencies
@@ -35,11 +35,11 @@ jest.mock('../../services/llm-provider', () => ({
 }));
 
 describe('FormOptimizer', () => {
-  let agent: FormOptimizer;
+  let agent: FormOptimizerAgent;
   let mockContext: TaskContext;
 
   beforeEach(() => {
-    agent = new FormOptimizer();
+    agent = new FormOptimizerAgent('test_business_ux', 'test_user_ux');
     
     mockContext = {
       contextId: 'test_context_ux',
@@ -499,10 +499,10 @@ describe('FormOptimizer', () => {
  * Performance Tests
  */
 describe('FormOptimizer Performance', () => {
-  let agent: FormOptimizer;
+  let agent: FormOptimizerAgent;
 
   beforeEach(() => {
-    agent = new FormOptimizer();
+    agent = new FormOptimizerAgent('test_business_ux', 'test_user_ux');
   });
 
   test('should optimize within time limits', async () => {
