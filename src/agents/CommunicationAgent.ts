@@ -3,7 +3,7 @@
  * Migrated from EventEmitter to Consolidated BaseAgent Pattern
  * 
  * AGENT MISSION: Manage user communications, approval workflows, and status updates
- * throughout compliance processes. Use clear language, provide timely updates, and 
+ * throughout task processes. Use clear language, provide timely updates, and 
  * build user confidence.
  * 
  * This agent is GENERAL PURPOSE - it handles all user communication needs including
@@ -454,8 +454,8 @@ export class CommunicationAgent extends BaseAgent {
   private generateEscalationMessage(originalMessageId: string, reason: string, urgency: string): NotificationMessage {
     return {
       messageType: 'escalation',
-      subject: 'Urgent: Action required for your filing',
-      content: `We need your immediate attention regarding your filing process. Original message: ${originalMessageId}. Reason: ${reason}`,
+      subject: 'Urgent: Action required for your task',
+      content: `We need your immediate attention regarding your task. Original message: ${originalMessageId}. Reason: ${reason}`,
       channel: this.selectEscalationChannel(urgency),
       urgency: 'urgent',
       responseRequired: true,

@@ -3,7 +3,7 @@
  * Migrated from EventEmitter to Consolidated BaseAgent Pattern
  * 
  * AGENT MISSION: Monitor system health, verify task completion, and maintain audit trails.
- * Detect anomalies, track performance metrics, and ensure compliance workflows execute correctly.
+ * Detect anomalies, track performance metrics, and ensure workflows execute correctly.
  * 
  * This agent is GENERAL PURPOSE - it provides monitoring and quality assurance capabilities
  * while working with Task Templates for specific workflow verification. The agent monitors
@@ -41,9 +41,9 @@ interface PerformanceAlert {
 interface AuditSummary {
   checksPerformed: number;
   anomaliesDetected: number;
-  complianceStatus: 'compliant' | 'warning' | 'violation';
+  auditStatus: 'passed' | 'warning' | 'failed';
   lastAuditTime: string;
-  retentionCompliance: boolean;
+  dataRetentionMet: boolean;
 }
 
 interface TaskVerificationResult {
@@ -60,8 +60,8 @@ interface MonitoringThresholds {
   databaseQueryTime: number;
   externalApiTimeout: number;
   agentSuccessRate: number;
-  paymentSuccessRate: number;
-  portalConnectivity: number;
+  operationSuccessRate: number;
+  apiConnectivity: number;
 }
 
 /**
@@ -73,8 +73,8 @@ export class MonitoringAgent extends BaseAgent {
     databaseQueryTime: 2000,
     externalApiTimeout: 30000,
     agentSuccessRate: 95,
-    paymentSuccessRate: 98,
-    portalConnectivity: 99
+    operationSuccessRate: 98,
+    apiConnectivity: 99
   };
 
   constructor(businessId: string, userId?: string) {
@@ -255,7 +255,7 @@ export class MonitoringAgent extends BaseAgent {
     
     // Generate audit report based on scope
     const auditReport = await this.compileAuditReport(timeRange, scope, context);
-    const complianceStatus = this.assessComplianceStatus(auditReport);
+    const auditStatus = this.assessAuditStatus(auditReport);
 
     await this.recordContextEntry(context, {
       operation: 'audit_report_generated',
@@ -263,25 +263,25 @@ export class MonitoringAgent extends BaseAgent {
         auditReport,
         scope,
         timeRange,
-        complianceStatus,
+        auditStatus,
         totalEntries: auditReport.totalEntries
       },
-      reasoning: `Audit report generated for ${scope} scope covering ${timeRange?.days || 'default'} days. Status: ${complianceStatus}`
+      reasoning: `Audit report generated for ${scope} scope covering ${timeRange?.days || 'default'} days. Status: ${auditStatus}`
     });
 
     return {
       status: 'completed',
       data: { 
         auditReport,
-        complianceStatus,
-        recommendations: this.generateComplianceRecommendations(auditReport),
+        auditStatus,
+        recommendations: this.generateAuditRecommendations(auditReport),
         reportMetadata: {
           generatedAt: new Date().toISOString(),
           scope,
           coverage: timeRange
         }
       },
-      reasoning: `Audit report generated successfully for ${scope}. Compliance status: ${complianceStatus}`
+      reasoning: `Audit report generated successfully for ${scope}. Audit status: ${auditStatus}`
     };
   }
 
@@ -432,14 +432,14 @@ export class MonitoringAgent extends BaseAgent {
       });
     }
 
-    if (metrics.apiConnectivity < this.defaultThresholds.portalConnectivity) {
+    if (metrics.apiConnectivity < this.defaultThresholds.apiConnectivity) {
       const severity = metrics.apiConnectivity < 80 ? 'critical' : 'warning';
       alerts.push({
         severity,
         component: 'external_apis',
         message: `API connectivity ${metrics.apiConnectivity}% below threshold`,
         timestamp: new Date().toISOString(),
-        threshold: this.defaultThresholds.portalConnectivity,
+        threshold: this.defaultThresholds.apiConnectivity,
         actualValue: metrics.apiConnectivity
       });
     }
@@ -451,10 +451,10 @@ export class MonitoringAgent extends BaseAgent {
     return {
       checksPerformed: 15,
       anomaliesDetected: alerts.length,
-      complianceStatus: alerts.some(a => a.severity === 'critical') ? 'violation' : 
-                       alerts.some(a => a.severity === 'warning') ? 'warning' : 'compliant',
+      auditStatus: alerts.some(a => a.severity === 'critical') ? 'failed' : 
+                       alerts.some(a => a.severity === 'warning') ? 'warning' : 'passed',
       lastAuditTime: new Date().toISOString(),
-      retentionCompliance: true
+      dataRetentionMet: true
     };
   }
 
@@ -526,27 +526,27 @@ export class MonitoringAgent extends BaseAgent {
       totalEntries: Math.floor(Math.random() * 1000) + 100,
       scope,
       timeRange,
-      complianceViolations: Math.floor(Math.random() * 5),
+      issuesFound: Math.floor(Math.random() * 5),
       successfulOperations: Math.floor(Math.random() * 950) + 50,
       generatedAt: new Date().toISOString()
     };
   }
 
-  private assessComplianceStatus(auditReport: any): 'compliant' | 'warning' | 'violation' {
-    if (auditReport.complianceViolations === 0) return 'compliant';
-    if (auditReport.complianceViolations <= 2) return 'warning';
-    return 'violation';
+  private assessAuditStatus(auditReport: any): 'passed' | 'warning' | 'failed' {
+    if (auditReport.issuesFound === 0) return 'passed';
+    if (auditReport.issuesFound <= 2) return 'warning';
+    return 'failed';
   }
 
-  private generateComplianceRecommendations(auditReport: any): string[] {
+  private generateAuditRecommendations(auditReport: any): string[] {
     const recommendations: string[] = [];
     
-    if (auditReport.complianceViolations > 0) {
-      recommendations.push(`Address ${auditReport.complianceViolations} compliance violations`);
+    if (auditReport.issuesFound > 0) {
+      recommendations.push(`Address ${auditReport.issuesFound} identified issues`);
       recommendations.push('Review audit trail retention policies');
     }
 
-    return recommendations.length > 0 ? recommendations : ['Audit compliance maintained successfully'];
+    return recommendations.length > 0 ? recommendations : ['Audit requirements met successfully'];
   }
 
   private async performAnomalyDetection(_scope: string, _context: TaskContext): Promise<PerformanceAlert[]> {
@@ -556,8 +556,8 @@ export class MonitoringAgent extends BaseAgent {
     if (Math.random() > 0.7) {
       anomalies.push({
         severity: 'warning',
-        component: 'payment_processor',
-        message: 'Unusual payment processing latency detected',
+        component: 'data_processor',
+        message: 'Unusual data processing latency detected',
         timestamp: new Date().toISOString()
       });
     }

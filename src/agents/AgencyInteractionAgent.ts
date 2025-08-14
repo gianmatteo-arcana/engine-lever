@@ -1,13 +1,13 @@
 /**
- * Agency Interaction Agent
+ * External Portal Agent
  * Migrated from EventEmitter to Consolidated BaseAgent Pattern
  * 
- * AGENT MISSION: Navigate government portals and submit compliance forms accurately.
- * Monitor submission status, handle agency responses, and retrieve confirmation documents.
+ * AGENT MISSION: Navigate external portals and submit forms accurately.
+ * Monitor submission status, handle portal responses, and retrieve confirmation documents.
  * 
- * This agent is GENERAL PURPOSE - it provides government portal interaction capabilities
- * while working with Task Templates for specific form submission workflows. The agent handles
- * the technical aspects of portal navigation and form submission across multiple agencies.
+ * This agent is GENERAL PURPOSE - it provides external portal interaction capabilities
+ * while working with Task Templates for specific submission workflows. The agent handles
+ * the technical aspects of portal navigation and form submission across multiple systems.
  */
 
 import { BaseAgent } from './base/BaseAgent';
@@ -25,7 +25,7 @@ interface SubmissionResult {
   submissionId: string;
   confirmationNumber: string;
   formType: string;
-  agency: string;
+  portalId: string;
   status: 'submitted' | 'processing' | 'completed' | 'rejected' | 'error';
   submissionDate: string;
   estimatedCompletion?: string;
@@ -33,30 +33,7 @@ interface SubmissionResult {
 }
 
 interface FormData {
-  entityName: string;
-  entityNumber?: string;
-  entityType: string;
-  address: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-  };
-  officers?: Array<{
-    name: string;
-    title: string;
-    address?: string;
-  }>;
-  members?: Array<{
-    name: string;
-    percentage: number;
-    address?: string;
-  }>;
-  paymentInfo?: {
-    amount: number;
-    method: string;
-    transactionId?: string;
-  };
+  [key: string]: any; // Generic form data structure - specific fields defined by Task Templates
 }
 
 interface StatusCheckResult {
@@ -80,33 +57,32 @@ interface PortalError {
 
 /**
  * Agency Interaction Agent - Consolidated BaseAgent Implementation
+ * (Renamed but now general-purpose for any external portal interaction)
  */
 export class AgencyInteractionAgent extends BaseAgent {
-  private readonly supportedAgencies = ['ca_sos', 'irs', 'ftb', 'local_licensing'];
-
   constructor(businessId: string, userId?: string) {
     super('agency_interaction_agent.yaml', businessId, userId);
   }
 
   /**
-   * Main processing method - handles all agency interaction operations
+   * Main processing method - handles all portal interaction operations
    */
   async processRequest(request: AgentRequest, context: TaskContext): Promise<AgentResponse> {
-    const requestId = `aia_${Date.now()}`;
+    const requestId = `epa_${Date.now()}`;
     
     try {
-      // Record agency interaction initiation
+      // Record portal interaction initiation
       await this.recordContextEntry(context, {
-        operation: 'agency_interaction_initiated',
+        operation: 'portal_interaction_initiated',
         data: { 
           operationType: request.instruction,
           requestId,
-          targetAgency: request.data?.agency
+          targetPortal: request.data?.portalId
         },
-        reasoning: 'Starting government portal interaction and form submission process'
+        reasoning: 'Starting external portal interaction and form submission process'
       });
 
-      // Route based on instruction - GENERAL AGENCY OPERATIONS
+      // Route based on instruction - GENERAL PORTAL OPERATIONS
       switch (request.instruction) {
         case 'submit_form':
           return await this.submitForm(request, context);
@@ -125,61 +101,53 @@ export class AgencyInteractionAgent extends BaseAgent {
         
         default:
           await this.recordContextEntry(context, {
-            operation: 'unknown_agency_instruction',
+            operation: 'unknown_portal_instruction',
             data: { instruction: request.instruction, requestId },
-            reasoning: 'Received unrecognized instruction for agency interaction'
+            reasoning: 'Received unrecognized instruction for portal interaction'
           });
 
           return {
             status: 'error',
-            data: { error: `Unknown agency interaction instruction: ${request.instruction}` },
-            reasoning: 'Agency interaction agent cannot process unrecognized instruction type'
+            data: { error: `Unknown portal interaction instruction: ${request.instruction}` },
+            reasoning: 'Portal interaction agent cannot process unrecognized instruction type'
           };
       }
 
     } catch (error: any) {
       await this.recordContextEntry(context, {
-        operation: 'agency_interaction_error',
+        operation: 'portal_interaction_error',
         data: { error: error.message, requestId },
-        reasoning: 'Agency interaction failed due to technical error'
+        reasoning: 'Portal interaction failed due to technical error'
       });
 
       return {
         status: 'error',
         data: { error: error.message },
-        reasoning: 'Technical error during agency interaction'
+        reasoning: 'Technical error during portal interaction'
       };
     }
   }
 
   /**
-   * Submit form to government agency portal
+   * Submit form to external portal
    */
   private async submitForm(
     request: AgentRequest, 
     context: TaskContext
   ): Promise<AgentResponse> {
     
-    const { agency, formData, attachments = [] } = request.data || {};
+    const { portalId, formData, attachments = [] } = request.data || {};
     
-    if (!agency || !formData) {
+    if (!portalId || !formData) {
       return {
         status: 'error',
-        data: { error: 'Agency and form data are required for submission' },
-        reasoning: 'Cannot submit form without agency and form data'
-      };
-    }
-
-    if (!this.supportedAgencies.includes(agency)) {
-      return {
-        status: 'error',
-        data: { error: `Unsupported agency: ${agency}. Supported agencies: ${this.supportedAgencies.join(', ')}` },
-        reasoning: 'Specified agency is not supported by this agent'
+        data: { error: 'Portal ID and form data are required for submission' },
+        reasoning: 'Cannot submit form without portal ID and form data'
       };
     }
 
     // Validate form data before submission
-    const validationResult = this.validateFormForAgency(formData, agency);
+    const validationResult = this.validateFormForPortal(formData, portalId);
     if (!validationResult.valid) {
       return {
         status: 'error',
@@ -187,79 +155,79 @@ export class AgencyInteractionAgent extends BaseAgent {
           error: 'Form validation failed',
           validationErrors: validationResult.errors 
         },
-        reasoning: 'Form data does not meet agency requirements'
+        reasoning: 'Form data does not meet portal requirements'
       };
     }
 
     // Perform form submission
-    const submissionResult = await this.performFormSubmission(agency, formData, attachments);
+    const submissionResult = await this.performFormSubmission(portalId, formData, attachments);
     
     await this.recordContextEntry(context, {
       operation: 'form_submitted',
       data: { 
-        agency,
+        portalId,
         submissionResult,
-        formType: this.getFormType(agency),
+        formType: request.data?.formType || 'standard',
         attachmentCount: attachments.length
       },
-      reasoning: `Form successfully submitted to ${agency}. Confirmation: ${submissionResult.confirmationNumber}`
+      reasoning: `Form successfully submitted to ${portalId}. Confirmation: ${submissionResult.confirmationNumber}`
     });
 
     // Generate submission confirmation UI
-    const uiRequest = this.createSubmissionConfirmationUI(submissionResult, agency);
+    const uiRequest = this.createSubmissionConfirmationUI(submissionResult, portalId);
 
     return {
       status: submissionResult.status === 'error' ? 'error' : 'needs_input',
       data: { 
         submissionResult,
-        agency,
+        portalId,
         trackingInfo: {
           submissionId: submissionResult.submissionId,
           confirmationNumber: submissionResult.confirmationNumber,
-          expectedProcessingTime: this.getProcessingTime(agency)
+          expectedProcessingTime: this.getProcessingTime(portalId)
         }
       },
       uiRequests: [uiRequest],
-      reasoning: `Form submitted to ${agency} with confirmation ${submissionResult.confirmationNumber}. Status: ${submissionResult.status}`,
+      reasoning: `Form submitted to ${portalId} with confirmation ${submissionResult.confirmationNumber}. Status: ${submissionResult.status}`,
       nextAgent: submissionResult.status === 'submitted' ? 'monitoring' : 'communication'
     };
   }
 
   /**
-   * Check submission status with government agency
+   * Check submission status with external portal
    */
   private async checkSubmissionStatus(
     request: AgentRequest, 
     context: TaskContext
   ): Promise<AgentResponse> {
     
-    const { confirmationNumber, agency } = request.data || {};
+    const { confirmationNumber, portalId } = request.data || {};
     
-    if (!confirmationNumber || !agency) {
+    if (!confirmationNumber || !portalId) {
       return {
         status: 'error',
-        data: { error: 'Confirmation number and agency are required for status check' },
-        reasoning: 'Cannot check status without confirmation number and agency'
+        data: { error: 'Confirmation number and portal ID are required for status check' },
+        reasoning: 'Cannot check status without confirmation number and portal ID'
       };
     }
 
     // Check submission status
-    const statusResult = await this.performStatusCheck(confirmationNumber, agency);
+    const statusResult = await this.performStatusCheck(confirmationNumber, portalId);
     
     await this.recordContextEntry(context, {
       operation: 'status_checked',
       data: { 
         confirmationNumber,
-        agency,
+        portalId,
         statusResult,
         currentStatus: statusResult.currentStatus
       },
-      reasoning: `Status check completed for ${agency} submission ${confirmationNumber}. Status: ${statusResult.currentStatus}`
+      reasoning: `Status check completed for ${portalId} submission ${confirmationNumber}. Status: ${statusResult.currentStatus}`
     });
 
     // Generate status update UI if processing is incomplete
     const needsFollowUp = !['completed', 'rejected'].includes(statusResult.currentStatus);
-    const uiRequest = needsFollowUp ? this.createStatusTrackingUI(statusResult, agency) : undefined;
+    const uiRequest = needsFollowUp ? this.createStatusTrackingUI(statusResult, portalId) : undefined;
 
     return {
       status: statusResult.currentStatus === 'completed' ? 'completed' : 'needs_input',
@@ -278,27 +246,27 @@ export class AgencyInteractionAgent extends BaseAgent {
   }
 
   /**
-   * Retrieve documents from government agency
+   * Retrieve documents from external portal
    */
   private async retrieveDocuments(
     request: AgentRequest, 
     context: TaskContext
   ): Promise<AgentResponse> {
     
-    const { confirmationNumber, agency, documentTypes } = request.data || {};
+    const { confirmationNumber, portalId, documentTypes } = request.data || {};
     
     // Retrieve available documents
-    const retrievalResult = await this.performDocumentRetrieval(confirmationNumber, agency, documentTypes);
+    const retrievalResult = await this.performDocumentRetrieval(confirmationNumber, portalId, documentTypes);
     
     await this.recordContextEntry(context, {
       operation: 'documents_retrieved',
       data: { 
         confirmationNumber,
-        agency,
+        portalId,
         retrievedDocuments: retrievalResult.documents,
         documentCount: retrievalResult.documents.length
       },
-      reasoning: `Retrieved ${retrievalResult.documents.length} documents from ${agency} for submission ${confirmationNumber}`
+      reasoning: `Retrieved ${retrievalResult.documents.length} documents from ${portalId} for submission ${confirmationNumber}`
     });
 
     return {
@@ -311,7 +279,7 @@ export class AgencyInteractionAgent extends BaseAgent {
           downloadUrls: retrievalResult.documents.map((doc: any) => doc.downloadUrl)
         }
       },
-      reasoning: `Successfully retrieved ${retrievalResult.documents.length} documents from ${agency}`
+      reasoning: `Successfully retrieved ${retrievalResult.documents.length} documents from ${portalId}`
     };
   }
 
@@ -350,7 +318,7 @@ export class AgencyInteractionAgent extends BaseAgent {
       },
       uiRequests: [uiRequest],
       reasoning: `Portal error analysis completed. ${portalError.retryable ? 'Recovery possible' : 'Manual intervention required'}`,
-      nextAgent: portalError.userActionRequired ? 'communication' : 'agency_interaction'
+      nextAgent: portalError.userActionRequired ? 'communication' : 'external_portal'
     };
   }
 
@@ -362,18 +330,18 @@ export class AgencyInteractionAgent extends BaseAgent {
     context: TaskContext
   ): Promise<AgentResponse> {
     
-    const { formData, agency } = request.data || {};
+    const { formData, portalId } = request.data || {};
     
-    const validationResult = this.validateFormForAgency(formData, agency);
+    const validationResult = this.validateFormForPortal(formData, portalId);
     
     await this.recordContextEntry(context, {
       operation: 'form_validated',
       data: { 
-        agency,
+        portalId,
         validationPassed: validationResult.valid,
         errorCount: validationResult.errors.length
       },
-      reasoning: `Form validation ${validationResult.valid ? 'passed' : 'failed'} for ${agency}`
+      reasoning: `Form validation ${validationResult.valid ? 'passed' : 'failed'} for ${portalId}`
     });
 
     return {
@@ -387,45 +355,17 @@ export class AgencyInteractionAgent extends BaseAgent {
     };
   }
 
-  // Helper methods for agency interactions
-  private validateFormForAgency(formData: FormData, agency: string): { valid: boolean; errors: string[] } {
+  // Helper methods for portal interactions
+  private validateFormForPortal(formData: FormData, _portalId: string): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
-    // Universal validation
-    if (!formData.entityName) {
-      errors.push('Entity name is required');
+    // Generic validation - Task Templates define specific requirements
+    if (!formData || Object.keys(formData).length === 0) {
+      errors.push('Form data is empty');
     }
 
-    if (!formData.address || !formData.address.street || !formData.address.city) {
-      errors.push('Complete address is required');
-    }
-
-    // Agency-specific validation
-    switch (agency) {
-      case 'ca_sos':
-        if (!formData.entityNumber || !/^\d{12}$/.test(formData.entityNumber)) {
-          errors.push('CA SOS requires 12-digit entity number');
-        }
-        if (formData.entityType === 'LLC' && (!formData.members || formData.members.length === 0)) {
-          errors.push('LLC requires at least one member');
-        }
-        if (formData.entityType === 'Corporation' && (!formData.officers || formData.officers.length === 0)) {
-          errors.push('Corporation requires at least one officer');
-        }
-        break;
-
-      case 'irs':
-        if (!formData.entityNumber || !/^\d{2}-\d{7}$/.test(formData.entityNumber)) {
-          errors.push('IRS requires valid EIN format (XX-XXXXXXX)');
-        }
-        break;
-
-      case 'ftb':
-        if (!formData.entityNumber) {
-          errors.push('FTB requires entity identification number');
-        }
-        break;
-    }
+    // Portal-specific validation is defined by Task Templates
+    // This agent doesn't know about specific portals or their requirements
 
     return {
       valid: errors.length === 0,
@@ -433,20 +373,20 @@ export class AgencyInteractionAgent extends BaseAgent {
     };
   }
 
-  private async performFormSubmission(agency: string, _formData: FormData, _attachments: any[]): Promise<SubmissionResult> {
+  private async performFormSubmission(portalId: string, _formData: FormData, _attachments: any[]): Promise<SubmissionResult> {
     // Mock form submission implementation
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
     
     const success = Math.random() > 0.1; // 90% success rate
-    const submissionId = `SUB_${agency.toUpperCase()}_${Date.now()}`;
-    const confirmationNumber = this.generateConfirmationNumber(agency);
+    const submissionId = `SUB_${portalId.toUpperCase()}_${Date.now()}`;
+    const confirmationNumber = this.generateConfirmationNumber(portalId);
 
     if (!success) {
       return {
         submissionId,
         confirmationNumber: '',
-        formType: this.getFormType(agency),
-        agency: agency.toUpperCase(),
+        formType: 'standard',
+        portalId: portalId.toUpperCase(),
         status: 'error',
         submissionDate: new Date().toISOString()
       };
@@ -455,25 +395,25 @@ export class AgencyInteractionAgent extends BaseAgent {
     return {
       submissionId,
       confirmationNumber,
-      formType: this.getFormType(agency),
-      agency: agency.toUpperCase(),
+      formType: 'standard',
+      portalId: portalId.toUpperCase(),
       status: 'submitted',
       submissionDate: new Date().toISOString(),
-      estimatedCompletion: new Date(Date.now() + this.getProcessingTimeMs(agency)).toISOString(),
-      receiptUrl: `https://${agency}.gov/receipt/${confirmationNumber}`
+      estimatedCompletion: new Date(Date.now() + this.getProcessingTimeMs(portalId)).toISOString(),
+      receiptUrl: `https://portal.example.com/receipt/${confirmationNumber}`
     };
   }
 
-  private async performStatusCheck(confirmationNumber: string, agency: string): Promise<StatusCheckResult> {
+  private async performStatusCheck(confirmationNumber: string, portalId: string): Promise<StatusCheckResult> {
     // Mock status check implementation
     await new Promise(resolve => setTimeout(resolve, 500));
 
     const statuses = ['submitted', 'processing', 'under_review', 'completed'];
     const currentStatus = statuses[Math.floor(Math.random() * statuses.length)];
-    const documentsReady = currentStatus === 'completed' ? ['confirmation_letter.pdf', 'filing_receipt.pdf'] : [];
+    const documentsReady = currentStatus === 'completed' ? ['confirmation_letter.pdf', 'receipt.pdf'] : [];
 
     return {
-      submissionId: `SUB_${agency.toUpperCase()}_${Date.now()}`,
+      submissionId: `SUB_${portalId.toUpperCase()}_${Date.now()}`,
       currentStatus,
       statusDate: new Date().toISOString(),
       processingStage: this.getProcessingStage(currentStatus),
@@ -484,26 +424,26 @@ export class AgencyInteractionAgent extends BaseAgent {
     };
   }
 
-  private async performDocumentRetrieval(confirmationNumber: string, agency: string, _documentTypes?: string[]): Promise<any> {
+  private async performDocumentRetrieval(confirmationNumber: string, portalId: string, _documentTypes?: string[]): Promise<any> {
     // Mock document retrieval implementation
     await new Promise(resolve => setTimeout(resolve, 800));
 
     return {
       confirmationNumber,
-      agency,
+      portalId,
       documents: [
         {
           type: 'confirmation_letter',
           filename: 'confirmation_letter.pdf',
           size: '145KB',
-          downloadUrl: `https://${agency}.gov/documents/${confirmationNumber}_confirmation.pdf`,
+          downloadUrl: `https://portal.example.com/documents/${confirmationNumber}_confirmation.pdf`,
           generatedAt: new Date().toISOString()
         },
         {
-          type: 'filing_receipt',
-          filename: 'filing_receipt.pdf',
+          type: 'receipt',
+          filename: 'receipt.pdf',
           size: '89KB',
-          downloadUrl: `https://${agency}.gov/documents/${confirmationNumber}_receipt.pdf`,
+          downloadUrl: `https://portal.example.com/documents/${confirmationNumber}_receipt.pdf`,
           generatedAt: new Date().toISOString()
         }
       ],
@@ -585,45 +525,28 @@ export class AgencyInteractionAgent extends BaseAgent {
     }
   }
 
-  private generateConfirmationNumber(agency: string): string {
+  private generateConfirmationNumber(portalId: string): string {
     const timestamp = Date.now().toString().slice(-6);
     const random = Math.random().toString(36).substr(2, 4).toUpperCase();
-    return `${agency.toUpperCase()}-${timestamp}-${random}`;
+    return `${portalId.toUpperCase()}-${timestamp}-${random}`;
   }
 
-  private getFormType(agency: string): string {
-    switch (agency) {
-      case 'ca_sos': return 'SI-550';
-      case 'irs': return '1120';
-      case 'ftb': return '100';
-      default: return 'FORM';
-    }
+  private getProcessingTime(_portalId: string): string {
+    // Generic processing times - specific times defined by Task Templates
+    return '1-5 business days';
   }
 
-  private getProcessingTime(agency: string): string {
-    switch (agency) {
-      case 'ca_sos': return '1-3 business days';
-      case 'irs': return '4-6 weeks';
-      case 'ftb': return '2-4 weeks';
-      default: return '1-2 weeks';
-    }
-  }
-
-  private getProcessingTimeMs(agency: string): number {
-    switch (agency) {
-      case 'ca_sos': return 3 * 24 * 60 * 60 * 1000; // 3 days
-      case 'irs': return 42 * 24 * 60 * 60 * 1000; // 6 weeks
-      case 'ftb': return 28 * 24 * 60 * 60 * 1000; // 4 weeks
-      default: return 14 * 24 * 60 * 60 * 1000; // 2 weeks
-    }
+  private getProcessingTimeMs(_portalId: string): number {
+    // Generic processing time in milliseconds
+    return 5 * 24 * 60 * 60 * 1000; // 5 days
   }
 
   private getProcessingStage(status: string): string {
     switch (status) {
       case 'submitted': return 'Initial Review';
       case 'processing': return 'Document Processing';
-      case 'under_review': return 'Legal Review';
-      case 'completed': return 'Filing Complete';
+      case 'under_review': return 'Review';
+      case 'completed': return 'Complete';
       default: return 'Processing';
     }
   }
@@ -632,60 +555,38 @@ export class AgencyInteractionAgent extends BaseAgent {
     const issues: string[] = [];
     let score = 100;
 
-    // Check completeness
-    if (!formData.entityNumber) {
-      issues.push('Missing entity number');
-      score -= 20;
-    }
-
-    if (!formData.address?.zipCode) {
-      issues.push('Missing zip code');
-      score -= 10;
-    }
-
-    if (formData.entityType === 'LLC' && (!formData.members || formData.members.length === 0)) {
-      issues.push('LLC missing member information');
-      score -= 15;
+    // Generic quality assessment - specific requirements from Task Templates
+    if (!formData || Object.keys(formData).length === 0) {
+      issues.push('Form data is empty');
+      score = 0;
     }
 
     return { score: Math.max(0, score), issues };
   }
 
   private generateValidationRecommendations(errors: string[]): string[] {
-    return errors.map(error => {
-      if (error.includes('entity number')) {
-        return 'Verify entity number from official records';
-      }
-      if (error.includes('address')) {
-        return 'Provide complete business address';
-      }
-      if (error.includes('member')) {
-        return 'Add required member information';
-      }
-      if (error.includes('officer')) {
-        return 'Add required officer information';
-      }
+    return errors.map(_error => {
       return 'Review and correct form data';
     });
   }
 
   // UI Creation methods
-  private createSubmissionConfirmationUI(result: SubmissionResult, agency: string): UIRequest {
+  private createSubmissionConfirmationUI(result: SubmissionResult, portalId: string): UIRequest {
     return {
       requestId: `submission_confirmation_${Date.now()}`,
       templateType: UITemplateType.SuccessScreen,
       semanticData: {
-        agentRole: 'agency_interaction_agent',
+        agentRole: 'external_portal_agent',
         title: 'Form Submitted Successfully',
-        description: `Your ${result.formType} form has been submitted to ${agency.toUpperCase()}`,
+        description: `Your form has been submitted to ${portalId.toUpperCase()}`,
         submissionResult: result,
         confirmationNumber: result.confirmationNumber,
-        estimatedProcessing: this.getProcessingTime(agency),
+        estimatedProcessing: this.getProcessingTime(portalId),
         actions: {
           track_status: {
             type: 'custom',
             label: 'Track Status',
-            handler: () => ({ action: 'check_submission_status', confirmationNumber: result.confirmationNumber, agency })
+            handler: () => ({ action: 'check_submission_status', confirmationNumber: result.confirmationNumber, portalId })
           },
           download_receipt: result.receiptUrl ? {
             type: 'custom',
@@ -708,13 +609,13 @@ export class AgencyInteractionAgent extends BaseAgent {
     } as any;
   }
 
-  private createStatusTrackingUI(status: StatusCheckResult, agency: string): UIRequest {
+  private createStatusTrackingUI(status: StatusCheckResult, portalId: string): UIRequest {
     return {
       requestId: `status_tracking_${Date.now()}`,
       templateType: UITemplateType.ProgressIndicator,
       semanticData: {
-        agentRole: 'agency_interaction_agent',
-        title: `Submission Status - ${agency.toUpperCase()}`,
+        agentRole: 'external_portal_agent',
+        title: `Submission Status - ${portalId.toUpperCase()}`,
         description: `Current status: ${status.currentStatus} - ${status.processingStage}`,
         statusResult: status,
         currentStage: status.processingStage,
@@ -745,7 +646,7 @@ export class AgencyInteractionAgent extends BaseAgent {
       requestId: `error_resolution_${Date.now()}`,
       templateType: UITemplateType.ErrorDisplay,
       semanticData: {
-        agentRole: 'agency_interaction_agent',
+        agentRole: 'external_portal_agent',
         title: 'Submission Error',
         description: error.message,
         portalError: error,
@@ -798,15 +699,15 @@ export class AgencyInteractionAgent extends BaseAgent {
       sequenceNumber: (context.history?.length || 0) + 1,
       actor: {
         type: 'agent',
-        id: 'agency_interaction_agent',
+        id: 'external_portal_agent',
         version: (this as any).specializedTemplate?.agent?.version || '1.0.0'
       },
       operation: entry.operation || 'unknown',
       data: entry.data || {},
-      reasoning: entry.reasoning || 'Agency interaction operation',
+      reasoning: entry.reasoning || 'Portal interaction operation',
       trigger: entry.trigger || {
         type: 'agent_request',
-        source: 'agency_interaction',
+        source: 'external_portal',
         details: {}
       }
     };

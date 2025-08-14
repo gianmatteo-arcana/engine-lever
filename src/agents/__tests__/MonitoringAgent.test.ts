@@ -263,7 +263,7 @@ describe('MonitoringAgent', () => {
 
       expect(response.status).toBe('completed');
       expect(response.data.auditReport).toBeDefined();
-      expect(response.data.complianceStatus).toMatch(/compliant|warning|violation/);
+      expect(response.data.auditStatus).toMatch(/passed|warning|failed/);
       expect(response.data.recommendations).toBeDefined();
       expect(response.data.reportMetadata).toBeDefined();
       expect(response.data.reportMetadata.scope).toBe('compliance_filing');
