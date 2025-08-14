@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
 import { AgentRole, AgentMessage, TaskContext, TaskPriority, convertPriority } from './base/types';
-import { BaseAgent } from './base/BaseAgent';
+import { BaseAgent } from './base';
 import { OrchestratorAgent } from './OrchestratorAgent';
 import { LegalComplianceAgent } from './legal-compliance';
 import { DataCollectionAgent } from './data-collection';

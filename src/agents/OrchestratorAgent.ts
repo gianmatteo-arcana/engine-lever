@@ -18,7 +18,7 @@
  * - BaseOrchestrator: Core message handling
  */
 
-import { BaseAgent } from './base/BaseAgent';
+import { BaseAgent } from './base';
 import { AgentRole } from './base/types';
 import { LLMProvider } from '../services/llm-provider-interface';
 import { ConfigurationManager } from '../services/configuration-manager';
