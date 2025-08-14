@@ -1,14 +1,14 @@
-# Profile Collector Agent Configuration
+# Form Optimizer Agent Configuration
 agent:
-  id: "profile_collector"
-  name: "Profile Collector Agent"
+  id: "form_optimizer_agent"
+  name: "Form Optimizer Agent"
   version: "1.0.0"
-  role: "profile_collector"
+  role: "form_optimization_specialist"
   mission: |
-    You are a Profile Collector Agent specialized in gathering
-    user and business profile information.
+    You are a Form Optimizer Agent specialized in improving form
+    usability and user experience.
   agent_card:
-    skills: ["profile collection", "data gathering"]
+    skills: ["form optimization", "user experience improvement"]
 schemas:
   output:
     type: "object"
