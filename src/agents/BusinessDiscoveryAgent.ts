@@ -1,9 +1,20 @@
 /**
- * Business Discovery Agent
- * EXACTLY matches PRD lines 356-437
+ * Entity Discovery Agent
  * 
- * Specialized agent that finds business information in public records
- * Uses intelligent search strategies to minimize user input
+ * AGENT MISSION: Discover and identify entities from available data sources
+ * using pattern matching, data correlation, and confidence scoring.
+ * 
+ * This agent is GENERAL PURPOSE - it discovers entities from any type of
+ * data source. Task Templates define which specific sources to search and
+ * what patterns to look for. The agent handles the technical aspects of
+ * searching, matching, and confidence calculation.
+ * 
+ * EXPERTISE:
+ * - Pattern matching and entity recognition
+ * - Multi-source data correlation
+ * - Confidence scoring algorithms
+ * - Search optimization strategies
+ * - Name variation generation
  */
 
 import { BaseAgent } from './base/BaseAgent';
@@ -15,369 +26,410 @@ import {
   UIRequest 
 } from '../types/engine-types';
 import { DatabaseService } from '../services/database';
-// import { FluidUIActions } from '../types/compatibility-layer';
 
-interface BusinessSearchResult {
+interface EntitySearchResult {
   found: boolean;
   confidence: number; // 0-1
-  businessData?: {
+  entityData?: {
+    identifier: string;
     name: string;
-    entityType: string;
-    state: string;
-    ein?: string;
-    formationDate?: string;
-    status: string;
-  };
-  searchDetails: {
-    statesSearched: string[];
-    queriesAttempted: string[];
+    type: string;
+    attributes: Record<string, any>;
     source: string;
+    lastVerified?: string;
+  };
+  searchMetrics: {
+    sourcesQueried: string[];
+    patternsAttempted: number;
+    timeElapsed: number;
+    matchQuality: string; // 'exact' | 'fuzzy' | 'partial'
   };
 }
 
-interface SearchClues {
-  email: string;
-  name?: string;
-  location?: string;
-  extractedDomain?: string;
+interface SearchPatterns {
+  primaryIdentifier?: string;
+  alternateIdentifiers: string[];
+  attributes: Record<string, any>;
+  correlationHints?: Record<string, any>;
 }
 
 /**
- * Business Discovery - Finds business information in public records
+ * Entity Discovery Agent - Consolidated BaseAgent Implementation
+ * Specializes in finding and identifying entities from various data sources
  */
 export class BusinessDiscoveryAgent extends BaseAgent {
   constructor(businessId: string, userId?: string) {
-    super('business_discovery_agent.yaml', businessId, userId);
+    super('entity_discovery_agent.yaml', businessId, userId);
   }
 
   /**
-   * Main processing method - finds business in public records
+   * Main processing method - discovers entities from data sources
    */
   async processRequest(request: AgentRequest, context: TaskContext): Promise<AgentResponse> {
-    const requestId = `bda_${Date.now()}`;
+    const requestId = `eda_${Date.now()}`;
     
     try {
-      // Extract search clues from context
-      const clues = this.extractSearchClues(context);
+      // Extract search patterns from context and request
+      const searchPatterns = this.extractSearchPatterns(context, request);
       
-      // Record search initiation
+      // Record discovery initiation
       await this.recordContextEntry(context, {
-        operation: 'business_search_initiated',
-        data: { clues, requestId },
-        reasoning: 'Starting business discovery using available clues from user profile and context'
+        operation: 'entity_discovery_initiated',
+        data: { 
+          patterns: searchPatterns, 
+          requestId,
+          dataSources: request.data?.dataSources || context.metadata?.dataSources || ['default']
+        },
+        reasoning: 'Starting entity discovery using available patterns and configured data sources'
       });
 
-      // Perform intelligent search
-      const searchResult = await this.searchBusinessRecords(clues, context);
+      // Perform entity discovery across data sources
+      const searchResult = await this.discoverEntity(searchPatterns, request, context);
 
-      if (searchResult.found && searchResult.businessData) {
-        // Success! Found business
+      if (searchResult.found && searchResult.entityData) {
+        // Entity discovered successfully
         await this.recordContextEntry(context, {
-          operation: 'business_found',
+          operation: 'entity_discovered',
           data: { 
-            business: searchResult.businessData,
+            entity: searchResult.entityData,
             confidence: searchResult.confidence,
-            searchDetails: searchResult.searchDetails
+            metrics: searchResult.searchMetrics
           },
-          reasoning: `Business found with ${(searchResult.confidence * 100).toFixed(0)}% confidence in ${searchResult.businessData.state} records`
+          reasoning: `Entity discovered with ${(searchResult.confidence * 100).toFixed(0)}% confidence from ${searchResult.entityData.source}`
         });
 
-        // Generate FoundYouCard UI request
+        // Generate confirmation UI if needed
+        const uiRequests = request.data?.requireConfirmation !== false 
+          ? [this.createConfirmationUI(searchResult.entityData, searchResult.confidence)]
+          : [];
+
         return {
           status: 'needs_input',
-          data: searchResult.businessData,
-          uiRequests: [this.createFoundCard(searchResult.businessData, searchResult.confidence)],
-          reasoning: 'Found business in public records, requesting user confirmation',
-          nextAgent: 'profile_collector'
+          data: {
+            entityFound: true,
+            entity: searchResult.entityData,
+            confidence: searchResult.confidence,
+            searchMetrics: searchResult.searchMetrics
+          },
+          uiRequests,
+          reasoning: `Entity discovered with ${searchResult.searchMetrics.matchQuality} match quality`,
+          nextAgent: request.data?.nextAgent || 'profile_collector'
         };
 
       } else {
-        // Not found - record what we tried
+        // Entity not found
         await this.recordContextEntry(context, {
-          operation: 'business_not_found',
+          operation: 'entity_not_found',
           data: { 
-            searchDetails: searchResult.searchDetails,
-            clues: clues 
+            searchMetrics: searchResult.searchMetrics,
+            patterns: searchPatterns 
           },
-          reasoning: `Business not found after searching ${searchResult.searchDetails.statesSearched.length} states with ${searchResult.searchDetails.queriesAttempted.length} queries`
+          reasoning: `Entity not found after querying ${searchResult.searchMetrics.sourcesQueried.length} sources with ${searchResult.searchMetrics.patternsAttempted} pattern variations`
         });
 
-        // Hand off to Profile Collection Agent to ask user
         return {
           status: 'needs_input',
           data: { 
-            businessFound: false,
-            searchAttempted: true
+            entityFound: false,
+            searchAttempted: true,
+            searchMetrics: searchResult.searchMetrics
           },
-          reasoning: 'Business not found in public records, need user to provide business information',
-          nextAgent: 'profile_collector'
+          reasoning: 'Entity not found in available data sources, additional information needed',
+          nextAgent: request.data?.nextAgent || 'profile_collector'
         };
       }
 
     } catch (error: any) {
       await this.recordContextEntry(context, {
-        operation: 'business_search_error',
+        operation: 'entity_discovery_error',
         data: { error: error.message, requestId },
-        reasoning: 'Business search failed due to technical error'
+        reasoning: 'Entity discovery failed due to technical error'
       });
 
       return {
         status: 'error',
         data: { error: error.message },
-        reasoning: 'Technical error during business search, fallback to manual collection'
+        reasoning: 'Technical error during entity discovery'
       };
     }
   }
 
   /**
-   * Extract search clues from task context
+   * Extract search patterns from context and request
+   * Generic pattern extraction - Task Templates define specific patterns
    */
-  private extractSearchClues(context: TaskContext): SearchClues {
+  private extractSearchPatterns(context: TaskContext, request: AgentRequest): SearchPatterns {
     const userData = context.currentState.data.user || {};
-    const clues: SearchClues = {
-      email: userData.email || '',
-      name: userData.name || `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
-      location: userData.location || context.currentState.data.location
+    const entityData = context.currentState.data.entity || {};
+    
+    // Build search patterns from available data
+    const patterns: SearchPatterns = {
+      primaryIdentifier: request.data?.primaryIdentifier || entityData.identifier,
+      alternateIdentifiers: [],
+      attributes: {}
     };
 
-    // Extract domain from email
-    if (clues.email) {
-      const domain = clues.email.split('@')[1];
-      if (domain && !this.isPersonalEmailDomain(domain)) {
-        clues.extractedDomain = domain;
+    // Extract identifiers from various sources
+    if (userData.email) {
+      const domain = userData.email.split('@')[1];
+      if (domain && !this.isGenericDomain(domain)) {
+        patterns.alternateIdentifiers.push(domain);
+        patterns.attributes.emailDomain = domain;
       }
     }
 
-    return clues;
+    // Add name-based patterns if available
+    if (userData.name || entityData.name) {
+      const name = userData.name || entityData.name;
+      patterns.attributes.name = name;
+      patterns.alternateIdentifiers.push(...this.generateNameVariations(name));
+    }
+
+    // Add any additional attributes from context
+    if (request.data?.searchAttributes) {
+      Object.assign(patterns.attributes, request.data.searchAttributes);
+    }
+
+    // Add correlation hints from Task Template
+    if (context.metadata?.correlationHints) {
+      patterns.correlationHints = context.metadata.correlationHints;
+    }
+
+    return patterns;
   }
 
   /**
-   * Intelligent business search using PRD-specified strategies
+   * Discover entity from configured data sources
+   * Task Templates specify which sources and search strategies to use
    */
-  private async searchBusinessRecords(clues: SearchClues, context: TaskContext): Promise<BusinessSearchResult> {
-    const result: BusinessSearchResult = {
+  private async discoverEntity(
+    patterns: SearchPatterns, 
+    request: AgentRequest,
+    context: TaskContext
+  ): Promise<EntitySearchResult> {
+    const startTime = Date.now();
+    const result: EntitySearchResult = {
       found: false,
       confidence: 0,
-      searchDetails: {
-        statesSearched: [],
-        queriesAttempted: [],
-        source: ''
+      searchMetrics: {
+        sourcesQueried: [],
+        patternsAttempted: 0,
+        timeElapsed: 0,
+        matchQuality: 'partial'
       }
     };
 
-    // Generate business name variations
-    const nameVariations = this.getNameVariations(clues);
-    
-    // Determine search priority order (PRD strategy)
-    const searchStates = this.prioritizeSearchStates(clues, context);
+    // Get data sources from request or context
+    const dataSources = request.data?.dataSources || 
+                       context.metadata?.dataSources || 
+                       ['public_records'];
 
-    // Search each state in priority order
-    for (const state of searchStates) {
+    // Generate search variations
+    const searchVariations = this.generateSearchVariations(patterns);
+    result.searchMetrics.patternsAttempted = searchVariations.length;
+
+    // Search each data source
+    for (const source of dataSources) {
       try {
-        result.searchDetails.statesSearched.push(state);
+        result.searchMetrics.sourcesQueried.push(source);
         
-        for (const businessName of nameVariations) {
-          result.searchDetails.queriesAttempted.push(`${businessName} (${state})`);
-          
-          const searchResponse = await this.searchStateRecords(state, businessName);
+        // Search with each variation
+        for (const variation of searchVariations) {
+          const searchResponse = await this.searchDataSource(source, variation, context);
           
           if (searchResponse.found) {
             result.found = true;
-            result.businessData = searchResponse.businessData;
+            result.entityData = searchResponse.entityData;
             result.confidence = searchResponse.confidence;
-            result.searchDetails.source = `${state}_sos`;
+            result.searchMetrics.matchQuality = searchResponse.matchQuality || 'fuzzy';
+            result.searchMetrics.timeElapsed = Date.now() - startTime;
             return result;
           }
         }
 
-        // Stop after 3 states (PRD constraint)
-        if (result.searchDetails.statesSearched.length >= 3) {
+        // Respect search limits from Task Template
+        const maxSources = context.metadata?.maxDataSources || 3;
+        if (result.searchMetrics.sourcesQueried.length >= maxSources) {
           break;
         }
 
       } catch (error: any) {
-        // Log search error but continue with next state
+        // Log search error but continue with next source
         await this.recordContextEntry(context, {
-          operation: 'state_search_error',
-          data: { state, error: error.message },
-          reasoning: `Error searching ${state} records, continuing with next state`
+          operation: 'source_search_error',
+          data: { source, error: error.message },
+          reasoning: `Error searching ${source}, continuing with next data source`
         });
       }
     }
 
+    result.searchMetrics.timeElapsed = Date.now() - startTime;
     return result;
   }
 
   /**
-   * Generate business name variations for search
+   * Generate search variations based on patterns
+   * Generic variation generation - works with any entity type
    */
-  private getNameVariations(clues: SearchClues): string[] {
+  private generateSearchVariations(patterns: SearchPatterns): any[] {
+    const variations: any[] = [];
+
+    // Primary identifier is highest priority
+    if (patterns.primaryIdentifier) {
+      variations.push({
+        type: 'exact',
+        identifier: patterns.primaryIdentifier,
+        attributes: patterns.attributes
+      });
+    }
+
+    // Add alternate identifier variations
+    patterns.alternateIdentifiers.forEach(altId => {
+      variations.push({
+        type: 'alternate',
+        identifier: altId,
+        attributes: patterns.attributes
+      });
+    });
+
+    // Add attribute-based searches if no identifiers
+    if (variations.length === 0 && Object.keys(patterns.attributes).length > 0) {
+      variations.push({
+        type: 'attributes',
+        identifier: null,
+        attributes: patterns.attributes
+      });
+    }
+
+    // Apply correlation hints if provided
+    if (patterns.correlationHints) {
+      variations.forEach(v => {
+        v.correlationHints = patterns.correlationHints;
+      });
+    }
+
+    // Limit variations to prevent excessive searching
+    return variations.slice(0, 10);
+  }
+
+  /**
+   * Generate name variations for searching
+   * Generic algorithm - works with any naming pattern
+   */
+  private generateNameVariations(name: string): string[] {
+    if (!name) return [];
+    
     const variations: string[] = [];
+    const baseName = name.trim();
+    
+    // Basic variations
+    variations.push(
+      baseName,
+      baseName.toLowerCase(),
+      baseName.toUpperCase(),
+      baseName.replace(/\s+/g, ''), // No spaces
+      baseName.replace(/[^a-zA-Z0-9]/g, '') // Alphanumeric only
+    );
 
-    // If we have a domain, use it as primary source
-    if (clues.extractedDomain) {
-      const baseName = this.getNameFromDomain(clues.extractedDomain);
-      variations.push(
-        baseName,
-        `${baseName} Inc`,
-        `${baseName} LLC`,
-        `${baseName} Corp`,
-        `${baseName} Corporation`,
-        baseName.replace(/\s/g, ''), // No spaces version
-        baseName.toUpperCase()
-      );
+    // If multi-word, try last word (often surname or main identifier)
+    const words = baseName.split(/\s+/);
+    if (words.length > 1) {
+      variations.push(words[words.length - 1]);
+      variations.push(words[0]); // First word
+      variations.push(words.map(w => w[0]).join('')); // Initials
     }
 
-    // If we have user name, try variations
-    if (clues.name) {
-      const lastName = clues.name.split(' ').pop();
-      if (lastName) {
-        variations.push(
-          `${lastName} Consulting`,
-          `${lastName} LLC`,
-          `${lastName} & Associates`,
-          clues.name.replace(/\s/g, '') // Full name no spaces
-        );
-      }
-    }
-
-    // Remove duplicates and limit to reasonable number
+    // Remove duplicates
     return [...new Set(variations)].slice(0, 8);
   }
 
   /**
-   * Prioritize states to search based on clues (PRD strategy)
+   * Search a specific data source
+   * This is where Task Templates can provide source-specific logic
    */
-  private prioritizeSearchStates(clues: SearchClues, context: TaskContext): string[] {
-    const states: string[] = [];
-
-    // Tech company signals → Delaware first
-    if (this.isTechCompanySignal(clues)) {
-      states.push('delaware');
-    }
-
-    // User's state from location
-    if (clues.location) {
-      const userState = this.extractStateFromLocation(clues.location);
-      if (userState && !states.includes(userState)) {
-        states.push(userState);
-      }
-    }
-
-    // Add default state from task template if specified
-    const defaultState = context.metadata?.defaultState;
-    if (defaultState && !states.includes(defaultState)) {
-      states.push(defaultState);
-    }
-
-    // Limit to 3 states maximum (PRD constraint)
-    return states.slice(0, 3);
-  }
-
-  /**
-   * Search specific state records
-   */
-  private async searchStateRecords(state: string, businessName: string): Promise<{
+  private async searchDataSource(
+    source: string, 
+    searchPattern: any,
+    context: TaskContext
+  ): Promise<{
     found: boolean;
     confidence: number;
-    businessData?: any;
+    entityData?: any;
+    matchQuality?: string;
   }> {
-    // Real implementation requires API integration
-    // For now, return not found to force proper UI flow
+    // Task Templates provide source-specific search configuration
+    const sourceConfig = context.metadata?.dataSourceConfigs?.[source] || {};
     
-    // TODO: Integrate with real state APIs:
-    // Task Templates will specify which APIs to use based on jurisdiction
+    // This would integrate with actual data sources via ToolChain
+    // For now, return not found to maintain system flow
+    console.log(`[EntityDiscovery] Searching ${source} with pattern:`, searchPattern.type);
     
-    // Proper implementation would:
-    // 1. Call state-specific API with businessName
-    // 2. Parse response for matching entities
-    // 3. Calculate confidence based on name match accuracy
-    // 4. Return structured business data
+    // Real implementation would:
+    // 1. Use ToolChain to access the data source
+    // 2. Apply search pattern with source-specific logic
+    // 3. Calculate confidence based on match quality
+    // 4. Return structured entity data
     
-    console.log(`[BusinessDiscovery] Would search ${state} records for: ${businessName}`);
-    
-    // Return not found to force user input flow
     return { 
       found: false, 
-      confidence: 0,
-      businessData: undefined
+      confidence: 0
     };
   }
 
   /**
-   * Generate FoundYouCard UI request
+   * Create confirmation UI for discovered entity
+   * Generic UI that works with any entity type
    */
-  private createFoundCard(businessData: any, confidence: number): UIRequest {
+  private createConfirmationUI(entityData: any, confidence: number): UIRequest {
     return {
-      requestId: `found_you_${Date.now()}`,
-      templateType: 'found_you_card' as any,
+      requestId: `entity_confirm_${Date.now()}`,
+      templateType: 'entity_confirmation' as any,
       semanticData: {
-        agentRole: 'business_discovery_agent',
-        businessData,
+        agentRole: 'entity_discovery_agent',
+        title: 'Entity Found',
+        description: `We found an entity matching your information with ${(confidence * 100).toFixed(0)}% confidence`,
+        entityData,
         confidence: {
           score: confidence,
-          source: businessData.state + ' Public Records',
-          lastUpdated: new Date().toISOString()
+          source: entityData.source,
+          lastVerified: entityData.lastVerified || new Date().toISOString()
         },
         actions: {
           confirm: {
             type: 'submit' as const,
-            label: 'Confirm',
+            label: 'Yes, this is correct',
             primary: true,
-            handler: () => ({ action: 'confirm_business', businessData })
+            handler: () => ({ action: 'confirm_entity', entityData })
           },
-          notMe: {
+          reject: {
             type: 'cancel' as const,
-            label: 'Not My Business',
-            handler: () => ({ action: 'reject_business' })
+            label: 'No, this is not correct',
+            handler: () => ({ action: 'reject_entity' })
           },
-          editDetails: {
+          modify: {
             type: 'custom' as const,
             label: 'Edit Details',
-            handler: () => ({ action: 'edit_business_details', businessData })
+            handler: () => ({ action: 'modify_entity', entityData })
           }
         }
       },
       context: {
         userProgress: 25,
-        deviceType: 'mobile',
-        urgency: 'high'
+        deviceType: 'responsive',
+        urgency: 'medium'
       }
     } as any;
   }
 
-  // Helper methods
-  private isPersonalEmailDomain(domain: string): boolean {
-    const personalDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com'];
-    return personalDomains.includes(domain.toLowerCase());
-  }
-
-  private isTechCompanySignal(clues: SearchClues): boolean {
-    if (!clues.extractedDomain) return false;
-    const techTlds = ['.io', '.ai', '.dev', '.tech'];
-    return techTlds.some(tld => clues.extractedDomain!.endsWith(tld));
-  }
-
-  private getNameFromDomain(domain: string): string {
-    // Remove TLD and convert to business name
-    const baseName = domain.split('.')[0];
-    // Convert camelCase/PascalCase to words and capitalize first letter
-    const nameWithSpaces = baseName.replace(/([A-Z])/g, ' $1').trim();
-    return nameWithSpaces.charAt(0).toUpperCase() + nameWithSpaces.slice(1);
-  }
-
-  private extractStateFromLocation(location: string): string | null {
-    // Simple location to state mapping (extend as needed)
-    // Task Templates provide location-to-state mapping for specific jurisdictions
-    const stateMap: Record<string, string> = {};
-    
-    const locationLower = location.toLowerCase();
-    for (const [city, state] of Object.entries(stateMap)) {
-      if (locationLower.includes(city)) {
-        return state;
-      }
-    }
-    return null;
+  /**
+   * Check if domain is generic (not entity-specific)
+   */
+  private isGenericDomain(domain: string): boolean {
+    const genericDomains = [
+      'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 
+      'aol.com', 'icloud.com', 'mail.com', 'protonmail.com'
+    ];
+    return genericDomains.includes(domain.toLowerCase());
   }
 
   /**
@@ -390,15 +442,15 @@ export class BusinessDiscoveryAgent extends BaseAgent {
       sequenceNumber: (context.history?.length || 0) + 1,
       actor: {
         type: 'agent',
-        id: 'business_discovery_agent',
+        id: 'entity_discovery_agent',
         version: (this as any).specializedTemplate?.agent?.version || '1.0.0'
       },
       operation: entry.operation || 'unknown',
       data: entry.data || {},
-      reasoning: entry.reasoning || 'Business discovery action',
+      reasoning: entry.reasoning || 'Entity discovery action',
       trigger: entry.trigger || {
         type: 'agent_request',
-        source: 'business_discovery',
+        source: 'entity_discovery',
         details: {}
       }
     };
@@ -408,7 +460,7 @@ export class BusinessDiscoveryAgent extends BaseAgent {
     }
     context.history.push(contextEntry);
 
-    // Also persist to database if context has an ID
+    // Persist to database if available
     if (context.contextId) {
       try {
         const db = DatabaseService.getInstance();
