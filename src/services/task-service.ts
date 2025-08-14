@@ -19,11 +19,9 @@ import {
 import {
   DatabaseTask,
   CreateTaskRequest as DatabaseCreateTaskRequest,
-  UITask,
   TaskApiResponse,
   TaskListApiResponse,
   TaskCreateApiResponse,
-  databaseTaskToUI,
   validateCreateTaskRequest
 } from '../types/database-aligned-types';
 
@@ -43,9 +41,9 @@ export interface TaskResponse {
 }
 
 /**
- * Universal Database Task Creation Request (new API)
+ * Database Task Creation Request
  */
-export interface UniversalCreateTaskRequest extends DatabaseCreateTaskRequest {
+export interface DatabaseTaskCreateRequest extends DatabaseCreateTaskRequest {
   userToken: string;
 }
 
@@ -486,14 +484,14 @@ export class TaskService {
   }
 
   // ============================================================================
-  // NEW UNIVERSAL DATABASE TASK API (Multi-Repo Sync)
+  // DATABASE TASK API
   // ============================================================================
 
   /**
-   * Create universal database task (new API)
-   * This matches the database schema exactly and fixes type mismatches
+   * Create database task
+   * Aligns with database schema for type safety
    */
-  async createDatabaseTask(request: UniversalCreateTaskRequest): Promise<TaskCreateApiResponse> {
+  async createDatabaseTask(request: DatabaseTaskCreateRequest): Promise<TaskCreateApiResponse> {
     try {
       // Validate request
       if (!validateCreateTaskRequest(request)) {
@@ -530,11 +528,11 @@ export class TaskService {
         updated_at: new Date().toISOString()
       };
 
-      // Save to database
-      const dbService = DatabaseService.getInstance();
-      const client = dbService.getServiceClientForTasks(); // Use service role for backend operations
+      // Use existing pattern - service role operations through getUserClient
+      // This is temporary - should be refactored to proper DI
+      const userClient = this.dbService.getUserClient(request.userToken);
 
-      const { data, error } = await client
+      const { data, error } = await userClient
         .from('tasks')
         .insert(dbTask)
         .select()
@@ -595,10 +593,9 @@ export class TaskService {
         };
       }
 
-      const dbService = DatabaseService.getInstance();
-      const client = dbService.getServiceClientForTasks();
+      const userClient = this.dbService.getUserClient(userToken);
 
-      const { data, error } = await client
+      const { data, error } = await userClient
         .from('tasks')
         .select('*')
         .eq('user_id', userId)
@@ -639,10 +636,9 @@ export class TaskService {
         };
       }
 
-      const dbService = DatabaseService.getInstance();
-      const client = dbService.getServiceClientForTasks();
+      const userClient = this.dbService.getUserClient(userToken);
 
-      const { data, error } = await client
+      const { data, error } = await userClient
         .from('tasks')
         .select('*')
         .eq('id', taskId)
@@ -705,10 +701,4 @@ export class TaskService {
     }
   }
 
-  /**
-   * Convert database tasks to UI format
-   */
-  convertTasksToUI(dbTasks: DatabaseTask[]): UITask[] {
-    return dbTasks.map(databaseTaskToUI);
-  }
 }

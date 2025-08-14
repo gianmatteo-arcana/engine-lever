@@ -1,15 +1,8 @@
 /**
- * Database-Aligned Types for Multi-Repository Synchronization
+ * Database Schema Types
  * 
- * This file defines types that EXACTLY match the database schema created by migrations.
- * It serves as the authoritative source for both backend and frontend repositories.
- * 
- * CRITICAL: This file must be kept synchronized with:
- * 1. Database migration files in frontend repo
- * 2. Frontend TypeScript interfaces
- * 3. Backend service interfaces
- * 
- * When database schema changes, this file MUST be updated first.
+ * Types that match the database schema exactly.
+ * These serve as the contract between backend services and database.
  */
 
 // ============================================================================
@@ -68,43 +61,21 @@ export interface CreateTaskRequest {
 
 /**
  * Task Update Request
+ * Per PRD: Only status and certain metadata fields are mutable
  */
 export interface UpdateTaskRequest {
   id: string;
-  title?: string;
-  description?: string;
   status?: DatabaseTask['status'];
-  priority?: DatabaseTask['priority'];
-  deadline?: string;
-  notes?: string;
-  metadata?: Record<string, any>;
+  // Only specific metadata updates allowed
+  metadata?: {
+    lastViewedAt?: string;
+    notes?: string;
+  };
 }
 
 // ============================================================================
-// FRONTEND COMPATIBILITY TYPES
+// TASK CONTEXT TYPES (Engine Integration)
 // ============================================================================
-
-/**
- * Frontend-friendly Task interface (for components)
- * Transforms database types to UI-friendly formats
- */
-export interface UITask {
-  id: string;
-  title: string;
-  description?: string;
-  type: string; // task_type renamed for UI
-  status: DatabaseTask['status'];
-  priority: DatabaseTask['priority'];
-  deadline?: Date | null; // Converted from string
-  createdAt: Date; // Converted from created_at string
-  updatedAt: Date; // Converted from updated_at string
-  completedAt?: Date | null; // Converted from string
-  lastViewedAt?: Date | null; // Converted from string
-  businessId?: string; // Renamed from business_id
-  templateId?: string; // Renamed from template_id
-  metadata: Record<string, any>;
-  notes?: string;
-}
 
 /**
  * Task Context for Engine compliance
@@ -185,52 +156,8 @@ export interface TaskGoal {
 }
 
 // ============================================================================
-// TYPE TRANSFORMATION UTILITIES
+// VALIDATION AND GUARDS
 // ============================================================================
-
-/**
- * Convert database task to UI task
- */
-export function databaseTaskToUI(dbTask: DatabaseTask): UITask {
-  return {
-    id: dbTask.id,
-    title: dbTask.title,
-    description: dbTask.description,
-    type: dbTask.task_type,
-    status: dbTask.status,
-    priority: dbTask.priority,
-    deadline: dbTask.deadline ? new Date(dbTask.deadline) : null,
-    createdAt: new Date(dbTask.created_at),
-    updatedAt: new Date(dbTask.updated_at),
-    completedAt: dbTask.completed_at ? new Date(dbTask.completed_at) : null,
-    lastViewedAt: dbTask.last_viewed_at ? new Date(dbTask.last_viewed_at) : null,
-    businessId: dbTask.business_id,
-    templateId: dbTask.template_id,
-    metadata: dbTask.metadata || {},
-    notes: dbTask.notes,
-  };
-}
-
-/**
- * Convert UI task to database update request
- */
-export function uiTaskToDatabaseUpdate(uiTask: Partial<UITask>): UpdateTaskRequest {
-  const update: UpdateTaskRequest = {
-    id: uiTask.id!,
-  };
-  
-  if (uiTask.title !== undefined) update.title = uiTask.title;
-  if (uiTask.description !== undefined) update.description = uiTask.description;
-  if (uiTask.status !== undefined) update.status = uiTask.status;
-  if (uiTask.priority !== undefined) update.priority = uiTask.priority;
-  if (uiTask.deadline !== undefined) {
-    update.deadline = uiTask.deadline ? uiTask.deadline.toISOString() : undefined;
-  }
-  if (uiTask.notes !== undefined) update.notes = uiTask.notes;
-  if (uiTask.metadata !== undefined) update.metadata = uiTask.metadata;
-  
-  return update;
-}
 
 /**
  * Type guard for DatabaseTask
@@ -244,16 +171,6 @@ export function isDatabaseTask(obj: any): obj is DatabaseTask {
     typeof obj.created_at === 'string';
 }
 
-/**
- * Type guard for UITask
- */
-export function isUITask(obj: any): obj is UITask {
-  return obj &&
-    typeof obj.id === 'string' &&
-    typeof obj.title === 'string' &&
-    typeof obj.type === 'string' &&
-    obj.createdAt instanceof Date;
-}
 
 // ============================================================================
 // API RESPONSE TYPES
@@ -302,10 +219,41 @@ export function validateCreateTaskRequest(obj: any): obj is CreateTaskRequest {
 }
 
 /**
- * Runtime validation for UpdateTaskRequest  
+ * Runtime validation for UpdateTaskRequest
+ * Enforces immutability rules per PRD
  */
-export function validateUpdateTaskRequest(obj: any): obj is UpdateTaskRequest {
-  return obj &&
-    typeof obj.id === 'string' &&
-    obj.id.length > 0;
+export function validateUpdateTaskRequest(obj: any, logger?: any): obj is UpdateTaskRequest {
+  if (!obj || typeof obj.id !== 'string' || obj.id.length === 0) {
+    return false;
+  }
+  
+  // Warn if trying to update immutable fields
+  const immutableFields = ['title', 'description', 'task_type', 'business_id', 'template_id', 'priority', 'deadline'];
+  const violations = immutableFields.filter(field => field in obj);
+  
+  if (violations.length > 0 && logger) {
+    logger.warn('Attempted to update immutable task fields', {
+      taskId: obj.id,
+      violations,
+      message: 'Per PRD, these fields are immutable after task creation'
+    });
+  }
+  
+  // Only allow status and specific metadata updates
+  const allowedFields = ['id', 'status', 'metadata'];
+  const providedFields = Object.keys(obj);
+  const invalidFields = providedFields.filter(field => !allowedFields.includes(field));
+  
+  if (invalidFields.length > 0) {
+    if (logger) {
+      logger.error('Invalid task update fields provided', {
+        taskId: obj.id,
+        invalidFields,
+        allowedFields
+      });
+    }
+    return false;
+  }
+  
+  return true;
 }
