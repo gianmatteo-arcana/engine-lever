@@ -7,20 +7,12 @@ agent:
   version: "1.0.0"
   role: "payment_specialist"
   
-  # Agent mission - secure payment processing and financial operations
+  # Agent mission - concise and focused for optimal LLM performance
   mission: |
-    You are a Payment Agent specialized in secure financial operations for business compliance.
-    You handle payment processing, fund verification, and transaction management for government
-    fees, taxes, and regulatory filings.
+    Process secure payments for government fees and regulatory filings. Calculate costs,
+    verify payment methods, and execute transactions with full audit trails.
     
-    Your primary responsibility is to ensure secure, compliant payment processing while providing
-    transparent cost breakdowns and maintaining detailed financial audit trails.
-    
-    CORE PRINCIPLES:
-    - Security First: All financial operations follow PCI DSS and security best practices
-    - Transparency: Clear cost breakdowns and fee explanations for all transactions
-    - Compliance: Proper handling of government payments and tax obligations
-    - Audit Trail: Detailed transaction logging for financial accountability
+    Key outputs: cost breakdowns, payment authorizations, transaction confirmations.
     
   agent_card:
     skills:
@@ -77,6 +69,12 @@ schemas:
           reasoning:
             type: "string"
             description: "Financial reasoning and payment method selection"
+          
+          confidence:
+            type: "number"
+            minimum: 0
+            maximum: 1
+            description: "Confidence level in payment processing decisions (0.0-1.0)"
 
 # Available operations for payment processing
 operations:
@@ -152,3 +150,118 @@ tools:
     - "fee_calculator"
     - "cost_analyzer"
     - "transaction_tracker"
+
+# Tool selection criteria and decision trees
+tool_selection:
+  decision_tree:
+    payment_method_selection:
+      primary_tools: ["stripe_payment_processor", "ach_transfer_service"]
+      selection_criteria: |
+        IF amount > 1000 THEN use ach_transfer_service
+        ELSE IF recipient == "government" THEN use ach_transfer_service
+        ELSE IF payment_method == "credit_card" THEN use stripe_payment_processor
+        ELSE use ach_transfer_service
+      
+      fallback_chain:
+        - "Try primary payment method"
+        - "Switch to backup payment method"
+        - "Request manual payment authorization"
+      
+      confidence_thresholds:
+        high_confidence: 0.95  # Process payment automatically
+        medium_confidence: 0.8  # Request payment confirmation
+        low_confidence: 0.6  # Require manual approval
+    
+    fee_calculation:
+      primary_tools: ["fee_calculator", "cost_analyzer"]
+      selection_criteria: |
+        IF standard_filing THEN use fee_calculator
+        ELSE IF complex_calculation THEN use cost_analyzer
+        ELSE use manual_calculation
+      
+      fallback_chain:
+        - "Use current fee schedule"
+        - "Apply standard rates with markup"
+        - "Request manual fee calculation"
+
+# Structured examples for few-shot learning
+examples:
+  successful_payment:
+    request:
+      operation: "process_payment"
+      parameters:
+        amount: 45.00
+        paymentMethod:
+          type: "credit_card"
+          last4: "1234"
+        recipient: "ca_sos"
+    
+    response:
+      status: "payment_authorized"
+      contextUpdate:
+        operation: "payment_processed"
+        data:
+          transaction:
+            id: "txn_abc123"
+            amount: 45.00
+            status: "authorized"
+            reference: "CA_SOI_2024_001"
+          cost_breakdown:
+            government_fee: 25.00
+            processing_fee: 15.00
+            convenience_fee: 5.00
+          payment_status: "authorized"
+        reasoning: "Credit card payment authorized for CA SOS Statement of Information filing. Government fee $25 + processing $15 + convenience $5 = $45 total."
+        confidence: 0.95
+      confidence: 0.95
+      fallback_strategy: "If payment fails, switch to ACH transfer"
+
+  payment_failure:
+    request:
+      operation: "process_payment"
+      parameters:
+        amount: 1000.00
+        paymentMethod:
+          type: "credit_card"
+          last4: "9999"
+        recipient: "ca_sos"
+    
+    response:
+      status: "payment_failed"
+      error:
+        type: "payment_declined"
+        message: "Credit card payment declined - insufficient funds"
+        recovery_strategy: "Try alternative payment method or contact bank"
+        user_action_required: true
+      contextUpdate:
+        operation: "payment_failed"
+        data:
+          error_code: "insufficient_funds"
+          suggested_alternatives: ["ach_transfer", "bank_verification"]
+        reasoning: "Large payment amount declined on credit card. Recommend ACH transfer for amounts over $500."
+        confidence: 1.0
+      confidence: 1.0
+      fallback_strategy: "Offer ACH transfer option with bank verification"
+
+# Fallback patterns for graceful degradation
+fallback_patterns:
+  payment_processor_down:
+    strategy: "Switch to backup processor"
+    actions:
+      - "Try secondary payment processor"
+      - "Queue payment for later processing"
+      - "Offer manual payment options"
+    
+  insufficient_funds:
+    strategy: "Offer payment alternatives"
+    actions:
+      - "Suggest ACH transfer for lower fees"
+      - "Offer payment plan if available"
+      - "Provide cost reduction options"
+    
+  bank_verification_failed:
+    strategy: "Manual verification process"
+    actions:
+      - "Request bank statements"
+      - "Offer certified check option"
+      - "Escalate to manual review"

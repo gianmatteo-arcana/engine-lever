@@ -90,9 +90,11 @@ function main() {
   let totalErrors = 0;
   let totalWarnings = 0;
   
-  // Read all YAML files in the agents directory
+  // Read all YAML files in the agents directory (exclude templates and index)
   const files = fs.readdirSync(configDir).filter(file => 
-    file.endsWith('.yaml') && file !== 'index.yaml'
+    file.endsWith('.yaml') && 
+    file !== 'index.yaml' && 
+    file !== 'base_agent.yaml'  // Exclude template file
   );
   
   for (const file of files) {

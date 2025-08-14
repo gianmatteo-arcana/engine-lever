@@ -7,20 +7,12 @@ agent:
   version: "1.0.0"
   role: "monitoring_specialist"
   
-  # Agent mission - quality assurance and system monitoring
+  # Agent mission - concise and focused for optimal LLM performance
   mission: |
-    You are a Monitoring Agent specialized in quality assurance, system monitoring, and
-    audit trail management. You ensure all compliance workflows execute correctly,
-    track deadlines, and maintain comprehensive audit records.
+    Monitor system health, verify task completion, and maintain audit trails.
+    Detect anomalies, track performance metrics, and ensure compliance workflows execute correctly.
     
-    Your primary responsibility is to monitor system health, verify task completion,
-    detect anomalies, and maintain detailed audit trails for compliance and debugging.
-    
-    CORE PRINCIPLES:
-    - Quality Assurance: Verify successful completion of all workflow steps
-    - Proactive Monitoring: Detect issues before they impact user experience
-    - Audit Compliance: Maintain detailed records for regulatory and debugging purposes
-    - Exception Handling: Identify and escalate system anomalies and failures
+    Key outputs: health reports, audit summaries, anomaly alerts.
     
   agent_card:
     skills:
@@ -77,6 +69,12 @@ schemas:
           reasoning:
             type: "string"
             description: "Monitoring analysis and alert rationale"
+          
+          confidence:
+            type: "number"
+            minimum: 0
+            maximum: 1
+            description: "Confidence level in monitoring assessment (0.0-1.0)"
 
 # Available operations for monitoring
 operations:
@@ -174,3 +172,118 @@ tools:
     - "audit_logger"
     - "compliance_tracker"
     - "report_generator"
+
+# Tool selection criteria and decision trees
+tool_selection:
+  decision_tree:
+    health_monitoring:
+      primary_tools: ["health_checker", "performance_profiler"]
+      selection_criteria: |
+        IF performance_issue_suspected THEN use performance_profiler
+        ELSE IF routine_health_check THEN use health_checker
+        ELSE IF anomaly_detected THEN use anomaly_detector
+        ELSE use health_checker
+      
+      fallback_chain:
+        - "Run automated health checks"
+        - "Perform manual system verification"
+        - "Escalate to human administrator"
+      
+      confidence_thresholds:
+        high_confidence: 0.95  # System healthy
+        medium_confidence: 0.8  # Monitor closely
+        low_confidence: 0.6  # Generate alert
+    
+    audit_generation:
+      primary_tools: ["audit_logger", "compliance_tracker"]
+      selection_criteria: |
+        IF compliance_audit THEN use compliance_tracker
+        ELSE IF system_audit THEN use audit_logger
+        ELSE use report_generator
+      
+      fallback_chain:
+        - "Generate automated audit report"
+        - "Compile manual audit data"
+        - "Request human audit review"
+
+# Structured examples for few-shot learning
+examples:
+  healthy_system_check:
+    request:
+      operation: "monitor_system_health"
+      parameters:
+        components: ["agents", "database", "external_apis"]
+    
+    response:
+      status: "system_healthy"
+      contextUpdate:
+        operation: "health_check_completed"
+        data:
+          metrics:
+            agent_response_time: 1250
+            database_query_time: 850
+            api_connectivity: 100
+            overall_health: "excellent"
+          alerts: []
+          audit_summary:
+            checks_performed: 15
+            anomalies_detected: 0
+            last_check: "2024-01-15T10:30:00Z"
+        reasoning: "All system components operating within normal parameters. Agent response times averaging 1.25s, database queries under 1s, all APIs responsive."
+        confidence: 0.98
+      confidence: 0.98
+      fallback_strategy: "If health check fails, perform detailed component analysis"
+
+  anomaly_detected:
+    request:
+      operation: "monitor_system_health"
+      parameters:
+        components: ["payment_systems"]
+    
+    response:
+      status: "anomaly_detected"
+      contextUpdate:
+        operation: "anomaly_alert_generated"
+        data:
+          metrics:
+            payment_success_rate: 85
+            error_rate: 15
+            response_time: 8500
+          alerts: [
+            {
+              severity: "warning",
+              component: "payment_processor",
+              message: "Payment success rate below threshold (85% < 98%)",
+              timestamp: "2024-01-15T10:30:00Z"
+            }
+          ]
+          audit_summary:
+            anomalies_count: 1
+            escalation_required: true
+        reasoning: "Payment system showing degraded performance. Success rate 85% below 98% threshold. Response times elevated to 8.5s. Immediate attention required."
+        confidence: 0.95
+      confidence: 0.95
+      fallback_strategy: "Escalate to payment system administrator and switch to backup processor"
+
+# Fallback patterns for graceful degradation
+fallback_patterns:
+  monitoring_tools_unavailable:
+    strategy: "Manual monitoring with basic checks"
+    actions:
+      - "Perform basic connectivity tests"
+      - "Check database responsiveness"
+      - "Log monitoring tool failure"
+    
+  metric_collection_failed:
+    strategy: "Use historical baselines and estimates"
+    actions:
+      - "Apply historical performance averages"
+      - "Flag metrics as estimated"
+      - "Schedule metric collection retry"
+    
+  alert_system_down:
+    strategy: "Direct notification and logging"
+    actions:
+      - "Log alerts to file system"
+      - "Send direct notifications if possible"
+      - "Queue alerts for retry when system recovers"

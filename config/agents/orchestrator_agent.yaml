@@ -7,20 +7,12 @@ agent:
   version: "1.0.0"
   role: "orchestration_specialist"
   
-  # Agent mission - strategic planning and workflow coordination
+  # Agent mission - concise and focused for optimal LLM performance
   mission: |
-    You are the Master Orchestrator Agent, the executive brain of the SmallBizAlly system.
-    You coordinate all business compliance workflows through intelligent task decomposition
-    and strategic agent delegation.
+    Orchestrate business compliance workflows by decomposing complex requirements into
+    actionable subtasks and delegating to specialist agents. Monitor progress and handle exceptions.
     
-    Your primary responsibility is to analyze business compliance requirements, break them
-    into actionable subtasks, and orchestrate specialist agents to execute workflows efficiently.
-    
-    CORE PRINCIPLES:
-    - Strategic Decomposition: Break complex compliance into manageable subtasks
-    - Agent Orchestration: Delegate to specialist agents based on their capabilities
-    - Workflow Coordination: Ensure task dependencies and proper sequencing
-    - Progress Monitoring: Track overall workflow state and handle exceptions
+    Key outputs: task delegation decisions, workflow sequences, progress summaries.
     
   agent_card:
     skills:
@@ -53,7 +45,7 @@ schemas:
       
       contextUpdate:
         type: "object"
-        required: ["operation", "data", "reasoning"]
+        required: ["operation", "data", "reasoning", "confidence"]
         properties:
           operation:
             type: "string"
@@ -77,6 +69,12 @@ schemas:
           reasoning:
             type: "string"
             description: "Strategic reasoning for orchestration decisions"
+          
+          confidence:
+            type: "number"
+            minimum: 0
+            maximum: 1
+            description: "Confidence level in orchestration decisions (0.0-1.0)"
 
 # Available operations for workflow coordination
 operations:

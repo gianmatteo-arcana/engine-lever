@@ -7,20 +7,12 @@ agent:
   version: "1.0.0"
   role: "legal_compliance_specialist"
   
-  # Agent mission - legal analysis and compliance guidance
+  # Agent mission - concise and focused for optimal LLM performance
   mission: |
-    You are a Legal Compliance Agent with paralegal expertise in business regulatory requirements.
-    You analyze business entities, interpret legal obligations, and provide precise compliance guidance
-    for small businesses navigating government regulations.
+    Analyze business compliance requirements and translate complex regulations into actionable steps.
+    Identify deadlines, assess risks, and provide clear guidance for regulatory obligations.
     
-    Your primary responsibility is to translate complex legal requirements into actionable compliance
-    steps, ensuring businesses meet all regulatory obligations while minimizing risk and complexity.
-    
-    CORE PRINCIPLES:
-    - Regulatory Expertise: Deep knowledge of business compliance requirements
-    - Risk Assessment: Identify compliance gaps and potential legal issues
-    - Practical Guidance: Convert legal complexity into clear action items
-    - Documentation: Maintain detailed reasoning for all compliance decisions
+    Key outputs: compliance checklists, deadline schedules, risk assessments.
     
   agent_card:
     skills:
@@ -77,6 +69,12 @@ schemas:
           reasoning:
             type: "string"
             description: "Legal reasoning and regulatory interpretation"
+          
+          confidence:
+            type: "number"
+            minimum: 0
+            maximum: 1
+            description: "Confidence level in compliance analysis (0.0-1.0)"
 
 # Available operations for legal analysis
 operations:
@@ -129,3 +127,118 @@ tools:
     - "legal_document_parser"
     - "requirement_extractor"
     - "deadline_calculator"
+
+# Tool selection criteria and decision trees
+tool_selection:
+  decision_tree:
+    compliance_research:
+      primary_tools: ["regulation_database", "ca_sos_api", "federal_tax_api"]
+      selection_criteria: |
+        IF jurisdiction == "california" AND entity_type == "corporation" THEN use ca_sos_api
+        ELSE IF tax_compliance THEN use federal_tax_api
+        ELSE use regulation_database
+      
+      fallback_chain:
+        - "Search primary regulatory databases"
+        - "Consult secondary legal sources"
+        - "Request manual legal research"
+      
+      confidence_thresholds:
+        high_confidence: 0.9  # Proceed with analysis
+        medium_confidence: 0.7  # Flag for review
+        low_confidence: 0.5  # Require manual validation
+    
+    risk_assessment:
+      primary_tools: ["compliance_tracker", "deadline_calculator"]
+      selection_criteria: |
+        IF has_filing_history THEN use compliance_tracker
+        ELSE IF specific_deadline THEN use deadline_calculator
+        ELSE use manual_assessment
+      
+      fallback_chain:
+        - "Automated compliance status check"
+        - "Manual deadline calculation"
+        - "Conservative risk assessment"
+
+# Structured examples for few-shot learning
+examples:
+  entity_analysis_success:
+    request:
+      operation: "analyze_entity_compliance"
+      parameters:
+        businessEntity:
+          name: "TechCorp LLC"
+          entityType: "LLC"
+          jurisdiction: "California"
+          formationDate: "2023-01-15"
+        filingType: "soi"
+    
+    response:
+      status: "requirements_identified"
+      contextUpdate:
+        operation: "compliance_analysis_completed"
+        data:
+          compliance_requirements:
+            - type: "Statement of Information"
+              deadline: "2024-04-15"
+              status: "due"
+              priority: "high"
+          risk_assessment:
+            level: "medium"
+            factors: ["approaching_deadline", "first_time_filing"]
+          action_items:
+            - "Gather current LLC member information"
+            - "Verify business address accuracy"
+            - "Prepare SI-550 form"
+        reasoning: "LLC formed in 2023 requires initial SOI filing within 90 days of first anniversary. Deadline April 15, 2024. Medium risk due to approaching deadline."
+        confidence: 0.9
+      confidence: 0.9
+      fallback_strategy: "If analysis unclear, request manual legal review"
+
+  missing_data_example:
+    request:
+      operation: "analyze_entity_compliance"
+      parameters:
+        businessEntity:
+          name: "Unknown Business"
+          entityType: null
+        filingType: "soi"
+    
+    response:
+      status: "error"
+      error:
+        type: "data_missing"
+        message: "Insufficient business entity information for compliance analysis"
+        recovery_strategy: "Request complete business entity details"
+        user_action_required: true
+      contextUpdate:
+        operation: "compliance_analysis_blocked"
+        data:
+          missing_fields: ["entityType", "jurisdiction", "formationDate"]
+        reasoning: "Cannot determine compliance requirements without basic entity information. Entity type and jurisdiction are mandatory for regulatory analysis."
+        confidence: 1.0
+      confidence: 1.0
+      fallback_strategy: "Collect entity information through guided form"
+
+# Fallback patterns for graceful degradation
+fallback_patterns:
+  data_unavailable:
+    strategy: "Conservative compliance approach"
+    actions:
+      - "Assume most restrictive requirements apply"
+      - "Request manual verification of entity details"
+      - "Provide general compliance guidance"
+    
+  api_failure:
+    strategy: "Use cached data and manual research"
+    actions:
+      - "Check local compliance database"
+      - "Apply known filing patterns for entity type"
+      - "Flag for manual verification"
+    
+  uncertain_requirements:
+    strategy: "Request expert review"
+    actions:
+      - "Document uncertainty in reasoning"
+      - "Provide range of possible requirements"
+      - "Escalate to human legal expert"
