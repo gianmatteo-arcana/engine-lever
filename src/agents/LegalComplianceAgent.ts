@@ -2,13 +2,13 @@
  * Legal Compliance Agent
  * Migrated from EventEmitter to Consolidated BaseAgent Pattern
  * 
- * AGENT MISSION: Analyze business compliance requirements and translate complex 
+ * AGENT MISSION: Analyze regulatory requirements and translate complex 
  * regulations into actionable steps. Identify deadlines, assess risks, and provide 
  * clear guidance for regulatory obligations.
  * 
- * This agent is GENERAL PURPOSE - it works with Task Templates for specific
- * compliance tasks (SOI, tax filings, etc.). The agent provides legal analysis
- * capabilities while Task Templates define the specific workflow logic.
+ * This agent is GENERAL PURPOSE - it provides legal analysis capabilities
+ * while Task Templates define the specific workflow logic. The agent handles
+ * the technical aspects of requirement analysis and risk assessment.
  */
 
 import { BaseAgent } from './base/BaseAgent';
@@ -28,11 +28,11 @@ interface FilingRequirements {
   filingPeriod: string;
   fee: number;
   requiredDocuments: string[];
-  formNumber: string;
+  formIdentifier: string;
   filingType: string;
 }
 
-interface ComplianceRequirement {
+interface RequirementItem {
   type: string;
   deadline: string;
   status: 'due' | 'overdue' | 'completed' | 'upcoming';
@@ -58,90 +58,91 @@ export class LegalComplianceAgent extends BaseAgent {
   }
 
   /**
-   * Main processing method - analyzes compliance requirements
+   * Main processing method - analyzes regulatory requirements
    */
   async processRequest(request: AgentRequest, context: TaskContext): Promise<AgentResponse> {
     const requestId = `lca_${Date.now()}`;
     
     try {
-      // Extract business entity data from context
-      const businessEntity = this.extractBusinessEntity(context);
+      // Extract entity data from context
+      const entityData = this.extractEntityData(context);
       
       // Record analysis initiation
       await this.recordContextEntry(context, {
-        operation: 'compliance_analysis_initiated',
+        operation: 'regulatory_analysis_initiated',
         data: { 
-          businessEntity,
+          entityData,
           analysisType: request.instruction,
           requestId 
         },
-        reasoning: 'Starting comprehensive compliance analysis for business entity and filing requirements'
+        reasoning: 'Starting comprehensive regulatory analysis for entity and filing requirements'
       });
 
-      // Route based on instruction - GENERAL COMPLIANCE OPERATIONS
+      // Route based on instruction - GENERAL REGULATORY OPERATIONS
       switch (request.instruction) {
         case 'validate_filing_requirements':
-          return await this.validateFilingRequirements(request, context, businessEntity);
+          return await this.validateFilingRequirements(request, context, entityData);
         
-        case 'analyze_entity_compliance':
-          return await this.analyzeEntityCompliance(request, context, businessEntity);
+        case 'analyze_entity_requirements':
+          return await this.analyzeEntityRequirements(request, context, entityData);
         
-        case 'assess_compliance_risk':
-          return await this.assessComplianceRisk(request, context, businessEntity);
+        case 'assess_regulatory_risk':
+          return await this.assessRegulatoryRisk(request, context, entityData);
         
-        case 'prepare_compliance_guidance':
-          return await this.prepareComplianceGuidance(request, context, businessEntity);
+        case 'prepare_regulatory_guidance':
+          return await this.prepareRegulatoryGuidance(request, context, entityData);
         
         default:
           await this.recordContextEntry(context, {
             operation: 'unknown_instruction',
             data: { instruction: request.instruction, requestId },
-            reasoning: 'Received unrecognized instruction for legal compliance analysis'
+            reasoning: 'Received unrecognized instruction for regulatory analysis'
           });
 
           return {
             status: 'error',
             data: { error: `Unknown instruction: ${request.instruction}` },
-            reasoning: 'Legal compliance agent cannot process unrecognized instruction type'
+            reasoning: 'Legal analysis agent cannot process unrecognized instruction type'
           };
       }
 
     } catch (error: any) {
       await this.recordContextEntry(context, {
-        operation: 'compliance_analysis_error',
+        operation: 'regulatory_analysis_error',
         data: { error: error.message, requestId },
-        reasoning: 'Legal compliance analysis failed due to technical error'
+        reasoning: 'Regulatory analysis failed due to technical error'
       });
 
       return {
         status: 'error',
         data: { error: error.message },
-        reasoning: 'Technical error during compliance analysis'
+        reasoning: 'Technical error during regulatory analysis'
       };
     }
   }
 
   /**
-   * Validate filing requirements for any compliance task type
+   * Validate filing requirements for any regulatory task type
    * Task Templates provide the specific filing type logic
    */
   private async validateFilingRequirements(
     request: AgentRequest, 
     context: TaskContext, 
-    businessEntity: any
+    entityData: any
   ): Promise<AgentResponse> {
     
     // Get filing type from request (provided by Task Template)
     const filingType = request.data?.filingType || 'general';
+    const templateRequirements = request.data?.requirements || {};
     
     // General filing requirements analysis - specific logic comes from Task Templates
     const filingRequirements: FilingRequirements = {
-      isRequired: this.isFilingRequired(businessEntity, filingType),
-      dueDate: this.calculateFilingDueDate(businessEntity, filingType),
-      filingPeriod: this.getFilingPeriod(businessEntity, filingType),
-      fee: this.getFilingFee(businessEntity, filingType),
-      requiredDocuments: this.getRequiredDocuments(businessEntity, filingType),
-      formNumber: this.getFormNumber(businessEntity, filingType),
+      isRequired: this.evaluateFilingRequirement(entityData, templateRequirements),
+      dueDate: this.calculateDueDate(entityData, templateRequirements),
+      filingPeriod: templateRequirements.period || 'As Required',
+      fee: templateRequirements.fee || 0,
+      requiredDocuments: templateRequirements.documents || ['Entity information'],
+      formIdentifier: templateRequirements.formId || 'TBD',
       filingType
     };
 
@@ -154,92 +155,92 @@ export class LegalComplianceAgent extends BaseAgent {
         dueDate: filingRequirements.dueDate,
         fee: filingRequirements.fee
       },
-      reasoning: `Filing requirements analysis completed for ${filingType} filing. Entity: ${businessEntity.entityType} in ${businessEntity.jurisdiction}. Required: ${filingRequirements.isRequired}, Due: ${filingRequirements.dueDate}`
+      reasoning: `Filing requirements analysis completed for ${filingType} filing. Required: ${filingRequirements.isRequired}, Due: ${filingRequirements.dueDate}`
     });
 
-    // Generate compliance guidance UI
-    const uiRequest = this.createFilingGuidanceUI(filingRequirements, businessEntity);
+    // Generate regulatory guidance UI
+    const uiRequest = this.createFilingGuidanceUI(filingRequirements, entityData);
 
     return {
       status: 'needs_input',
       data: { 
         filingRequirements,
-        entityAnalysis: businessEntity,
+        entityAnalysis: entityData,
         guidance: {
           isRequired: filingRequirements.isRequired,
           nextSteps: filingRequirements.isRequired 
             ? ['Gather required information', `Complete ${filingType} filing`, 'Submit with required fee']
-            : [`No ${filingType} filing required for this entity type`]
+            : [`No ${filingType} filing required for this entity`]
         }
       },
       uiRequests: [uiRequest],
-      reasoning: `${filingType} filing requirements validated, providing compliance guidance to user`,
+      reasoning: `${filingType} filing requirements validated, providing regulatory guidance to user`,
       nextAgent: 'data_collection'
     };
   }
 
   /**
-   * Analyze entity compliance requirements
+   * Analyze entity regulatory requirements
    */
-  private async analyzeEntityCompliance(
+  private async analyzeEntityRequirements(
     request: AgentRequest, 
     context: TaskContext, 
-    businessEntity: any
+    entityData: any
   ): Promise<AgentResponse> {
     
-    // Comprehensive compliance analysis
-    const complianceRequirements = this.identifyComplianceRequirements(businessEntity);
-    const riskAssessment = this.performRiskAssessment(complianceRequirements, businessEntity);
+    // Comprehensive regulatory analysis based on Task Template data
+    const requirements = this.identifyRequirements(entityData, request.data?.scope);
+    const riskAssessment = this.performRiskAssessment(requirements, entityData);
 
     await this.recordContextEntry(context, {
-      operation: 'compliance_requirements_identified',
+      operation: 'requirements_identified',
       data: { 
-        requirementsCount: complianceRequirements.length,
-        highPriorityCount: complianceRequirements.filter(r => r.priority === 'high' || r.priority === 'critical').length,
+        requirementsCount: requirements.length,
+        highPriorityCount: requirements.filter(r => r.priority === 'high' || r.priority === 'critical').length,
         riskLevel: riskAssessment.level,
-        entityType: businessEntity.entityType,
-        jurisdiction: businessEntity.jurisdiction
+        entityType: entityData.type,
+        jurisdiction: entityData.jurisdiction
       },
-      reasoning: `Identified ${complianceRequirements.length} compliance requirements with ${riskAssessment.level} risk level for ${businessEntity.entityType} entity`
+      reasoning: `Identified ${requirements.length} regulatory requirements with ${riskAssessment.level} risk level for entity`
     });
 
-    // Generate compliance roadmap UI
-    const uiRequest = this.createComplianceRoadmapUI(complianceRequirements, riskAssessment, businessEntity);
+    // Generate regulatory roadmap UI
+    const uiRequest = this.createRegulatoryRoadmapUI(requirements, riskAssessment, entityData);
 
     return {
       status: 'needs_input',
       data: {
-        complianceRequirements,
+        requirements,
         riskAssessment,
-        entityAnalysis: businessEntity,
+        entityAnalysis: entityData,
         summary: {
-          totalRequirements: complianceRequirements.length,
-          criticalCount: complianceRequirements.filter(r => r.priority === 'critical').length,
-          upcomingDeadlines: complianceRequirements.filter(r => 
+          totalRequirements: requirements.length,
+          criticalCount: requirements.filter(r => r.priority === 'critical').length,
+          upcomingDeadlines: requirements.filter(r => 
             new Date(r.deadline).getTime() - new Date().getTime() < 30 * 24 * 60 * 60 * 1000
           ).length
         }
       },
       uiRequests: [uiRequest],
-      reasoning: 'Comprehensive compliance analysis completed, providing roadmap for regulatory obligations',
+      reasoning: 'Comprehensive regulatory analysis completed, providing roadmap for obligations',
       nextAgent: 'ux_optimization_agent'
     };
   }
 
   /**
-   * Assess compliance risks
+   * Assess regulatory risks
    */
-  private async assessComplianceRisk(
+  private async assessRegulatoryRisk(
     request: AgentRequest, 
     context: TaskContext, 
-    businessEntity: any
+    entityData: any
   ): Promise<AgentResponse> {
     
-    const requirements = this.identifyComplianceRequirements(businessEntity);
-    const riskAssessment = this.performRiskAssessment(requirements, businessEntity);
+    const requirements = this.identifyRequirements(entityData, request.data?.scope);
+    const riskAssessment = this.performRiskAssessment(requirements, entityData);
 
     await this.recordContextEntry(context, {
-      operation: 'compliance_risk_assessed',
+      operation: 'regulatory_risk_assessed',
       data: { 
         riskLevel: riskAssessment.level,
         riskFactors: riskAssessment.factors,
@@ -257,32 +258,32 @@ export class LegalComplianceAgent extends BaseAgent {
           .filter(r => r.priority === 'critical')
           .map(r => `${r.type}: ${r.deadline}`)
       },
-      reasoning: 'Compliance risk assessment completed with mitigation recommendations'
+      reasoning: 'Regulatory risk assessment completed with mitigation recommendations'
     };
   }
 
   /**
-   * Prepare compliance guidance for any filing type
+   * Prepare regulatory guidance for any filing type
    * Task Templates specify the exact form requirements
    */
-  private async prepareComplianceGuidance(
+  private async prepareRegulatoryGuidance(
     request: AgentRequest, 
     context: TaskContext, 
-    businessEntity: any
+    entityData: any
   ): Promise<AgentResponse> {
     
     const filingType = request.data?.filingType || 'general';
-    const guidanceTemplate = this.getGuidanceTemplate(filingType, businessEntity);
-    const prefilledData = this.generatePrefilledData(businessEntity, filingType);
+    const guidanceTemplate = this.getGuidanceTemplate(filingType, request.data?.templateData);
+    const prefilledData = this.generatePrefilledData(entityData, request.data?.templateData);
 
     await this.recordContextEntry(context, {
-      operation: 'compliance_guidance_prepared',
+      operation: 'regulatory_guidance_prepared',
       data: { 
         filingType,
-        entityType: businessEntity.entityType,
+        entityType: entityData.type,
         prefilledFields: Object.keys(prefilledData).length
       },
-      reasoning: `Prepared ${filingType} compliance guidance with ${Object.keys(prefilledData).length} pre-filled fields`
+      reasoning: `Prepared ${filingType} regulatory guidance with ${Object.keys(prefilledData).length} pre-filled fields`
     });
 
     return {
@@ -290,170 +291,89 @@ export class LegalComplianceAgent extends BaseAgent {
       data: {
         guidanceTemplate,
         prefilledData,
-        instructions: this.getFilingInstructions(filingType),
-        submissionGuidance: this.getSubmissionGuidance(filingType, businessEntity)
+        instructions: this.getFilingInstructions(request.data?.templateData),
+        submissionGuidance: this.getSubmissionGuidance(request.data?.templateData)
       },
-      reasoning: `${filingType} compliance guidance prepared with pre-filled data and submission instructions`
+      reasoning: `${filingType} regulatory guidance prepared with pre-filled data and submission instructions`
     };
   }
 
-  // Helper methods for compliance analysis
-  private extractBusinessEntity(context: TaskContext): any {
+  // Helper methods for regulatory analysis
+  private extractEntityData(context: TaskContext): any {
     const businessData = context.currentState.data.business || {};
     const userData = context.currentState.data.user || {};
     
     return {
       name: businessData.name || `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
-      entityType: businessData.entityType || 'LLC',
-      jurisdiction: businessData.state || 'CA',
+      type: businessData.entityType || 'Entity',
+      jurisdiction: businessData.state || 'Unknown',
       formationDate: businessData.formationDate,
       industry: businessData.industry,
-      ein: businessData.ein,
+      identifier: businessData.ein || businessData.entityNumber,
       address: businessData.address
     };
   }
 
-  private isFilingRequired(entity: any, filingType: string): boolean {
-    // General filing requirement logic - specific rules come from Task Templates
-    // This is a fallback implementation
-    
-    switch (filingType) {
-      case 'soi': {
-        const soiRequiredTypes = ['Corporation', 'LLC', 'Limited Partnership'];
-        return entity.jurisdiction === 'CA' && soiRequiredTypes.includes(entity.entityType);
-      }
-      
-      case 'franchise_tax': {
-        return entity.jurisdiction === 'CA' && ['Corporation', 'LLC'].includes(entity.entityType);
-      }
-      
-      default: {
-        // Conservative approach: assume filing is required unless proven otherwise
-        return true;
-      }
-    }
-  }
-
-  private calculateFilingDueDate(entity: any, filingType: string): Date | undefined {
-    if (!this.isFilingRequired(entity, filingType) || !entity.formationDate) return undefined;
-    
-    const formationDate = new Date(entity.formationDate);
-    const dueDate = new Date(formationDate);
-    
-    switch (filingType) {
-      case 'soi': {
-        if (entity.entityType === 'Corporation' || entity.entityType === 'LLC') {
-          // Initial due 90 days after formation, then biennial
-          dueDate.setDate(dueDate.getDate() + 90);
-        }
-        break;
-      }
-      
-      case 'franchise_tax': {
-        // Franchise tax due on 15th day of 4th month after year end
-        const nextYear = new Date(formationDate.getFullYear() + 1, 3, 15); // April 15
-        return nextYear;
-      }
-      
-      default: {
-        // Default: assume 90 days for new filings
-        dueDate.setDate(dueDate.getDate() + 90);
-      }
+  private evaluateFilingRequirement(_entityData: any, templateRequirements: any): boolean {
+    // Generic filing requirement evaluation - Task Templates define specific rules
+    if (templateRequirements?.required !== undefined) {
+      return templateRequirements.required;
     }
     
-    return dueDate;
+    // Conservative approach: assume filing is required unless proven otherwise
+    return true;
   }
 
-  private getFilingPeriod(entity: any, filingType: string): string {
-    switch (filingType) {
-      case 'soi':
-        if (entity.entityType === 'Corporation' || entity.entityType === 'LLC') return 'Biennial';
-        break;
-      case 'franchise_tax':
-        return 'Annual';
-      default:
-        return 'As Required';
+  private calculateDueDate(_entityData: any, templateRequirements: any): Date | undefined {
+    if (templateRequirements?.dueDate) {
+      return new Date(templateRequirements.dueDate);
     }
-    return 'N/A';
-  }
-
-  private getFilingFee(entity: any, filingType: string): number {
-    switch (filingType) {
-      case 'soi':
-        if (entity.entityType === 'Corporation') return 25;
-        if (entity.entityType === 'LLC') return 20;
-        break;
-      case 'franchise_tax':
-        return 800; // CA minimum franchise tax
-      default:
-        return 0;
+    
+    if (templateRequirements?.daysFromNow) {
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + templateRequirements.daysFromNow);
+      return dueDate;
     }
-    return 0;
+    
+    // Default: 90 days from now if not specified
+    const defaultDue = new Date();
+    defaultDue.setDate(defaultDue.getDate() + 90);
+    return defaultDue;
   }
 
-  private getRequiredDocuments(entity: any, filingType: string): string[] {
-    switch (filingType) {
-      case 'soi': {
-        const docs = ['Business entity information', 'Current business address'];
-        if (entity.entityType === 'Corporation') {
-          docs.push('Officer and director information', 'Stock information');
-        } else if (entity.entityType === 'LLC') {
-          docs.push('Member and manager information');
-        }
-        return docs;
-      }
-      case 'franchise_tax': {
-        return ['Financial statements', 'Tax calculation worksheets'];
-      }
-      default: {
-        return ['Business entity information'];
-      }
-    }
-  }
+  private identifyRequirements(_entityData: any, scope: any): RequirementItem[] {
+    const requirements: RequirementItem[] = [];
 
-  private getFormNumber(entity: any, filingType: string): string {
-    switch (filingType) {
-      case 'soi':
-        if (entity.entityType === 'Corporation' || entity.entityType === 'LLC') return 'SI-550';
-        break;
-      case 'franchise_tax':
-        return '100';
-      default:
-        return 'TBD';
-    }
-    return 'N/A';
-  }
-
-  private identifyComplianceRequirements(entity: any): ComplianceRequirement[] {
-    const requirements: ComplianceRequirement[] = [];
-
-    // SOI requirement (if applicable)
-    if (this.isFilingRequired(entity, 'soi')) {
-      requirements.push({
-        type: 'Statement of Information',
-        deadline: this.calculateFilingDueDate(entity, 'soi')?.toISOString() || '',
-        status: 'due',
-        priority: 'high',
-        fee: this.getFilingFee(entity, 'soi'),
-        forms: [this.getFormNumber(entity, 'soi')],
-        description: 'Required business information filing with CA Secretary of State'
+    // Generic requirement identification - Task Templates define specific requirements
+    if (scope?.requirements && Array.isArray(scope.requirements)) {
+      scope.requirements.forEach((req: any) => {
+        requirements.push({
+          type: req.type || 'Regulatory Filing',
+          deadline: req.deadline || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+          status: req.status || 'upcoming',
+          priority: req.priority || 'medium',
+          fee: req.fee,
+          forms: req.forms,
+          description: req.description
+        });
       });
     }
 
-    // Franchise Tax
-    requirements.push({
-      type: 'Franchise Tax Return',
-      deadline: new Date(new Date().getFullYear(), 3, 15).toISOString(), // April 15
-      status: 'upcoming',
-      priority: 'critical',
-      fee: 800, // CA minimum franchise tax
-      description: 'Annual franchise tax payment to CA Franchise Tax Board'
-    });
+    // If no specific requirements from template, return generic placeholder
+    if (requirements.length === 0) {
+      requirements.push({
+        type: 'Regulatory Review',
+        deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        status: 'upcoming',
+        priority: 'medium',
+        description: 'Review regulatory requirements for your entity'
+      });
+    }
 
     return requirements;
   }
 
-  private performRiskAssessment(requirements: ComplianceRequirement[], _entity: any): RiskAssessment {
+  private performRiskAssessment(requirements: RequirementItem[], _entityData: any): RiskAssessment {
     const overdue = requirements.filter(r => r.status === 'overdue');
     const critical = requirements.filter(r => r.priority === 'critical');
     
@@ -464,34 +384,34 @@ export class LegalComplianceAgent extends BaseAgent {
 
     if (overdue.length > 0) {
       level = 'high';
-      factors.push('Overdue compliance obligations');
+      factors.push('Overdue regulatory obligations');
       consequences.push('Penalties and interest charges', 'Loss of good standing');
-      mitigationSteps.push('File overdue requirements immediately', 'Contact agencies to discuss payment plans');
+      mitigationSteps.push('File overdue requirements immediately', 'Contact agencies to discuss resolution');
     } else if (critical.length > 2) {
       level = 'medium';
       factors.push('Multiple critical requirements pending');
-      consequences.push('Potential compliance violations');
+      consequences.push('Potential regulatory violations');
       mitigationSteps.push('Prioritize critical requirements', 'Set up deadline reminders');
     } else {
-      factors.push('Normal compliance schedule');
+      factors.push('Normal regulatory schedule');
       mitigationSteps.push('Maintain regular filing schedule', 'Monitor upcoming deadlines');
     }
 
     return { level, factors, consequences, mitigationSteps };
   }
 
-  private createFilingGuidanceUI(requirements: FilingRequirements, entity: any): UIRequest {
+  private createFilingGuidanceUI(requirements: FilingRequirements, entityData: any): UIRequest {
     return {
       requestId: `filing_guidance_${Date.now()}`,
       templateType: UITemplateType.InstructionPanel,
       semanticData: {
-        agentRole: 'legal_compliance_agent',
+        agentRole: 'legal_analysis_agent',
         title: `${requirements.filingType.toUpperCase()} Filing Requirements`,
         description: requirements.isRequired 
-          ? `Your ${entity.entityType} requires ${requirements.filingType} filing by ${requirements.dueDate?.toLocaleDateString()}`
-          : `No ${requirements.filingType} filing required for your ${entity.entityType}`,
+          ? `Your entity requires ${requirements.filingType} filing by ${requirements.dueDate?.toLocaleDateString()}`
+          : `No ${requirements.filingType} filing required for your entity`,
         requirements,
-        entity,
+        entityData,
         actions: {
           proceed: {
             type: 'submit',
@@ -514,14 +434,14 @@ export class LegalComplianceAgent extends BaseAgent {
     } as any;
   }
 
-  private createComplianceRoadmapUI(requirements: ComplianceRequirement[], risk: RiskAssessment, entity: any): UIRequest {
+  private createRegulatoryRoadmapUI(requirements: RequirementItem[], risk: RiskAssessment, _entityData: any): UIRequest {
     return {
-      requestId: `compliance_roadmap_${Date.now()}`,
+      requestId: `regulatory_roadmap_${Date.now()}`,
       templateType: UITemplateType.ComplianceRoadmap,
       semanticData: {
-        agentRole: 'legal_compliance_agent',
-        title: 'Your Compliance Roadmap',
-        description: `${requirements.length} requirements identified for your ${entity.entityType}`,
+        agentRole: 'legal_analysis_agent',
+        title: 'Your Regulatory Roadmap',
+        description: `${requirements.length} requirements identified for your entity`,
         requirements,
         riskAssessment: risk,
         summary: {
@@ -534,7 +454,7 @@ export class LegalComplianceAgent extends BaseAgent {
             type: 'submit',
             label: 'Get Started',
             primary: true,
-            handler: () => ({ action: 'start_compliance_process', requirements })
+            handler: () => ({ action: 'start_regulatory_process', requirements })
           },
           customize: {
             type: 'custom',
@@ -551,110 +471,62 @@ export class LegalComplianceAgent extends BaseAgent {
     } as any;
   }
 
-  private getGuidanceTemplate(filingType: string, entity: any): any {
+  private getGuidanceTemplate(_filingType: string, templateData: any): any {
     // Return guidance template structure - specific forms come from Task Templates
     return {
-      filingType,
-      sections: ['Business Information', 'Contact Details', 'Filing Information'],
-      fields: this.getRequiredFields(filingType, entity)
+      sections: templateData?.sections || ['Entity Information', 'Contact Details', 'Filing Information'],
+      fields: templateData?.fields || []
     };
   }
 
-  private getRequiredFields(filingType: string, _entity: any): any[] {
-    switch (filingType) {
-      case 'soi':
-        return [
-          { id: 'businessName', label: 'Business Name', type: 'text', required: true },
-          { id: 'entityType', label: 'Entity Type', type: 'select', required: true },
-          { id: 'businessAddress', label: 'Business Address', type: 'address', required: true },
-          { id: 'mailingAddress', label: 'Mailing Address', type: 'address', required: true }
-        ];
-      case 'franchise_tax':
-        return [
-          { id: 'businessName', label: 'Business Name', type: 'text', required: true },
-          { id: 'taxYear', label: 'Tax Year', type: 'number', required: true },
-          { id: 'totalIncome', label: 'Total Income', type: 'currency', required: true }
-        ];
-      default:
-        return [
-          { id: 'businessName', label: 'Business Name', type: 'text', required: true },
-          { id: 'entityType', label: 'Entity Type', type: 'select', required: true }
-        ];
-    }
-  }
-
-  private generatePrefilledData(entity: any, filingType: string): any {
-    const baseData = {
-      businessName: entity.name,
-      entityType: entity.entityType,
-      jurisdiction: entity.jurisdiction,
-      formationDate: entity.formationDate
+  private generatePrefilledData(entityData: any, templateData: any): any {
+    const baseData: any = {
+      entityName: entityData.name,
+      entityType: entityData.type,
+      jurisdiction: entityData.jurisdiction,
+      formationDate: entityData.formationDate
     };
 
-    // Add filing-specific data
-    switch (filingType) {
-      case 'franchise_tax':
-        return {
-          ...baseData,
-          taxYear: new Date().getFullYear() - 1
-        };
-      default:
-        return baseData;
+    // Add template-specific data if provided
+    if (templateData?.prefillMapping) {
+      Object.keys(templateData.prefillMapping).forEach(key => {
+        const sourceField = templateData.prefillMapping[key];
+        if (entityData[sourceField]) {
+          baseData[key] = entityData[sourceField];
+        }
+      });
     }
+
+    return baseData;
   }
 
-  private getFilingInstructions(filingType: string): string[] {
-    switch (filingType) {
-      case 'soi':
-        return [
-          'Complete all required fields accurately',
-          'Ensure business address is current',
-          'Include all required attachments',
-          'Submit with appropriate filing fee'
-        ];
-      case 'franchise_tax':
-        return [
-          'Review financial statements for accuracy',
-          'Calculate minimum tax or income-based tax',
-          'Submit by April 15th deadline',
-          'Pay minimum $800 franchise tax'
-        ];
-      default:
-        return [
-          'Review all information for accuracy',
-          'Submit by required deadline',
-          'Include all required documentation'
-        ];
+  private getFilingInstructions(templateData: any): string[] {
+    if (templateData?.instructions && Array.isArray(templateData.instructions)) {
+      return templateData.instructions;
     }
+
+    // Generic instructions if not provided by template
+    return [
+      'Review all information for accuracy',
+      'Submit by required deadline',
+      'Include all required documentation',
+      'Pay applicable fees'
+    ];
   }
 
-  private getSubmissionGuidance(filingType: string, entity: any): any {
-    switch (filingType) {
-      case 'soi':
-        return {
-          method: 'online',
-          url: 'https://bizfileonline.sos.ca.gov',
-          fee: this.getFilingFee(entity, filingType),
-          processingTime: '1-2 business days',
-          confirmationMethod: 'email'
-        };
-      case 'franchise_tax':
-        return {
-          method: 'online',
-          url: 'https://www.ftb.ca.gov',
-          fee: this.getFilingFee(entity, filingType),
-          processingTime: '3-5 business days',
-          confirmationMethod: 'mail and email'
-        };
-      default:
-        return {
-          method: 'varies',
-          url: 'Contact agency directly',
-          fee: this.getFilingFee(entity, filingType),
-          processingTime: 'varies',
-          confirmationMethod: 'varies'
-        };
+  private getSubmissionGuidance(templateData: any): any {
+    if (templateData?.submission) {
+      return templateData.submission;
     }
+
+    // Generic submission guidance
+    return {
+      method: 'varies',
+      url: 'Contact appropriate agency',
+      fee: 0,
+      processingTime: 'varies',
+      confirmationMethod: 'varies'
+    };
   }
 
   /**
@@ -667,15 +539,15 @@ export class LegalComplianceAgent extends BaseAgent {
       sequenceNumber: (context.history?.length || 0) + 1,
       actor: {
         type: 'agent',
-        id: 'legal_compliance_agent',
+        id: 'legal_analysis_agent',
         version: (this as any).specializedTemplate?.agent?.version || '1.0.0'
       },
       operation: entry.operation || 'unknown',
       data: entry.data || {},
-      reasoning: entry.reasoning || 'Legal compliance action',
+      reasoning: entry.reasoning || 'Legal analysis action',
       trigger: entry.trigger || {
         type: 'agent_request',
-        source: 'legal_compliance',
+        source: 'legal_analysis',
         details: {}
       }
     };
