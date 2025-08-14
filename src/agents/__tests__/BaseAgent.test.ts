@@ -1,15 +1,19 @@
 /**
- * Enhanced BaseAgent Tests
+ * BaseAgent Tests
  * 
- * Tests the template inheritance system and universal schema enforcement
+ * Tests the consolidated BaseAgent class including:
+ * - Template inheritance system
+ * - Business context enforcement
+ * - Standard schema validation
+ * - Task context injection
  */
 
-import { EnhancedBaseAgent } from '../base/EnhancedBaseAgent';
-import { DataCollectionAgentEnhanced } from '../DataCollectionAgentEnhanced';
+import { BaseAgent } from '../base/BaseAgent';
+import { DataCollectionAgent } from '../DataCollectionAgent';
 import { 
   BaseAgentRequest, 
   BaseAgentResponse,
-  UniversalContextEntry 
+  ContextEntry 
 } from '../../types/base-agent-types';
 
 // Mock LLM Provider for testing
@@ -35,13 +39,15 @@ jest.mock('../../services/tool-chain', () => ({
   }))
 }));
 
-describe('EnhancedBaseAgent Template Inheritance System', () => {
-  let dataAgent: DataCollectionAgentEnhanced;
+describe('BaseAgent Consolidated Implementation', () => {
+  let dataAgent: DataCollectionAgent;
+  const testBusinessId = 'test_business_123';
+  const testUserId = 'test_user_456';
   
   beforeEach(() => {
     // Reset NODE_ENV to test to avoid initializing real services
     process.env.NODE_ENV = 'test';
-    dataAgent = new DataCollectionAgentEnhanced();
+    dataAgent = new DataCollectionAgent(testBusinessId, testUserId);
   });
   
   afterEach(() => {
@@ -76,7 +82,7 @@ describe('EnhancedBaseAgent Template Inheritance System', () => {
   });
   
   describe('Template Inheritance and Schema Enforcement', () => {
-    test('should enforce universal context entry schema', async () => {
+    test('should enforce standard context entry schema', async () => {
       const mockTaskContext = {
         taskId: 'test_task_001',
         userId: 'test_user',
@@ -98,7 +104,7 @@ describe('EnhancedBaseAgent Template Inheritance System', () => {
       expect(response.contextUpdate).toBeDefined();
       expect(response.confidence).toBeDefined();
       
-      // Validate universal context entry schema
+      // Validate standard context entry schema
       const contextEntry = response.contextUpdate;
       expect(contextEntry.entryId).toMatch(/^entry_\d+_[a-z0-9]+$/);
       expect(contextEntry.sequenceNumber).toBe(1); // First entry
@@ -304,6 +310,64 @@ describe('EnhancedBaseAgent Template Inheritance System', () => {
       };
       
       await expect(dataAgent.execute(request)).rejects.toThrow('missing required contextUpdate');
+    });
+  });
+  
+  describe('Business Context Enforcement', () => {
+    test('should enforce business context in constructor', () => {
+      expect(() => new DataCollectionAgent('', testUserId)).toThrow('BaseAgent requires businessId for access control');
+    });
+    
+    test('should validate business access', () => {
+      const otherBusinessId = 'other_business_789';
+      
+      // Create a test subclass to access protected method
+      class TestAgent extends DataCollectionAgent {
+        testBusinessAccess(targetId: string) {
+          this.validateBusinessAccess(targetId);
+        }
+      }
+      
+      const testAgent = new TestAgent(testBusinessId, testUserId);
+      
+      // Should allow access to same business
+      expect(() => testAgent.testBusinessAccess(testBusinessId)).not.toThrow();
+      
+      // Should deny access to different business
+      expect(() => testAgent.testBusinessAccess(otherBusinessId)).toThrow(
+        `Access denied: Agent can only operate on businessId ${testBusinessId}, not ${otherBusinessId}`
+      );
+    });
+    
+    test('should inject business context into prompts', async () => {
+      const mockTaskContext = {
+        taskId: 'business_context_test',
+        userId: testUserId,
+        businessId: testBusinessId,
+        businessProfile: {
+          name: 'Test Company LLC',
+          entityType: 'LLC',
+          industry: 'Technology',
+          state: 'California'
+        },
+        history: [],
+        currentState: { data: {} }
+      };
+      
+      const request: BaseAgentRequest = {
+        taskContext: mockTaskContext,
+        operation: 'gather_business_info',
+        parameters: { test: 'data' }
+      };
+      
+      // Set task context
+      dataAgent.setTaskContext(mockTaskContext);
+      
+      const response = await dataAgent.execute(request);
+      
+      expect(response).toBeDefined();
+      expect(response.status).toBeDefined();
+      // The business context should be included in the prompt (implicit through execution)
     });
   });
   

@@ -1,11 +1,12 @@
 /**
- * Data Collection Agent - Enhanced with Template Inheritance
+ * Data Collection Agent
  * 
- * This demonstrates how to use the EnhancedBaseAgent with template inheritance.
- * The agent inherits universal principles from base_agent.yaml and adds specialized behavior.
+ * Specialized agent for gathering business information from various sources.
+ * Demonstrates how specialized agents extend the consolidated BaseAgent class
+ * to inherit common functionality while adding domain-specific capabilities.
  */
 
-import { EnhancedBaseAgent } from './base/EnhancedBaseAgent';
+import { BaseAgent } from './base/BaseAgent';
 import { 
   BaseAgentRequest, 
   BaseAgentResponse 
@@ -13,13 +14,17 @@ import {
 
 /**
  * Data Collection Agent Implementation
- * Inherits from EnhancedBaseAgent which merges base_agent.yaml + data_collection_agent.yaml
+ * 
+ * Extends BaseAgent to provide specialized data collection capabilities:
+ * - Business discovery from public records
+ * - Progressive disclosure form creation
+ * - Business data validation
  */
-export class DataCollectionAgentEnhanced extends EnhancedBaseAgent {
+export class DataCollectionAgent extends BaseAgent {
   
-  constructor() {
-    // Load data_collection_agent.yaml which extends base_agent
-    super('data_collection_agent.yaml');
+  constructor(businessId: string, userId?: string) {
+    // Load data_collection_agent.yaml configuration
+    super('data_collection_agent.yaml', businessId, userId);
   }
   
   /**
@@ -97,9 +102,9 @@ export class DataCollectionAgentEnhanced extends EnhancedBaseAgent {
 
 // Example usage demonstration
 export async function demonstrateDataCollectionAgent(): Promise<void> {
-  console.log('🚀 Demonstrating Enhanced Data Collection Agent with Template Inheritance');
+  console.log('🚀 Demonstrating Data Collection Agent with Template Inheritance');
   
-  const agent = new DataCollectionAgentEnhanced();
+  const agent = new DataCollectionAgent('business_123', 'user_456');
   
   // Display agent capabilities
   const capabilities = agent.getCapabilities();
@@ -161,4 +166,4 @@ export async function demonstrateDataCollectionAgent(): Promise<void> {
 }
 
 // Export for testing
-export { DataCollectionAgentEnhanced as default };
+export { DataCollectionAgent as default };

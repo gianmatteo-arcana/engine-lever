@@ -1,13 +1,15 @@
 /**
  * BaseAgent Template Types
  * 
- * These types implement the UNIVERSAL CONTEXT ENTRY CONTRACT from base_agent.yaml
- * THIS IS THE CONTRACT! - All agents MUST use this exact format
- * Backend and frontend layers MUST understand this schema
+ * Type definitions for the consolidated BaseAgent class and its configuration system.
+ * These types define the structure for:
+ * - Context entries that track agent operations
+ * - Agent configuration templates (base and specialized)
+ * - Request/response formats for agent interactions
  */
 
-// Universal Context Entry Schema - THE CONTRACT
-export interface UniversalContextEntry {
+// Standard Context Entry Schema - used by all agents
+export interface ContextEntry {
   entryId: string; // Format: "entry_<timestamp>_<random>"
   sequenceNumber: number; // Previous + 1
   timestamp: string; // ISO format
@@ -46,7 +48,7 @@ export interface BaseAgentTemplate {
   context_patterns: {
     read_pattern: string;
     write_pattern: string;
-    universal_context_entry_schema: string;
+    context_entry_schema: string;
   };
   error_handling: {
     classification: {
@@ -108,10 +110,10 @@ export interface SpecializedAgentConfig {
   fallback_patterns?: Record<string, any>;
 }
 
-// Agent Response with Universal Schema Compliance
+// Agent Response with Standard Schema Compliance
 export interface BaseAgentResponse {
   status: 'completed' | 'needs_input' | 'delegated' | 'error';
-  contextUpdate: UniversalContextEntry;
+  contextUpdate: ContextEntry;
   confidence: number; // Overall confidence (0.0-1.0)
   fallback_strategy?: string;
   uiRequests?: any[]; // UI requests batched for efficiency

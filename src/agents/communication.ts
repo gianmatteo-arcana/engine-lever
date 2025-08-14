@@ -1,4 +1,4 @@
-import { BaseAgent } from './base/BaseAgent';
+import { BaseAgent } from './base';
 import {
   AgentRole,
   AgentMessage,
