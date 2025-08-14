@@ -1,17 +1,67 @@
 /**
- * BaseAgent - Consolidated Agent Foundation
+ * 🏛️ **UNIVERSAL AGENT ARCHITECTURE - BaseAgent Foundation**
  * 
- * This class consolidates Agent.ts, BaseA2AAgent.ts, and the previous BaseAgent.ts into a single
- * unified implementation. It provides:
+ * 🎯 **CRITICAL ARCHITECTURAL PRINCIPLES - MANDATORY FOR ALL AGENTS**
  * 
- * 1. YAML configuration loading and template inheritance
- * 2. Business context enforcement (agents work on behalf of specific businesses)
- * 3. LLM prompt construction with business profile injection
- * 4. Standardized context entry schema for all agents
- * 5. Task context management and state tracking
+ * This base class enforces the core architectural pattern that ALL agents must follow:
  * 
- * All specialized agents extend this base class to inherit common functionality
- * while adding their domain-specific capabilities.
+ * ## 1. 🚫 **FORBIDDEN PATTERNS - NEVER VIOLATE THESE**
+ * 
+ * ❌ **NO hardcoded entity types** (LLC, Corporation, Partnership, etc.)
+ * ❌ **NO geographic assumptions** (California, US-specific logic)
+ * ❌ **NO task-specific business logic** (SOI filing, compliance-specific rules)
+ * ❌ **NO jurisdiction-specific code** (state laws, local regulations)
+ * 
+ * ## 2. ✅ **MANDATORY PATTERNS - ALWAYS FOLLOW THESE**
+ * 
+ * ✅ **Agents focus on ROLES and expertise** - Each agent has ONE clear mission
+ * ✅ **Task Templates provide context** - All specific logic comes from YAML configuration
+ * ✅ **Generic and reusable** - Must work with ANY jurisdiction/entity type
+ * ✅ **Toolchain integration** - Access external tools through ToolChain interface
+ * ✅ **Complete traceability** - Record every decision with reasoning in TaskContext
+ * 
+ * ## 3. 🏗️ **ARCHITECTURAL PATTERN: "Built Generically, Grounded in Examples"**
+ * 
+ * **Agent Code (TypeScript):**
+ * - Generic algorithms and business logic
+ * - Universal data structures and interfaces  
+ * - Tool access patterns and error handling
+ * - Context recording and state management
+ * 
+ * **Task Templates (YAML):**
+ * - Jurisdiction-specific rules and requirements
+ * - Entity type definitions and mappings
+ * - Tool configurations and data sources
+ * - Workflow steps and UI templates
+ * 
+ * ## 4. 🔧 **TOOLCHAIN INTEGRATION PATTERN**
+ * 
+ * All agents access external tools through ToolChain:
+ * ```typescript
+ * // TODO: Access ToolChain for [agent-specific capability]
+ * // const toolName = await this.toolChain.getTool('tool_name');
+ * // const result = await toolName.performAction(parameters);
+ * ```
+ * 
+ * ## 5. 📋 **TASK CONTEXT RECORDING**
+ * 
+ * Every agent action MUST be recorded:
+ * ```typescript
+ * await this.recordContextEntry(context, {
+ *   operation: 'descriptive_operation_name',
+ *   data: { relevant: 'data' },
+ *   reasoning: 'Clear explanation of why this action was taken'
+ * });
+ * ```
+ * 
+ * ## 6. ⚠️ **ENFORCEMENT**
+ * 
+ * Violations will be rejected in code review:
+ * - Search code for: `LLC|Corporation|California|SOI|Secretary of State`
+ * - Agent code must work with ANY Task Template configuration
+ * - All specifics come from Task Templates, not agent code
+ * 
+ * **Remember**: Agents provide CAPABILITIES, Task Templates define WORKFLOWS
  */
 
 import * as fs from 'fs';

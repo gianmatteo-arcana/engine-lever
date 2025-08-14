@@ -70,6 +70,20 @@ export class AgencyInteractionAgent extends BaseAgent {
   async processRequest(request: AgentRequest, context: TaskContext): Promise<AgentResponse> {
     const requestId = `epa_${Date.now()}`;
     
+    // TODO: Access ToolChain for external portal interactions
+    // const portalNavigator = await this.toolChain.getTool('portal_navigation_service');
+    // const formSubmissionService = await this.toolChain.getTool('form_submission_service');
+    // const documentRetrieval = await this.toolChain.getTool('document_retrieval_service');
+    // const captchaSolver = await this.toolChain.getTool('captcha_solver_service');
+    // const receiptProcessor = await this.toolChain.getTool('receipt_processor');
+    //
+    // Examples of tools this agent would ideally access:
+    // - Web automation tools (Puppeteer, Playwright, Selenium)
+    // - Portal-specific API connectors
+    // - Document parsers and extractors
+    // - Payment processing handlers
+    // - Status monitoring and webhooks
+    
     try {
       // Record portal interaction initiation
       await this.recordContextEntry(context, {

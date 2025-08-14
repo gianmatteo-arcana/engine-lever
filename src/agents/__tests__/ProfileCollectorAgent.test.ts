@@ -52,6 +52,23 @@ describe('ProfileCollector', () => {
         version: '2.0',
         metadata: { name: 'Test Template', description: 'Test', category: 'test' },
         goals: { primary: [] }
+      },
+      metadata: {
+        // Add Task Template metadata for location mapping and entity types
+        locationMapping: {
+          'austin': 'TX',
+          'texas': 'TX',
+          'san francisco': 'CA',
+          'california': 'CA',
+          'delaware': 'DE',
+          'new york': 'NY',
+          'seattle': 'WA'
+        },
+        defaultEntityTypes: {
+          businessEmail: 'registered_entity',
+          personalEmail: 'individual_entity'
+        },
+        defaultLocation: 'CA'
       }
     };
   });
@@ -90,7 +107,7 @@ describe('ProfileCollector', () => {
 
       expect(response.status).toBe('needs_input');
       expect(response.data.smartDefaults.businessName).toBe('Innovative Design LLC');
-      expect(response.data.smartDefaults.entityType).toBe('LLC');
+      expect(response.data.smartDefaults.entityType).toBe('registered_entity');
       expect(response.data.smartDefaults.state).toBe('TX');
       expect(response.data.smartDefaults.confidence).toBeGreaterThan(0.8);
       expect(response.data.strategy).toBe('high_confidence_prefill');
@@ -135,10 +152,10 @@ describe('ProfileCollector', () => {
       expect(businessNameField?.defaultValue).toBe('TechStart Inc');
       
       const entityTypeField = uiRequest.semanticData.formDefinition?.find((f: any) => f.id === 'entityType');
-      expect(entityTypeField?.defaultValue).toBe('Corporation');
+      expect(entityTypeField?.defaultValue).toBe('registered_entity'); // Corporation mapped to generic type
       
-      const stateField = uiRequest.semanticData.formDefinition?.find((f: any) => f.id === 'state');
-      expect(stateField?.defaultValue).toBe('DE');
+      const locationField = uiRequest.semanticData.formDefinition?.find((f: any) => f.id === 'location');
+      expect(locationField?.defaultValue).toBe('DE');
     });
   });
 
@@ -171,7 +188,7 @@ describe('ProfileCollector', () => {
 
       expect(response.status).toBe('needs_input');
       expect(response.data.smartDefaults.businessName).toBe('Innovative Design');
-      expect(response.data.smartDefaults.entityType).toBe('LLC'); // Business domain suggests LLC
+      expect(response.data.smartDefaults.entityType).toBe('registered_entity'); // Business domain suggests registered entity
       expect(response.data.smartDefaults.state).toBe('TX'); // From location
       expect(response.data.strategy).toBe('moderate_confidence_suggest');
     });
@@ -199,7 +216,7 @@ describe('ProfileCollector', () => {
       const response = await agent.processRequest(request, mockContext);
 
       expect(response.data.smartDefaults.businessName).toBeUndefined();
-      expect(response.data.smartDefaults.entityType).toBe('Sole Proprietorship');
+      expect(response.data.smartDefaults.entityType).toBe('individual_entity');
       expect(response.data.strategy).toBe('guided_collection');
       expect(response.uiRequests![0].semanticData.title).toContain('Tell Us About Your Business');
     });
@@ -220,7 +237,7 @@ describe('ProfileCollector', () => {
       const defaults = (agent as any).createDefaults(businessDiscovery, mockContext);
 
       expect(defaults.businessName).toBe('Austin Creative LLC');
-      expect(defaults.entityType).toBe('LLC');
+      expect(defaults.entityType).toBe('registered_entity');
       expect(defaults.state).toBe('TX');
       expect(defaults.confidence).toBeGreaterThan(0.8);
     });
@@ -231,7 +248,7 @@ describe('ProfileCollector', () => {
       const defaults = (agent as any).createDefaults(businessDiscovery, mockContext);
 
       expect(defaults.businessName).toBe('Innovative Design');
-      expect(defaults.entityType).toBe('LLC');
+      expect(defaults.entityType).toBe('registered_entity');
       expect(defaults.state).toBe('TX');
       expect(defaults.confidence).toBeGreaterThan(0.4);
       expect(defaults.confidence).toBeLessThan(0.8);
@@ -243,7 +260,7 @@ describe('ProfileCollector', () => {
 
       const defaults = (agent as any).createDefaults(businessDiscovery, mockContext);
 
-      expect(defaults.state).toBe('CA'); // Default fallback
+      expect(defaults.state).toBe('CA'); // Default fallback from metadata
       expect(defaults.confidence).toBeGreaterThan(0);
     });
   });
@@ -289,7 +306,7 @@ describe('ProfileCollector', () => {
   describe('Form Generation', () => {
     test('should generate base fields for all strategies', () => {
       const strategy = 'guided_collection';
-      const defaults = { confidence: 0.3, businessName: 'Test', entityType: 'LLC', state: 'CA' };
+      const defaults = { confidence: 0.3, businessName: 'Test', entityType: 'registered_entity', state: 'CA' };
       const existing = {};
 
       const form = (agent as any).createForm(strategy, defaults, existing);
@@ -306,9 +323,9 @@ describe('ProfileCollector', () => {
       expect(entityTypeField.type).toBe('select');
       expect(entityTypeField.options).toBeDefined();
 
-      const stateField = form.find((f: any) => f.id === 'state');
-      expect(stateField).toBeDefined();
-      expect(stateField.type).toBe('select');
+      const locationField = form.find((f: any) => f.id === 'location');
+      expect(locationField).toBeDefined();
+      expect(locationField.type).toBe('select');
     });
 
     test('should include optional fields for high confidence strategy', () => {
@@ -445,19 +462,19 @@ describe('ProfileCollector', () => {
     });
 
     test('should extract state from location correctly', () => {
-      expect((agent as any).getStateFromLocation('Austin, TX')).toBe('TX');
-      expect((agent as any).getStateFromLocation('San Francisco, CA')).toBe('CA');
-      expect((agent as any).getStateFromLocation('New York')).toBe('NY');
-      expect((agent as any).getStateFromLocation('Seattle')).toBe('WA');
-      expect((agent as any).getStateFromLocation('Unknown City')).toBe(''); // No default
+      expect((agent as any).getLocationCode('Austin, TX', mockContext)).toBe('TX');
+      expect((agent as any).getLocationCode('San Francisco, CA', mockContext)).toBe('CA');
+      expect((agent as any).getLocationCode('New York', mockContext)).toBe('NY');
+      expect((agent as any).getLocationCode('Seattle', mockContext)).toBe('WA');
+      expect((agent as any).getLocationCode('Unknown City', mockContext)).toBe(''); // No default
     });
 
     test('should infer entity type based on context', () => {
       const businessEmailUser = { email: 'owner@techcompany.com' };
-      expect((agent as any).inferEntityType(businessEmailUser, mockContext)).toBe('LLC');
+      expect((agent as any).inferEntityType(businessEmailUser, mockContext)).toBe('registered_entity');
 
       const personalEmailUser = { email: 'john@gmail.com' };
-      expect((agent as any).inferEntityType(personalEmailUser, mockContext)).toBe('Sole Proprietorship');
+      expect((agent as any).inferEntityType(personalEmailUser, mockContext)).toBe('individual_entity');
     });
 
     test('should infer industry from business name', () => {

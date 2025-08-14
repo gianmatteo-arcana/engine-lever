@@ -59,7 +59,7 @@ interface SearchPatterns {
  */
 export class BusinessDiscoveryAgent extends BaseAgent {
   constructor(businessId: string, userId?: string) {
-    super('entity_discovery_agent.yaml', businessId, userId);
+    super('business_discovery_agent.yaml', businessId, userId);
   }
 
   /**
@@ -358,7 +358,7 @@ export class BusinessDiscoveryAgent extends BaseAgent {
     matchQuality?: string;
   }> {
     // Task Templates provide source-specific search configuration
-    const sourceConfig = context.metadata?.dataSourceConfigs?.[source] || {};
+    const _sourceConfig = context.metadata?.dataSourceConfigs?.[source] || {};
     
     // This would integrate with actual data sources via ToolChain
     // For now, return not found to maintain system flow

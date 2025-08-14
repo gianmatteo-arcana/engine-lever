@@ -84,6 +84,11 @@ export class PaymentAgent extends BaseAgent {
   async processRequest(request: AgentRequest, context: TaskContext): Promise<AgentResponse> {
     const requestId = `pa_${Date.now()}`;
     
+    // TODO: Access ToolChain for payment processing
+    // const paymentProcessor = await this.toolChain.getTool('payment_processor');
+    // const receiptGenerator = await this.toolChain.getTool('receipt_generator');
+    // const refundProcessor = await this.toolChain.getTool('refund_processor');
+    
     try {
       // Record payment operation initiation
       await this.recordContextEntry(context, {
@@ -374,27 +379,38 @@ export class PaymentAgent extends BaseAgent {
 
   // Helper methods for payment processing
   private extractEntityType(context: TaskContext): string {
-    return context.currentState.data.business?.entityType || 'LLC';
+    return context.currentState.data.business?.entityType || 
+           context.metadata?.defaultEntityType || 
+           'registered_entity';
   }
 
   private extractJurisdiction(context: TaskContext): string {
-    return context.currentState.data.business?.state || 'CA';
+    return context.currentState.data.business?.location || 
+           context.currentState.data.business?.state || 
+           context.metadata?.defaultJurisdiction || 
+           'default';
   }
 
   private computePaymentBreakdown(filingType: string, entityType: string, jurisdiction: string): PaymentBreakdown {
-    // Government fees by filing type and jurisdiction
-    const governmentFees: Record<string, Record<string, number>> = {
-      'soi': {
-        'CA': entityType === 'Corporation' ? 25 : 20
-      },
-      'franchise_tax': {
-        'CA': 800
-      }
-    };
-
-    const governmentFee = governmentFees[filingType]?.[jurisdiction] || 50;
-    const serviceFee = Math.round(governmentFee * 0.1); // 10% service fee
-    const processingFee = 2.99; // Fixed processing fee
+    // TODO: Get fee structure from ToolChain based on Task Template
+    // const feeCalculator = await this.toolChain.getTool('fee_calculator_service');
+    // const paymentBreakdown = await feeCalculator.calculateFees({
+    //   filingType: filingType,
+    //   entityType: entityType,
+    //   jurisdiction: jurisdiction
+    // });
+    //
+    // Examples of tools this agent would ideally access:
+    // - Real-time fee lookup services
+    // - Payment gateway integrations (Stripe, PayPal)
+    // - Receipt generation services
+    // - Transaction monitoring and reconciliation
+    
+    // Generic fee calculation - Task Templates provide specific fee structures
+    // For now, use simple defaults since we don't have context stored
+    const governmentFee = 50; // Default fee
+    const serviceFee = Math.round(governmentFee * 0.1);
+    const processingFee = 2.99;
     const total = governmentFee + serviceFee + processingFee;
 
     return {

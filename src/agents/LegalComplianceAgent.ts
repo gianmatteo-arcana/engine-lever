@@ -63,6 +63,13 @@ export class LegalComplianceAgent extends BaseAgent {
   async processRequest(request: AgentRequest, context: TaskContext): Promise<AgentResponse> {
     const requestId = `lca_${Date.now()}`;
     
+    // TODO: Access ToolChain for legal research and analysis
+    // const legalResearchEngine = await this.toolChain.getTool('legal_research_engine');
+    // const regulatoryDatabase = await this.toolChain.getTool('regulatory_database');
+    // const complianceCalendar = await this.toolChain.getTool('compliance_calendar_service');
+    // const documentGenerator = await this.toolChain.getTool('legal_document_generator');
+    // const riskAnalyzer = await this.toolChain.getTool('regulatory_risk_analyzer');
+    
     try {
       // Extract entity data from context
       const entityData = this.extractEntityData(context);
@@ -343,6 +350,15 @@ export class LegalComplianceAgent extends BaseAgent {
 
   private identifyRequirements(_entityData: any, scope: any): RequirementItem[] {
     const requirements: RequirementItem[] = [];
+
+    // TODO: Use ToolChain for regulatory requirement research
+    // const regulatoryResearch = await this.toolChain.getTool('regulatory_research_engine');
+    // const requirements = await regulatoryResearch.identifyRequirements({
+    //   entityType: entityData.type,
+    //   jurisdiction: entityData.jurisdiction,
+    //   industry: entityData.industry,
+    //   scope: scope
+    // });
 
     // Generic requirement identification - Task Templates define specific requirements
     if (scope?.requirements && Array.isArray(scope.requirements)) {

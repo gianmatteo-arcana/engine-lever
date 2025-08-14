@@ -20,13 +20,14 @@ import { DatabaseService } from '../services/database';
 
 interface ProfileData {
   businessName: string;
-  entityType: 'LLC' | 'Corporation' | 'Partnership' | 'Sole Proprietorship';
-  state: string;
+  entityType: string; // Generic - Task Templates define valid types
+  location?: string; // Generic location - Task Templates define format
   formationDate?: string;
-  ein?: string;
+  identifier?: string; // Generic identifier (EIN, registration number, etc)
   website?: string;
   industry?: string;
   employeeCount?: number;
+  attributes?: Record<string, any>; // Task Template specific attributes
 }
 
 interface FormFieldDefinition {
@@ -62,6 +63,12 @@ export class ProfileCollectorAgent extends BaseAgent {
   async processRequest(request: AgentRequest, context: TaskContext): Promise<AgentResponse> {
     const requestId = `pca_${Date.now()}`;
     
+    // TODO: Access ToolChain for smart defaults generation
+    // const smartDefaultsEngine = await this.toolChain.getTool('smart_defaults_engine');
+    // const progressiveDisclosureManager = await this.toolChain.getTool('progressive_disclosure_manager');
+    // const formValidationService = await this.toolChain.getTool('form_validation_service');
+    // const businessInfoInferencer = await this.toolChain.getTool('business_info_inferencer');
+    
     try {
       // Extract context from previous agents
       const businessDiscoveryResult = this.getBusinessResult(context);
@@ -79,6 +86,12 @@ export class ProfileCollectorAgent extends BaseAgent {
       });
 
       // Generate smart defaults
+      // TODO: Use smart_defaults_engine tool for intelligent pre-filling
+      // const smartDefaults = await smartDefaultsEngine.generateDefaults({
+      //   businessDiscovery: businessDiscoveryResult,
+      //   userData: context.currentState.data.user,
+      //   existingData: existingData
+      // });
       const smartDefaults = this.createDefaults(businessDiscoveryResult, context);
       
       // Determine collection strategy based on available data
@@ -95,6 +108,13 @@ export class ProfileCollectorAgent extends BaseAgent {
       });
 
       // Generate optimized form based on strategy
+      // TODO: Use progressive_disclosure_manager for intelligent form generation
+      // const formDefinition = await progressiveDisclosureManager.createOptimizedForm({
+      //   strategy: strategy,
+      //   defaults: smartDefaults,
+      //   existingData: existingData,
+      //   userContext: context.currentState
+      // });
       const formDefinition = this.createForm(strategy, smartDefaults, existingData);
       
       // Create UI request for profile collection
@@ -165,10 +185,11 @@ export class ProfileCollectorAgent extends BaseAgent {
     const rawData = {
       businessName: business.name,
       entityType: business.entityType,
-      state: business.state,
-      ein: business.ein,
+      location: business.location || business.state,
+      identifier: business.identifier || business.ein,
       website: business.website,
-      industry: business.industry
+      industry: business.industry,
+      ...business.attributes
     };
     
     // Filter out undefined values to get accurate count of existing data
@@ -192,10 +213,14 @@ export class ProfileCollectorAgent extends BaseAgent {
     // Use business discovery results if available
     if (businessDiscovery.found && businessDiscovery.business) {
       defaults.businessName = businessDiscovery.business.name;
-      defaults.entityType = businessDiscovery.business.entityType;
-      defaults.state = this.normalizeState(businessDiscovery.business.state);
+      defaults.entityType = this.mapDiscoveredEntityType(businessDiscovery.business.entityType, context);
+      defaults.state = this.normalizeLocation(businessDiscovery.business.location || businessDiscovery.business.state, context);
       defaults.confidence = businessDiscovery.confidence; // Use business discovery confidence as primary
       confidenceFactors = 1; // Don't average with other factors for high-confidence discovery
+      
+      // TODO: Use business_info_inferencer for additional inference
+      // const inferredData = await businessInfoInferencer.inferFromDiscovery(businessDiscovery);
+      // Object.assign(defaults, inferredData);
     } else {
       // Infer from user data
       const userData = context.currentState.data.user || {};
@@ -221,9 +246,9 @@ export class ProfileCollectorAgent extends BaseAgent {
         confidenceFactors += 1;
       }
 
-      // Default state from location
+      // Default location from user data
       if (userData.location) {
-        defaults.state = this.getStateFromLocation(userData.location);
+        defaults.state = this.getLocationCode(userData.location, context);
         if (isPersonalEmail) {
           defaults.confidence += 0.2; // Lower confidence for personal emails
         } else {
@@ -231,8 +256,8 @@ export class ProfileCollectorAgent extends BaseAgent {
         }
         confidenceFactors += 1;
       } else {
-        // Fallback to CA when no location provided
-        defaults.state = 'CA';
+        // Use Task Template default location if no user location
+        defaults.state = context.metadata?.defaultLocation || '';
         if (isPersonalEmail) {
           defaults.confidence += 0.1; // Very low confidence for personal emails with no location
         } else {
@@ -297,21 +322,16 @@ export class ProfileCollectorAgent extends BaseAgent {
         label: 'Business Entity Type',
         required: true,
         defaultValue: defaults.entityType || existing.entityType || '',
-        options: [
-          { value: 'LLC', label: 'Limited Liability Company (LLC)' },
-          { value: 'Corporation', label: 'Corporation' },
-          { value: 'Sole Proprietorship', label: 'Sole Proprietorship' },
-          { value: 'Partnership', label: 'Partnership' }
-        ],
+        options: this.getEntityTypeOptions(existing),
         helpText: 'Choose the legal structure of your business'
       },
       {
-        id: 'state',
+        id: 'location',
         type: 'select',
-        label: 'State of Formation',
+        label: 'Business Location',
         required: true,
-        defaultValue: defaults.state || existing.state || '',
-        options: this.getStateOptions(),
+        defaultValue: defaults.state || existing.location || '',
+        options: this.getLocationOptions(existing),
         helpText: 'Where your business is legally registered'
       }
     ];
@@ -436,53 +456,111 @@ export class ProfileCollectorAgent extends BaseAgent {
                      .join(' ');
   }
 
-  private normalizeState(stateName: string): string {
-    const stateNormalization: Record<string, string> = {
-      'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR',
-      'california': 'CA', 'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE',
-      'florida': 'FL', 'georgia': 'GA', 'hawaii': 'HI', 'idaho': 'ID',
-      'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA', 'kansas': 'KS',
-      'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
-      'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS',
-      'missouri': 'MO', 'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV',
-      'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
-      'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH', 'oklahoma': 'OK',
-      'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
-      'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT',
-      'vermont': 'VT', 'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV',
-      'wisconsin': 'WI', 'wyoming': 'WY'
+  private normalizeLocation(locationName: string, context?: TaskContext): string {
+    // TODO: Use location normalization from ToolChain
+    // const locationService = await this.toolChain.getTool('location_normalization_service');
+    // return await locationService.normalize(locationName);
+    
+    if (!locationName) return '';
+    
+    // If context provided, use location mapping like getLocationCode
+    if (context) {
+      return this.getLocationCode(locationName, context);
+    }
+    
+    // Fallback: generic location mapping for common cases
+    const locationLower = locationName.toLowerCase();
+    const commonMappings: Record<string, string> = {
+      'delaware': 'DE',
+      'texas': 'TX', 
+      'california': 'CA',
+      'new york': 'NY',
+      'florida': 'FL'
     };
     
-    const normalized = stateNormalization[stateName.toLowerCase()];
-    return normalized || stateName.toUpperCase(); // Return abbreviated form or original
-  }
-
-  private getStateFromLocation(location: string): string {
-    const stateMap: Record<string, string> = {
-      'california': 'CA', 'ca': 'CA', 'san francisco': 'CA', 'los angeles': 'CA',
-      'new york': 'NY', 'ny': 'NY', 'manhattan': 'NY', 'brooklyn': 'NY',
-      'texas': 'TX', 'tx': 'TX', 'austin': 'TX', 'houston': 'TX',
-      'florida': 'FL', 'fl': 'FL', 'miami': 'FL', 'orlando': 'FL',
-      'washington': 'WA', 'wa': 'WA', 'seattle': 'WA',
-      'delaware': 'DE', 'de': 'DE'
-    };
-    
-    const locationLower = location.toLowerCase();
-    for (const [key, state] of Object.entries(stateMap)) {
+    for (const [key, code] of Object.entries(commonMappings)) {
       if (locationLower.includes(key)) {
-        return state;
+        return code;
       }
     }
-    // Return empty string if no state found - let Task Template provide default
+    
+    // Return original if no mapping found
+    return locationName.toUpperCase();
+  }
+
+  private getLocationCode(location: string, context: TaskContext): string {
+    // TODO: Use location extraction service from ToolChain
+    // const locationService = await this.toolChain.getTool('location_extraction_service');
+    // return await locationService.extractCode(location, context.metadata?.locationFormat);
+    
+    // Get location mapping from Task Template metadata
+    const locationMap = context.metadata?.locationMapping || {};
+    
+    const locationLower = location.toLowerCase();
+    for (const [key, code] of Object.entries(locationMap)) {
+      if (locationLower.includes(key.toLowerCase())) {
+        return code as string;
+      }
+    }
+    
+    // Return empty string if no location found - let Task Template provide default
     return '';
   }
 
-  private inferEntityType(userData: any, _context: TaskContext): string {
+  /**
+   * Map discovered entity types to generic types
+   * Task Templates define specific mappings for different jurisdictions
+   */
+  private mapDiscoveredEntityType(discoveredType: string, context: TaskContext): string {
+    // TODO: Get entity type mapping from ToolChain based on Task Template
+    // const entityMapper = await this.toolChain.getTool('entity_type_mapper');
+    // return await entityMapper.mapToGeneric(discoveredType, context.metadata?.jurisdiction);
+    
+    // Get entity type mapping from Task Template metadata
+    const entityTypeMap = context.metadata?.entityTypeMapping || {};
+    
+    // Check for direct mapping
+    if (entityTypeMap[discoveredType]) {
+      return entityTypeMap[discoveredType];
+    }
+    
+    // Fallback generic mapping for common types
+    const discoveredLower = discoveredType.toLowerCase();
+    if (discoveredLower.includes('llc') || 
+        discoveredLower.includes('limited liability') ||
+        discoveredLower.includes('corporation') ||
+        discoveredLower.includes('corp') ||
+        discoveredLower.includes('inc')) {
+      return 'registered_entity';
+    }
+    
+    if (discoveredLower.includes('sole') || 
+        discoveredLower.includes('individual') ||
+        discoveredLower.includes('proprietorship')) {
+      return 'individual_entity';
+    }
+    
+    if (discoveredLower.includes('partnership')) {
+      return 'partnership_entity';
+    }
+    
+    // Default to registered entity for unknown types
+    return 'registered_entity';
+  }
+
+  private inferEntityType(userData: any, context: TaskContext): string {
+    // TODO: Use business entity inference from ToolChain
+    // const entityInferencer = await this.toolChain.getTool('entity_type_inferencer');
+    // return await entityInferencer.infer(userData, context);
+    
+    // Use Task Template default entity types
+    const defaultEntityTypes = context.metadata?.defaultEntityTypes || {};
+    
     // Simple heuristics for entity type
     if (userData.email && !this.isPersonalEmailDomain(userData.email)) {
-      return 'LLC'; // Business domain suggests established entity
+      return defaultEntityTypes.businessEmail || 'registered_entity';
     }
-    return 'Sole Proprietorship'; // Conservative default
+    return defaultEntityTypes.personalEmail || 'individual_entity';
   }
 
   private inferIndustry(businessName?: string, _context?: TaskContext): string | undefined {
@@ -508,14 +586,33 @@ export class ProfileCollectorAgent extends BaseAgent {
     return undefined;
   }
 
-  private getStateOptions() {
+  private getLocationOptions(_existing: Partial<ProfileData>) {
+    // TODO: Get location options from ToolChain based on Task Template
+    // const locationService = await this.toolChain.getTool('location_options_service');
+    // return await locationService.getOptions(context.metadata?.jurisdiction);
+    
     // Task Templates provide jurisdiction-specific options
-    // This is just a generic list for demonstration
+    // This is just a generic placeholder
     return [
-      { value: 'STATE_1', label: 'State 1' },
-      { value: 'STATE_2', label: 'State 2' },
-      { value: 'STATE_3', label: 'State 3' },
-      // Task Templates will override with actual states
+      { value: 'LOCATION_1', label: 'Location 1' },
+      { value: 'LOCATION_2', label: 'Location 2' },
+      { value: 'LOCATION_3', label: 'Location 3' },
+      // Task Templates will override with actual locations
+    ];
+  }
+  
+  private getEntityTypeOptions(_existing: Partial<ProfileData>) {
+    // TODO: Get entity type options from ToolChain based on Task Template
+    // const entityService = await this.toolChain.getTool('entity_types_service');
+    // return await entityService.getOptions(context.metadata?.jurisdiction);
+    
+    // Task Templates provide entity type options
+    return [
+      { value: 'registered_entity', label: 'Registered Business Entity' },
+      { value: 'individual_entity', label: 'Individual/Sole Operator' },
+      { value: 'partnership_entity', label: 'Partnership' },
+      { value: 'other_entity', label: 'Other' },
+      // Task Templates will override with jurisdiction-specific types
     ];
   }
 
