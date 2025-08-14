@@ -3,7 +3,7 @@
  * 
  * Engine PRD Compliant Implementation
  * Creates ANY task type using identical flow
- * Zero special cases, 100% universal
+ * Zero special cases, unified approach
  */
 
 import { DatabaseService } from './database';
