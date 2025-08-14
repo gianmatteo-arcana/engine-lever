@@ -495,7 +495,7 @@ describe('CommunicationAgent', () => {
       const response = await agent.processRequest(request, mockTaskContext);
 
       // Should still process successfully despite database error
-      expect(response.status).toBe('completed');
+      expect(response.status).toBe('needs_input'); // CommunicationAgent generates UI for user interaction
       expect(response.data.notification).toBeDefined();
     });
   });
