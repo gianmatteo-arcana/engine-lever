@@ -225,14 +225,14 @@ export class DataCollectionAgent extends Agent {
             },
             operation: 'public_records_found',
             data: {
-              source: 'ca_sos',
+              source: 'public_records',
               business: {
                 entityType: publicData.entityType,
                 formationDate: publicData.formationDate,
                 status: publicData.status
               }
             },
-            reasoning: 'Found business in California Secretary of State database'
+            reasoning: 'Found business in public records database'
           }
         };
       }

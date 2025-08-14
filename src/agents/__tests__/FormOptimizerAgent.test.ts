@@ -228,10 +228,10 @@ describe('FormOptimizer', () => {
       expect(quickActions).toBeDefined();
       expect(quickActions.length).toBeGreaterThan(0);
       
-      // Should have single-member LLC action
-      const singleLLC = quickActions.find((a: any) => a.id === 'single_llc');
-      expect(singleLLC).toBeDefined();
-      expect(singleLLC.prefilledData.entityType).toBe('LLC');
+      // Should have individual entity action (generic replacement for single LLC)
+      const individualEntity = quickActions.find((a: any) => a.id === 'individual_entity');
+      expect(individualEntity).toBeDefined();
+      expect(individualEntity.prefilledData.entityType).toBe('individual_entity');
     });
 
     test('should include industry-specific quick actions', async () => {
@@ -249,9 +249,9 @@ describe('FormOptimizer', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const quickActions = response.data.optimizedForm.quickActions;
-      const techStartup = quickActions.find((a: any) => a.id === 'tech_startup');
-      expect(techStartup).toBeDefined();
-      expect(techStartup.prefilledData.industry).toBe('Technology');
+      const techEntity = quickActions.find((a: any) => a.id === 'tech_entity');
+      expect(techEntity).toBeDefined();
+      expect(techEntity.prefilledData.industry).toBe('Technology');
     });
   });
 

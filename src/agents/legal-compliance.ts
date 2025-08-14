@@ -24,7 +24,7 @@ export class LegalComplianceAgent extends BaseAgent {
         name: 'Legal Compliance Specialist',
         description: 'Paralegal with Regulatory Expertise',
         expertise: [
-          'California business compliance',
+          'Business regulatory compliance',
           'Form interpretation and completion',
           'Deadline tracking and management',
           'Regulatory requirement analysis',
@@ -47,7 +47,7 @@ export class LegalComplianceAgent extends BaseAgent {
       {
         canInitiateTasks: false,
         canDelegateTasks: false,
-        requiredTools: ['ca-sos-lookup', 'form-parser', 'deadline-calculator'],
+        requiredTools: ['registry-lookup', 'form-parser', 'deadline-calculator'],
         maxConcurrentTasks: 5,
         supportedMessageTypes: ['request', 'response', 'notification']
       }
@@ -262,7 +262,7 @@ export class LegalComplianceAgent extends BaseAgent {
           businessInfo: {
             name: '',
             fileNumber: '',
-            jurisdiction: 'California'
+            jurisdiction: ''
           },
           principalAddress: {
             street: '',
@@ -324,7 +324,7 @@ export class LegalComplianceAgent extends BaseAgent {
 
   private getFilingInstructions(_formNumber: string): string[] {
     return [
-      'Log in to California Business Search',
+      'Log in to business registry portal',
       'Locate your business entity',
       'Select "File Statement of Information"',
       'Complete all required fields',

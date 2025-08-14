@@ -209,7 +209,7 @@ describe('BaseAgent Consolidated Implementation', () => {
       const response = await dataAgent.discoverBusiness('test@techcorp.com', mockTaskContext);
       
       expect(response.status).toBeDefined();
-      expect(response.contextUpdate.operation).toBe('business_discovery');
+      expect(response.contextUpdate.operation).toBe('entity_discovery');
       expect(response.contextUpdate.data).toBeDefined();
     });
     
@@ -241,7 +241,7 @@ describe('BaseAgent Consolidated Implementation', () => {
       const mockBusinessData = {
         name: 'TechCorp LLC',
         entityType: 'LLC',
-        state: 'California'
+        state: 'State1'
       };
       
       const response = await dataAgent.validateBusinessData(mockBusinessData, mockTaskContext);
@@ -348,7 +348,7 @@ describe('BaseAgent Consolidated Implementation', () => {
           name: 'Test Company LLC',
           entityType: 'LLC',
           industry: 'Technology',
-          state: 'California'
+          state: 'State1'
         },
         history: [],
         currentState: { data: {} }

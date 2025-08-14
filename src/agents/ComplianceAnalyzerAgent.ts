@@ -20,12 +20,13 @@ import { DatabaseService } from '../services/database';
 
 interface BusinessProfile {
   name: string;
-  entityType: 'LLC' | 'Corporation' | 'Partnership' | 'Sole Proprietorship';
-  state: string;
+  entityType: string; // Generic - Task Templates define valid types
+  location?: string; // Generic location - Task Templates define format
   industry?: string;
   formationDate?: string;
   employeeCount?: number;
   website?: string;
+  attributes?: Record<string, any>; // Task Template specific attributes
 }
 
 interface ComplianceRequirement {
@@ -90,7 +91,7 @@ export class ComplianceAnalyzerAgent extends BaseAgent {
       });
 
       // Perform regulatory analysis
-      const complianceRequirements = await this.analyzeComplianceRequirements(businessProfile);
+      const complianceRequirements = await this.analyzeComplianceRequirements(businessProfile, context);
       
       // Generate compliance calendar
       const complianceCalendar = this.generateComplianceCalendar(businessProfile, complianceRequirements);
@@ -157,33 +158,37 @@ export class ComplianceAnalyzerAgent extends BaseAgent {
     // Look for profile collection results
     const profileEntry = context.history.find(entry => 
       entry.operation === 'profile_collection_initiated' || 
-      entry.operation === 'business_found'
+      entry.operation === 'entity_discovered'
     );
 
-    const profileData = profileEntry?.data?.business || {};
+    const profileData = profileEntry?.data?.entity || profileEntry?.data?.business || {};
 
-    return {
+    // Build profile from available data - Task Templates define defaults
+    const profile: BusinessProfile = {
       name: profileData.name || business.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-      entityType: profileData.entityType || business.entityType || 'Sole Proprietorship',
-      state: profileData.state || business.state || 'CA',
+      entityType: profileData.entityType || business.entityType || context.metadata?.defaultEntityType || 'unspecified',
+      location: profileData.location || profileData.state || business.location || business.state || user.location || context.metadata?.defaultLocation,
       industry: profileData.industry || business.industry,
       formationDate: profileData.formationDate || business.formationDate,
-      employeeCount: business.employeeCount || 1,
-      website: profileData.website || business.website
-    } as any;
+      employeeCount: business.employeeCount,
+      website: profileData.website || business.website,
+      attributes: { ...profileData.attributes, ...business.attributes }
+    };
+
+    return profile;
   }
 
   /**
    * Analyze compliance requirements based on business profile
    */
-  private async analyzeComplianceRequirements(profile: BusinessProfile): Promise<ComplianceRequirement[]> {
+  private async analyzeComplianceRequirements(profile: BusinessProfile, context: TaskContext): Promise<ComplianceRequirement[]> {
     const requirements: ComplianceRequirement[] = [];
 
     // Entity-specific requirements
-    requirements.push(...this.getEntityTypeRequirements(profile));
+    requirements.push(...this.getEntityTypeRequirements(profile, context));
     
     // State-specific requirements
-    requirements.push(...this.getStateRequirements(profile));
+    requirements.push(...this.getStateRequirements(profile, context));
     
     // Industry-specific requirements
     if (profile.industry) {
@@ -191,7 +196,7 @@ export class ComplianceAnalyzerAgent extends BaseAgent {
     }
     
     // Federal tax requirements
-    requirements.push(...this.getFederalTaxRequirements(profile));
+    requirements.push(...this.getFederalTaxRequirements(profile, context));
     
     // Calculate deadlines for all requirements
     this.calculateDeadlines(requirements, profile);
@@ -207,122 +212,118 @@ export class ComplianceAnalyzerAgent extends BaseAgent {
 
   /**
    * Get entity type specific requirements
+   * Generic implementation - Task Templates provide entity-specific rules
    */
-  private getEntityTypeRequirements(profile: BusinessProfile): ComplianceRequirement[] {
+  private getEntityTypeRequirements(profile: BusinessProfile, context: TaskContext): ComplianceRequirement[] {
     const requirements: ComplianceRequirement[] = [];
 
-    switch (profile.entityType) {
-      case 'LLC':
+    // Get entity rules from Task Template metadata  
+    const entityRules = context.metadata?.entityRules?.[profile.entityType] || {};
+    
+    // Generate requirements based on Task Template configuration
+    if (entityRules.governanceRequirements) {
+      entityRules.governanceRequirements.forEach((req: any) => {
         requirements.push({
-          id: 'llc_operating_agreement',
-          name: 'LLC Operating Agreement',
-          description: 'Create and maintain operating agreement defining member rights and responsibilities',
+          id: req.id || `governance_${Date.now()}`,
+          name: req.name || 'Governance Requirement',
+          description: req.description || 'Entity governance requirement',
           category: 'governance',
-          priority: 'high',
+          priority: req.priority || 'medium',
+          deadline: this.addDays(new Date(), req.daysToComplete || 30),
+          frequency: req.frequency || 'once',
+          estimatedCost: req.estimatedCost || 0,
+          consequences: req.consequences || 'Regulatory compliance risk',
+          forms: req.forms || []
+        });
+      });
+    }
+
+    // Check for name registration requirements
+    if (entityRules.requiresNameRegistration) {
+      const needsRegistration = this.checkNameRegistrationRequired(profile, context);
+      if (needsRegistration) {
+        requirements.push({
+          id: 'name_registration',
+          name: 'Business Name Registration',
+          description: 'Register business name with appropriate authority',
+          category: 'filing',
+          priority: 'critical',
           deadline: this.addDays(new Date(), 30),
           frequency: 'once',
-          estimatedCost: 500,
-          consequences: 'Default state rules apply, potential member disputes',
-          forms: ['Operating Agreement Template']
+          estimatedCost: entityRules.nameRegistrationCost || 100,
+          consequences: 'Cannot legally operate under business name',
+          forms: ['Name Registration Form']
         });
-        break;
-
-      case 'Corporation':
-        requirements.push(
-          {
-            id: 'corp_bylaws',
-            name: 'Corporate Bylaws',
-            description: 'Adopt corporate bylaws governing board and shareholder procedures',
-            category: 'governance',
-            priority: 'critical',
-            deadline: this.addDays(new Date(), 15),
-            frequency: 'once',
-            estimatedCost: 750,
-            consequences: 'Corporate veil piercing risk, governance disputes',
-            forms: ['Corporate Bylaws', 'Board Resolutions']
-          },
-          {
-            id: 'annual_board_meeting',
-            name: 'Annual Board Meeting',
-            description: 'Hold annual board meeting and document with minutes',
-            category: 'governance',
-            priority: 'high',
-            deadline: this.addDays(new Date(), 365),
-            frequency: 'annual',
-            estimatedCost: 200,
-            consequences: 'Loss of corporate protections, compliance violations'
-          }
-        );
-        break;
-
-      case 'Partnership':
-        requirements.push({
-          id: 'partnership_agreement',
-          name: 'Partnership Agreement',
-          description: 'Draft partnership agreement defining partner roles and profit sharing',
-          category: 'governance',
-          priority: 'high',
-          deadline: this.addDays(new Date(), 45),
-          frequency: 'once',
-          estimatedCost: 600,
-          consequences: 'Default partnership rules apply, potential disputes'
-        });
-        break;
-
-      case 'Sole Proprietorship':
-        if (profile.name !== profile.name.split(' ')[0]) { // If business name differs from personal name
-          requirements.push({
-            id: 'dba_filing',
-            name: 'DBA (Doing Business As) Filing',
-            description: 'File fictitious business name with county clerk',
-            category: 'filing',
-            priority: 'critical',
-            deadline: this.addDays(new Date(), 30),
-            frequency: 'once',
-            estimatedCost: 75,
-            consequences: 'Cannot legally operate under business name, banking issues'
-          });
-        }
-        break;
+      }
     }
+
+    // Add any custom requirements from Task Template
+    const customRequirements = context.metadata?.customRequirements || [];
+    customRequirements.forEach((req: any) => {
+      if (this.evaluateRequirementCondition(req.condition, profile)) {
+        requirements.push(this.createRequirementFromTemplate(req, profile));
+      }
+    });
 
     return requirements;
   }
 
   /**
-   * Get state-specific requirements
+   * Get location-specific requirements
+   * Generic implementation - Task Templates provide jurisdiction rules
    */
-  private getStateRequirements(profile: BusinessProfile): ComplianceRequirement[] {
+  private getStateRequirements(profile: BusinessProfile, context: TaskContext): ComplianceRequirement[] {
     const requirements: ComplianceRequirement[] = [];
 
-    // Get next annual report deadline based on state
-    const annualReportDeadline = this.calculateAnnualReportDeadline(profile.state, profile.formationDate);
-    
-    requirements.push({
-      id: 'annual_report',
-      name: `${profile.state} Annual Report`,
-      description: `File annual report with ${profile.state} Secretary of State`,
-      category: 'filing',
-      priority: 'critical',
-      deadline: annualReportDeadline,
-      frequency: 'annual',
-      estimatedCost: this.getStateFilingFee(profile.state),
-      consequences: 'Administrative dissolution, loss of good standing',
-      forms: ['Annual Report Form', 'Statement of Information']
-    });
+    // Get jurisdiction rules from Task Template
+    const jurisdictionRules = context.metadata?.jurisdictionRules || {};
+    const location = profile.location || 'default';
+    const locationRules = jurisdictionRules[location] || jurisdictionRules.default || {};
 
-    // Registered agent requirement
-    if (profile.entityType !== 'Sole Proprietorship') {
+    // Annual reporting requirements
+    if (locationRules.annualReporting) {
+      const annualReportDeadline = this.calculateAnnualReportDeadline(
+        location, 
+        profile.formationDate,
+        context
+      );
+      
       requirements.push({
-        id: 'registered_agent',
-        name: 'Registered Agent Maintenance',
-        description: 'Maintain registered agent for service of process',
-        category: 'governance',
-        priority: 'critical',
-        deadline: this.addDays(new Date(), 365),
+        id: 'annual_report',
+        name: locationRules.annualReportName || 'Annual Report',
+        description: locationRules.annualReportDescription || 'File annual report with regulatory authority',
+        category: 'filing',
+        priority: locationRules.annualReportPriority || 'critical',
+        deadline: annualReportDeadline,
         frequency: 'annual',
-        estimatedCost: 150,
-        consequences: 'Administrative dissolution, legal service issues'
+        estimatedCost: locationRules.annualReportFee || 50,
+        consequences: locationRules.annualReportConsequences || 'Loss of good standing',
+        forms: locationRules.annualReportForms || ['Annual Report Form']
+      });
+    }
+
+    // Agent/representative requirements
+    if (locationRules.requiresRegisteredAgent) {
+      const agentRequired = this.evaluateAgentRequirement(profile, locationRules);
+      if (agentRequired) {
+        requirements.push({
+          id: 'registered_agent',
+          name: locationRules.agentName || 'Registered Representative',
+          description: locationRules.agentDescription || 'Maintain registered representative for official communications',
+          category: 'governance',
+          priority: 'critical',
+          deadline: this.addDays(new Date(), 365),
+          frequency: 'annual',
+          estimatedCost: locationRules.agentCost || 150,
+          consequences: locationRules.agentConsequences || 'Legal service issues'
+        });
+      }
+    }
+
+    // Additional jurisdiction-specific requirements
+    if (locationRules.additionalRequirements) {
+      locationRules.additionalRequirements.forEach((req: any) => {
+        requirements.push(this.createRequirementFromTemplate(req, profile));
       });
     }
 
@@ -383,40 +384,60 @@ export class ComplianceAnalyzerAgent extends BaseAgent {
   }
 
   /**
-   * Get federal tax requirements
+   * Get tax requirements
+   * Generic implementation - Task Templates provide tax rules
    */
-  private getFederalTaxRequirements(profile: BusinessProfile): ComplianceRequirement[] {
+  private getFederalTaxRequirements(profile: BusinessProfile, context: TaskContext): ComplianceRequirement[] {
     const requirements: ComplianceRequirement[] = [];
 
-    // EIN application if not sole proprietorship
-    if (profile.entityType !== 'Sole Proprietorship') {
+    // Get tax rules from Task Template
+    const taxConfig = context.metadata?.taxRequirements || {};
+    
+    // Tax identification requirements
+    if (taxConfig.requiresTaxId) {
+      const needsTaxId = this.evaluateTaxIdRequirement(profile, taxConfig);
+      if (needsTaxId) {
+        requirements.push({
+          id: 'tax_identification',
+          name: taxConfig.taxIdName || 'Tax Identification Application',
+          description: taxConfig.taxIdDescription || 'Apply for tax identification number',
+          category: 'tax',
+          priority: 'critical',
+          deadline: this.addDays(new Date(), taxConfig.taxIdDeadlineDays || 15),
+          frequency: 'once',
+          estimatedCost: taxConfig.taxIdCost || 0,
+          consequences: taxConfig.taxIdConsequences || 'Cannot conduct business operations'
+        });
+      }
+    }
+
+    // Annual tax filing requirements
+    if (taxConfig.annualFiling !== false) {
+      const taxDeadline = this.calculateTaxDeadline(profile.entityType, context);
+      const taxForm = this.getTaxFormForEntity(profile.entityType, context);
+      
       requirements.push({
-        id: 'federal_ein',
-        name: 'Federal EIN Application',
-        description: 'Apply for Employer Identification Number with IRS',
+        id: 'annual_tax_return',
+        name: taxConfig.annualFilingName || 'Annual Tax Return',
+        description: taxConfig.annualFilingDescription || `File ${taxForm} with tax authority`,
         category: 'tax',
         priority: 'critical',
-        deadline: this.addDays(new Date(), 15),
-        frequency: 'once',
-        estimatedCost: 0,
-        consequences: 'Cannot open business bank account, payroll issues'
+        deadline: taxDeadline,
+        frequency: 'annual',
+        estimatedCost: taxConfig.annualFilingCost || 500,
+        consequences: taxConfig.annualFilingConsequences || 'Penalties and interest',
+        forms: [taxForm]
       });
     }
 
-    // Annual tax return
-    const taxDeadline = this.calculateTaxDeadline(profile.entityType);
-    requirements.push({
-      id: 'annual_tax_return',
-      name: 'Annual Tax Return',
-      description: `File ${this.getTaxFormForEntity(profile.entityType)} with IRS`,
-      category: 'tax',
-      priority: 'critical',
-      deadline: taxDeadline,
-      frequency: 'annual',
-      estimatedCost: 500,
-      consequences: 'Penalties, interest, potential audit',
-      forms: [this.getTaxFormForEntity(profile.entityType)]
-    });
+    // Additional tax requirements from Task Template
+    if (taxConfig.additionalRequirements) {
+      taxConfig.additionalRequirements.forEach((req: any) => {
+        if (this.evaluateRequirementCondition(req.condition, profile)) {
+          requirements.push(this.createRequirementFromTemplate(req, profile));
+        }
+      });
+    }
 
     return requirements;
   }
@@ -506,7 +527,7 @@ export class ComplianceAnalyzerAgent extends BaseAgent {
         suggestedTemplates: ['compliance_roadmap'],
         dataNeeded: ['priority_confirmation', 'deadline_adjustments'],
         title: 'Your Compliance Roadmap',
-        description: `We've identified ${calendar.requirements.length} requirements for your ${profile.entityType} in ${profile.state}. Let's prioritize what's most important.`,
+        description: `We've identified ${calendar.requirements.length} requirements for your ${profile.entityType} in ${profile.location || 'your jurisdiction'}. Let's prioritize what's most important.`,
         complianceCalendar: calendar,
         riskAssessment,
         businessProfile: profile,
@@ -581,26 +602,28 @@ export class ComplianceAnalyzerAgent extends BaseAgent {
     });
   }
 
-  private calculateAnnualReportDeadline(state: string, _formationDate?: string): string {
+  private calculateAnnualReportDeadline(location: string, formationDate?: string, context?: TaskContext): string {
     const now = new Date();
     let deadline = new Date();
 
-    switch (state) {
-      case 'CA':
-        // California varies by entity type and formation date
-        deadline.setMonth(11, 31); // December 31st default
-        break;
-      case 'DE':
-        deadline = new Date(now.getFullYear(), 2, 1); // March 1st
-        break;
-      case 'NY':
-        deadline = new Date(now.getFullYear(), 4, 15); // May 15th
-        break;
-      default:
-        deadline = new Date(now.getFullYear(), 11, 31); // December 31st default
+    // Get deadline rules from Task Template
+    const deadlineRules = context?.metadata?.deadlineRules?.[location] || 
+                         context?.metadata?.deadlineRules?.default || {};
+
+    if (deadlineRules.annualReportDeadline) {
+      // Use Task Template defined deadline logic
+      const { month, day } = deadlineRules.annualReportDeadline;
+      deadline = new Date(now.getFullYear(), month - 1, day);
+    } else if (formationDate && deadlineRules.useFormationDate) {
+      // Calculate based on formation date if specified
+      const formation = new Date(formationDate);
+      deadline = new Date(now.getFullYear(), formation.getMonth(), formation.getDate());
+    } else {
+      // Default to end of year
+      deadline = new Date(now.getFullYear(), 11, 31);
     }
 
-    // If deadline has passed, move to next year
+    // If deadline has passed, move to next period
     if (deadline < now) {
       deadline.setFullYear(deadline.getFullYear() + 1);
     }
@@ -608,27 +631,28 @@ export class ComplianceAnalyzerAgent extends BaseAgent {
     return deadline.toISOString();
   }
 
-  private getStateFilingFee(state: string): number {
-    const fees: Record<string, number> = {
-      'CA': 20,
-      'DE': 300,
-      'NY': 25,
-      'TX': 50,
-      'FL': 61.25
-    };
-    return fees[state] || 50; // Default $50
+  private getStateFilingFee(location: string, context?: TaskContext): number {
+    // Get fee structure from Task Template
+    const feeStructure = context?.metadata?.feeStructure || {};
+    return feeStructure[location]?.annualReportFee || 
+           feeStructure.default?.annualReportFee || 
+           50; // Default if not specified
   }
 
-  private calculateTaxDeadline(entityType: string): string {
+  private calculateTaxDeadline(entityType: string, context?: TaskContext): string {
     const now = new Date();
     let deadline = new Date();
 
-    switch (entityType) {
-      case 'Corporation':
-        deadline = new Date(now.getFullYear(), 2, 15); // March 15th
-        break;
-      default:
-        deadline = new Date(now.getFullYear(), 3, 15); // April 15th
+    // Get tax deadline rules from Task Template
+    const taxRules = context?.metadata?.taxRules || {};
+    const entityTaxRule = taxRules[entityType] || taxRules.default || {};
+
+    if (entityTaxRule.taxDeadline) {
+      const { month, day } = entityTaxRule.taxDeadline;
+      deadline = new Date(now.getFullYear(), month - 1, day);
+    } else {
+      // Default tax deadline
+      deadline = new Date(now.getFullYear(), 3, 15); // April 15th default
     }
 
     if (deadline < now) {
@@ -638,13 +662,12 @@ export class ComplianceAnalyzerAgent extends BaseAgent {
     return deadline.toISOString();
   }
 
-  private getTaxFormForEntity(entityType: string): string {
-    switch (entityType) {
-      case 'Corporation': return 'Form 1120';
-      case 'LLC': return 'Form 1065 or 1040 Schedule C';
-      case 'Partnership': return 'Form 1065';
-      default: return 'Form 1040 Schedule C';
-    }
+  private getTaxFormForEntity(entityType: string, context?: TaskContext): string {
+    // Get tax form mapping from Task Template
+    const taxForms = context?.metadata?.taxForms || {};
+    return taxForms[entityType] || 
+           taxForms.default || 
+           'Tax Return Form'; // Generic default
   }
 
   /**
@@ -685,5 +708,138 @@ export class ComplianceAnalyzerAgent extends BaseAgent {
         // Continue even if database write fails
       }
     }
+  }
+
+  /**
+   * Helper method to check if name registration is required
+   */
+  private checkNameRegistrationRequired(profile: BusinessProfile, context?: TaskContext): boolean {
+    // Task Templates define when name registration is needed
+    const nameRules = context?.metadata?.nameRegistrationRules || {};
+    
+    // Generic check - if business name differs from personal name
+    if (nameRules.checkPersonalName && profile.name) {
+      const nameParts = profile.name.split(' ');
+      if (nameParts.length > 1 && profile.name !== nameParts[0]) {
+        return true;
+      }
+    }
+    
+    // Check custom rules from Task Template
+    if (nameRules.customCheck) {
+      return this.evaluateRequirementCondition(nameRules.customCheck, profile);
+    }
+    
+    return false;
+  }
+
+  /**
+   * Evaluate if a requirement condition is met
+   */
+  private evaluateRequirementCondition(condition: any, profile: BusinessProfile): boolean {
+    if (!condition) return true;
+    
+    // Task Templates define condition evaluation logic
+    if (typeof condition === 'boolean') return condition;
+    
+    if (typeof condition === 'object') {
+      // Evaluate based on profile attributes
+      for (const [key, value] of Object.entries(condition)) {
+        const profileValue = (profile as any)[key] || profile.attributes?.[key];
+        if (profileValue !== value) return false;
+      }
+      return true;
+    }
+    
+    return true;
+  }
+
+  /**
+   * Create requirement from Task Template definition
+   */
+  private createRequirementFromTemplate(template: any, _profile: BusinessProfile): ComplianceRequirement {
+    return {
+      id: template.id || `req_${Date.now()}`,
+      name: template.name || 'Compliance Requirement',
+      description: template.description || 'Required for compliance',
+      category: template.category || 'filing',
+      priority: template.priority || 'medium',
+      deadline: this.addDays(new Date(), template.daysToComplete || 30),
+      frequency: template.frequency || 'once',
+      estimatedCost: template.estimatedCost || 0,
+      consequences: template.consequences || 'Compliance risk',
+      forms: template.forms || [],
+      dependencies: template.dependencies
+    };
+  }
+
+  /**
+   * Evaluate if agent/representative is required
+   */
+  private evaluateAgentRequirement(profile: BusinessProfile, locationRules: any): boolean {
+    if (!locationRules.agentConditions) return true;
+    
+    // Task Templates define when agents are required
+    const conditions = locationRules.agentConditions;
+    
+    // Check entity type conditions
+    if (conditions.excludedEntityTypes) {
+      if (conditions.excludedEntityTypes.includes(profile.entityType)) {
+        return false;
+      }
+    }
+    
+    if (conditions.requiredEntityTypes) {
+      return conditions.requiredEntityTypes.includes(profile.entityType);
+    }
+    
+    // Default to required unless explicitly excluded
+    return true;
+  }
+
+  /**
+   * Evaluate if tax ID is required
+   */
+  private evaluateTaxIdRequirement(profile: BusinessProfile, taxConfig: any): boolean {
+    if (!taxConfig.taxIdConditions) return true;
+    
+    const conditions = taxConfig.taxIdConditions;
+    
+    // Check entity type conditions
+    if (conditions.excludedEntityTypes) {
+      if (conditions.excludedEntityTypes.includes(profile.entityType)) {
+        return false;
+      }
+    }
+    
+    // Check other conditions from Task Template
+    if (conditions.customCheck) {
+      return this.evaluateRequirementCondition(conditions.customCheck, profile);
+    }
+    
+    return true;
+  }
+
+  /**
+   * Evaluate risk conditions
+   */
+  private evaluateRiskCondition(
+    risk: any, 
+    requirements: ComplianceRequirement[], 
+    profile: BusinessProfile
+  ): boolean {
+    if (!risk.condition) return true;
+    
+    // Check if specific requirement is missing
+    if (risk.condition.missingRequirement) {
+      return !requirements.find(r => r.id === risk.condition.missingRequirement);
+    }
+    
+    // Check profile conditions
+    if (risk.condition.profileCheck) {
+      return this.evaluateRequirementCondition(risk.condition.profileCheck, profile);
+    }
+    
+    return false;
   }
 }
