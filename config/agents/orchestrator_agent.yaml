@@ -1,0 +1,135 @@
+# Orchestrator Agent Configuration
+# ENGINE PRD Compliant - Master Task Coordination and Workflow Management
+
+agent:
+  id: "orchestrator_agent"
+  name: "Master Orchestrator Agent"
+  version: "1.0.0"
+  role: "orchestration_specialist"
+  
+  # Agent mission - concise and focused for optimal LLM performance
+  mission: |
+    Orchestrate business compliance workflows by decomposing complex requirements into
+    actionable subtasks and delegating to specialist agents. Monitor progress and handle exceptions.
+    
+    Key outputs: task delegation decisions, workflow sequences, progress summaries.
+    
+  agent_card:
+    skills:
+      - "Business compliance workflow analysis and decomposition"
+      - "Multi-agent task delegation and coordination" 
+      - "Workflow dependency management and sequencing"
+      - "Progress monitoring and exception handling"
+    
+    specializations:
+      - "California Secretary of State filings (SOI, Business Registration)"
+      - "Tax compliance workflows (Property Tax, 1099-NEC)"
+      - "Insurance renewal coordination (General Liability)"
+      - "Multi-jurisdictional compliance orchestration"
+    
+    output_formats:
+      - "Task decomposition with agent assignments"
+      - "Workflow execution plans with dependencies"
+      - "Progress summaries with status updates"
+      - "Exception handling and recovery strategies"
+
+# Response schemas for workflow coordination
+schemas:
+  output:
+    type: "object"
+    required: ["status", "contextUpdate"]
+    properties:
+      status:
+        type: "string"
+        enum: ["workflow_created", "task_delegated", "progress_updated", "workflow_completed", "error"]
+      
+      contextUpdate:
+        type: "object"
+        required: ["operation", "data", "reasoning", "confidence"]
+        properties:
+          operation:
+            type: "string"
+            description: "Orchestration operation performed"
+          
+          data:
+            type: "object"
+            properties:
+              workflow:
+                type: "object"
+                description: "Workflow structure and task assignments"
+              
+              delegations:
+                type: "array"
+                description: "Agent delegations with parameters"
+              
+              progress:
+                type: "object"
+                description: "Current workflow progress and status"
+          
+          reasoning:
+            type: "string"
+            description: "Strategic reasoning for orchestration decisions"
+          
+          confidence:
+            type: "number"
+            minimum: 0
+            maximum: 1
+            description: "Confidence level in orchestration decisions (0.0-1.0)"
+
+# Available operations for workflow coordination
+operations:
+  analyze_compliance_requirements:
+    description: "Analyze business entity and requirements to create compliance workflow"
+    parameters:
+      businessEntity:
+        type: "object"
+        required: true
+        description: "Business entity information and compliance context"
+      
+      complianceType:
+        type: "string"
+        enum: ["soi_filing", "business_registration", "tax_filing", "insurance_renewal"]
+        description: "Type of compliance workflow to orchestrate"
+
+  delegate_to_agent:
+    description: "Delegate specific task to specialist agent"
+    parameters:
+      agentRole:
+        type: "string"
+        required: true
+        description: "Target agent role for delegation"
+      
+      taskParameters:
+        type: "object"
+        required: true
+        description: "Task-specific parameters for the agent"
+
+# Workflow templates for different compliance types
+workflow_templates:
+  soi_filing:
+    name: "CA Statement of Information Filing"
+    phases:
+      - name: "business_discovery"
+        agent: "data_collection_agent"
+        dependencies: []
+      - name: "compliance_analysis"
+        agent: "legal_compliance_agent" 
+        dependencies: ["business_discovery"]
+      - name: "payment_processing"
+        agent: "payment_agent"
+        dependencies: ["compliance_analysis"]
+      - name: "form_submission"
+        agent: "agency_interaction_agent"
+        dependencies: ["payment_processing"]
+
+# Tools for orchestration
+tools:
+  workflow_management:
+    - "task_decomposer"
+    - "dependency_analyzer"
+    - "progress_tracker"
+  
+  agent_coordination:
+    - "capability_matcher"
+    - "delegation_manager"
+    - "communication_router"

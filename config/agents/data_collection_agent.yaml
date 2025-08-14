@@ -1,75 +1,238 @@
 # Data Collection Agent Configuration
-# Exactly matches PRD specification (lines 336-410)
+# ENGINE PRD Compliant - All behavior defined in YAML (PRD:46)
 
 agent:
   id: "data_collection_agent"
+  name: "Data Collection Agent"
   version: "1.0.0"
-  name: "Business Data Collection Specialist"
+  role: "data_collection_specialist"
   
-  # A2A AgentCard format
-  agent_card:
-    capabilities:
-      - "gather_business_data"
-      - "validate_information"
-      - "search_public_records"
-      - "generate_data_requests"
-    
-    endpoints:
-      execute: "/agents/data_collection/execute"
-      status: "/agents/data_collection/status"
-    
-    constraints:
-      max_execution_time: 30000  # 30 seconds
-      retry_policy:
-        max_retries: 3
-        backoff_multiplier: 2
-  
-  # Agent's mission (used in LLM prompt)
+  # Agent mission - concise and focused for optimal LLM performance
   mission: |
-    You are a Business Data Collection Specialist. Your role is to:
-    1. Gather business information from various sources
-    2. Validate data accuracy and completeness
-    3. Search public records when available
-    4. Request user input only when necessary
+    Gather business information through automated public records search before requesting
+    user input. Validate data quality and provide intelligent defaults.
     
-    Core principles:
-    - Exhaust autonomous sources before requesting user input
-    - Always record your reasoning in context updates
-    - Validate data against known patterns
-    - Respect data privacy and security
+    Key outputs: validated business entities, compliance mappings, progressive disclosure forms.
     
-    You operate on TaskContext objects and contribute incremental updates.
-    Never overwrite existing data, only append new information.
+  # Agent capabilities card for discovery (PRD:187-191)
+  agent_card:
+    skills:
+      - "Public records search (CA SOS, business registrations)"
+      - "Business information validation and cross-referencing"
+      - "Progressive user input collection with smart defaults"
+      - "Entity type classification and compliance requirements"
+    
+    data_sources:
+      - "California Secretary of State database"
+      - "Business license registries"
+      - "Federal EIN database"
+      - "State tax registration records"
+    
+    output_formats:
+      - "Validated business entity information"
+      - "Compliance requirement mapping"
+      - "Data collection audit trail"
+      - "Progressive disclosure UI requests"
+
+# Response schemas for LLM structured output (PRD:487-489)
+schemas:
+  output:
+    type: "object"
+    required: ["status", "contextUpdate"]
+    properties:
+      status:
+        type: "string"
+        enum: ["completed", "needs_input", "error", "delegated"]
+      
+      contextUpdate:
+        type: "object"
+        required: ["operation", "data", "reasoning"]
+        properties:
+          operation:
+            type: "string"
+            description: "What operation was performed"
+          
+          data:
+            type: "object"
+            description: "The collected or validated data"
+          
+          reasoning:
+            type: "string"
+            description: "Detailed explanation of data collection approach"
+          
+          confidence:
+            type: "number"
+            minimum: 0
+            maximum: 1
+            description: "Confidence level in collected data accuracy (0.0-1.0)"
+
+# Available operations this agent can perform
+operations:
+  gather_business_info:
+    description: "Collect comprehensive business entity information"
+    parameters:
+      businessName: 
+        type: "string"
+        required: false
+        description: "Business name if available"
+      
+      source_priority:
+        type: "array"
+        default: ["ca_sos", "federal_ein", "user_input"]
+        description: "Order of data source preference"
+
+# Tools this agent can access (PRD:484-485)
+tools:
+  public_records:
+    - "ca_sos_search"
+    - "business_registry_lookup"
+    - "federal_ein_verification"
   
-  # Expected input/output schemas
-  schemas:
-    input:
-      type: "object"
-      required: ["taskContext", "operation", "parameters"]
-      properties:
-        taskContext:
-          $ref: "#/definitions/TaskContext"
-        operation:
-          type: "string"
-          enum: ["gather", "validate", "search", "request_input"]
-        parameters:
-          type: "object"
+  validation:
+    - "entity_type_classifier"
+    - "address_standardizer"
+    - "compliance_requirements_mapper"
+
+# Tool selection criteria and decision trees
+tool_selection:
+  decision_tree:
+    business_lookup:
+      primary_tools: ["ca_sos_search", "federal_ein_verification"]
+      selection_criteria: |
+        IF business_name AND california_entity THEN use ca_sos_search
+        ELSE IF ein_provided THEN use federal_ein_verification
+        ELSE IF business_name THEN use ca_sos_search
+        ELSE request_user_input
+      
+      fallback_chain:
+        - "Search primary business databases"
+        - "Try fuzzy name matching"
+        - "Request direct user input with smart defaults"
+      
+      confidence_thresholds:
+        high_confidence: 0.9  # Accept data automatically
+        medium_confidence: 0.7  # Request user verification
+        low_confidence: 0.5  # Treat as partial match
     
-    output:
-      type: "object"
-      required: ["status", "contextUpdate"]
-      properties:
-        status:
-          type: "string"
-          enum: ["complete", "needs_input", "failed"]
-        contextUpdate:
-          type: "object"
-          properties:
-            operation:
-              type: "string"
-            data:
-              type: "object"
-            reasoning:
-              type: "string"
-        uiRequest:
-          $ref: "#/definitions/UIRequest"
+    data_validation:
+      primary_tools: ["entity_type_classifier", "address_standardizer"]
+      selection_criteria: |
+        IF entity_type_unclear THEN use entity_type_classifier
+        ELSE IF address_needs_validation THEN use address_standardizer
+        ELSE manual_validation
+      
+      fallback_chain:
+        - "Automated validation with ML models"
+        - "Cross-reference with multiple sources"
+        - "Flag for manual review"
+
+# Structured examples for few-shot learning
+examples:
+  successful_data_collection:
+    request:
+      operation: "gather_business_info"
+      parameters:
+        businessName: "TechCorp LLC"
+        source_priority: ["ca_sos", "federal_ein", "user_input"]
+    
+    response:
+      status: "completed"
+      contextUpdate:
+        operation: "business_info_collected"
+        data:
+          business:
+            name: "TechCorp LLC"
+            entityType: "LLC"
+            jurisdiction: "California"
+            formationDate: "2023-01-15"
+            ein: "12-3456789"
+            address:
+              street: "123 Main St"
+              city: "San Francisco"
+              state: "CA"
+              zip: "94105"
+          source: "ca_sos_database"
+          verified: true
+        reasoning: "Found complete business information in California SOS database. Entity type LLC, formed 2023, active status. Address and EIN verified."
+        confidence: 0.95
+      confidence: 0.95
+      fallback_strategy: "If SOS data incomplete, cross-reference with federal EIN lookup"
+
+  needs_user_input:
+    request:
+      operation: "gather_business_info"
+      parameters:
+        businessName: "Small Business Inc"
+    
+    response:
+      status: "needs_input"
+      contextUpdate:
+        operation: "partial_data_found"
+        data:
+          search_results: []
+          attempted_sources: ["ca_sos", "federal_ein"]
+          missing_data: ["entityType", "formationDate", "jurisdiction"]
+        reasoning: "No matches found in public databases for 'Small Business Inc'. Name may be DBA or entity not in California. Need direct user input."
+        confidence: 0.8
+      uiRequests: [
+        {
+          templateType: "BusinessInfoForm",
+          semanticData: {
+            purpose: "Complete business entity identification",
+            fields: [
+              {
+                id: "legalBusinessName",
+                label: "Legal Business Name",
+                type: "text",
+                required: true,
+                help: "Exact name as registered with state"
+              },
+              {
+                id: "entityType",
+                label: "Entity Type",
+                type: "select",
+                required: true,
+                options: [
+                  {"value": "LLC", "label": "Limited Liability Company (LLC)"},
+                  {"value": "Corporation", "label": "Corporation"},
+                  {"value": "Partnership", "label": "Partnership"}
+                ]
+              },
+              {
+                id: "formationState",
+                label: "State of Formation",
+                type: "select",
+                required: true,
+                default: "California"
+              }
+            ],
+            defaults: {"formationState": "California"},
+            help: "We couldn't find your business in public records"
+          }
+        }
+      ]
+      confidence: 0.8
+      fallback_strategy: "Collect entity information through progressive disclosure form"
+
+# Fallback patterns for graceful degradation
+fallback_patterns:
+  database_unavailable:
+    strategy: "Use cached data and manual collection"
+    actions:
+      - "Check local business database cache"
+      - "Proceed with user input collection"
+      - "Flag for database retry later"
+    
+  partial_data_found:
+    strategy: "Combine automated and manual collection"
+    actions:
+      - "Present found data for verification"
+      - "Request only missing information"
+      - "Provide intelligent defaults where possible"
+    
+  data_quality_issues:
+    strategy: "Request verification and correction"
+    actions:
+      - "Highlight conflicting information"
+      - "Request user to choose correct version"
+      - "Document data quality concerns"

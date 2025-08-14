@@ -1,228 +1,149 @@
 # Entity Compliance Agent Configuration
-# EXACTLY matches PRD lines 521-600
-# Specialized in determining regulatory requirements and compliance deadlines
+# ENGINE PRD Compliant - Entity-Specific Compliance Analysis and Requirements
 
 agent:
   id: "entity_compliance_agent"
+  name: "Entity Compliance Specialist Agent"
   version: "1.0.0"
-  name: "Regulatory Requirements Analyst"
+  role: "entity_compliance_specialist"
   
-  persona: |
-    You are a compliance specialist with deep knowledge of business regulations
-    across all 50 states. You understand the complex interplay between entity type,
-    industry, location, and regulatory requirements.
+  # Agent mission - entity-specific compliance analysis
+  mission: |
+    You are an Entity Compliance Agent specialized in analyzing business entities
+    and determining their specific regulatory requirements and compliance obligations.
+    You translate complex regulatory frameworks into actionable compliance roadmaps.
     
-    Your expertise includes:
-    - Corporate governance requirements by entity type
-    - State-specific filing deadlines and forms
-    - Industry-specific licensing and permits
-    - Tax obligations at federal, state, and local levels
-    - Ongoing compliance calendar management
+    Your primary responsibility is to create comprehensive compliance calendars
+    with specific deadlines, requirements, and risk assessments tailored to
+    each business entity's unique characteristics.
     
-    You translate complex regulatory requirements into clear, actionable timelines
-    that business owners can understand and follow.
+    CORE PRINCIPLES:
+    - Entity-Specific Analysis: Tailor requirements to specific entity types and structures
+    - Jurisdictional Expertise: Navigate multi-state and multi-level regulatory requirements
+    - Timeline Precision: Provide accurate deadlines and filing requirements
+    - Risk Assessment: Identify compliance gaps and prioritize critical requirements
   
-  capabilities:
-    - regulatory_analysis
-    - compliance_calendar_generation
-    - deadline_calculation
-    - form_identification
-    - license_requirements
-    - tax_obligations
-  
-  analysis_framework: |
-    1. Entity Type Analysis:
-       - LLC: Operating agreements, annual reports, state fees
-       - Corporation: Board resolutions, annual meetings, stock records
-       - Partnership: Partnership agreements, tax elections
-       - Sole Proprietorship: DBA filings, business licenses
+  agent_card:
+    skills:
+      - "Entity-specific regulatory analysis and compliance mapping"
+      - "Multi-jurisdictional compliance calendar generation"
+      - "Risk assessment and compliance gap identification"
+      - "Deadline calculation and filing requirement analysis"
     
-    2. State Requirements Matrix:
-       - Formation state regulations (home state)
-       - Qualification requirements (if doing business elsewhere)
-       - Annual report deadlines and fees
-       - Registered agent requirements
+    specializations:
+      - "Corporate governance and entity-specific requirements"
+      - "Multi-state compliance and foreign qualification"
+      - "Industry-specific licensing and permit requirements"
+      - "Tax obligation mapping and deadline management"
     
-    3. Industry Compliance:
-       - Professional licensing (legal, medical, accounting)
-       - Industry-specific permits (food service, construction)
-       - Safety and health regulations (OSHA requirements)
-       - Environmental compliance (waste disposal, emissions)
-    
-    4. Tax Compliance:
-       - Federal EIN application
-       - State tax registration
-       - Sales tax permits
-       - Quarterly and annual filing deadlines
-  
-  regulatory_databases:
-    federal:
-      irs: "Federal tax requirements and forms"
-      sba: "Small business licensing information"
-      osha: "Workplace safety requirements"
-    
-    state_specific:
-      secretary_of_state: "Corporate filings and annual reports"
-      department_of_revenue: "State tax requirements"
-      department_of_labor: "Employment and workers compensation"
-      licensing_boards: "Professional and trade licenses"
-    
-    local:
-      city_clerk: "Business licenses and permits"
-      zoning_office: "Land use and zoning compliance"
-      health_department: "Health permits and inspections"
-  
-  compliance_calendar_template: |
-    Generate compliance calendar with these elements:
-    
-    IMMEDIATE (Next 30 days):
-    - Critical deadlines that cannot be missed
-    - Required filings for business formation completion
-    - Essential licenses to begin operations
-    
-    QUARTERLY (90-day cycles):
-    - Tax filings (Federal Form 941, state quarterly)
-    - Financial reporting deadlines
-    - License renewals
-    
-    ANNUAL (Yearly requirements):
-    - Annual reports to Secretary of State
-    - Tax returns (Federal and state)
-    - License renewals and inspections
-    - Corporate governance (board meetings, resolutions)
-    
-    ONGOING (Continuous obligations):
-    - Record keeping requirements
-    - Registered agent maintenance
-    - Workers compensation and employment law
-  
-  deadline_calculation_rules: |
-    Deadline Calculation Logic:
-    
-    1. Annual Reports:
-       - Delaware: March 1st (for prior year)
-       - California: Variable by entity type and formation date
-       - New York: Biennial filing system
-       - Texas: Due by May 15th
-    
-    2. Tax Deadlines:
-       - Federal Corporate: March 15th (C-Corp) or April 15th (Pass-through)
-       - Quarterly estimates: April 15, June 15, Sept 15, Jan 15
-       - State varies by jurisdiction
-    
-    3. License Renewals:
-       - Professional licenses: Often tied to birth month or license issue date
-       - Business licenses: Usually annual, tied to formation date
-       - Industry permits: Varies widely by type and jurisdiction
-    
-    4. Grace Periods and Penalties:
-       - Account for grace periods where available
-       - Calculate late fees and penalties for missed deadlines
-       - Identify revival procedures for dissolved entities
-  
-  risk_assessment: |
-    Compliance Risk Factors:
-    
-    HIGH RISK (Immediate attention required):
-    - Operating without required licenses
-    - Missing tax filing deadlines
-    - Failure to maintain registered agent
-    - Corporate formalities not observed
-    
-    MEDIUM RISK (Plan to address):
-    - Upcoming renewal deadlines
-    - Incomplete corporate records
-    - Industry regulation changes
-    - Multi-state operation without qualification
-    
-    LOW RISK (Monitor and plan):
-    - Optional tax elections
-    - Enhanced reporting requirements
-    - Future regulatory changes
-    - Efficiency improvements
-  
-  prompt_template: |
-    Your mission: Create comprehensive compliance roadmap for this business.
-    
-    Business Profile:
-    - Name: {{business.name}}
-    - Entity Type: {{business.entityType}}
-    - State: {{business.state}}
-    - Industry: {{business.industry}}
-    - Formation Date: {{business.formationDate}}
-    - Employee Count: {{business.employeeCount}}
-    
-    Analysis Required:
-    1. What are the mandatory compliance requirements?
-    2. What are the upcoming deadlines in next 12 months?
-    3. What licenses or permits are required to operate?
-    4. What are the tax obligations and due dates?
-    5. What governance requirements must be maintained?
-    
-    Generate:
-    - Compliance calendar with specific dates
-    - Priority ranking (Critical/Important/Optional)
-    - Estimated costs for each requirement
-    - Consequences of non-compliance
-    - Recommended actions and timelines
+    output_formats:
+      - "Comprehensive compliance calendars with specific deadlines"
+      - "Risk-prioritized requirement analysis"
+      - "Entity-specific filing checklists and procedures"
+      - "Compliance gap assessments with remediation plans"
 
-  decision_rules: |
-    When analyzing compliance requirements:
-    
-    Entity Type Prioritization:
-    - LLC: Focus on state annual reports and operating agreements
-    - Corporation: Emphasize board governance and stock records
-    - Partnership: Highlight partnership agreements and tax elections
-    - Sole Prop: Concentrate on business licenses and DBAs
-    
-    State-Specific Rules:
-    - Delaware: Franchise tax and annual report (March 1)
-    - California: Statement of Information timing varies
-    - Nevada: List of officers and directors
-    - Apply home state rules plus foreign qualification states
-    
-    Industry Factors:
-    - Professional services: Licensing board requirements
-    - Retail: Sales tax permits and zoning
-    - Food service: Health permits and inspections
-    - Technology: Intellectual property and data privacy
-    
-    Deadline Urgency:
-    - Next 30 days: Critical priority
-    - 31-90 days: High priority
-    - 91-365 days: Medium priority
-    - Beyond 1 year: Planning priority
+# Response schemas for compliance analysis
+schemas:
+  output:
+    type: "object"
+    required: ["status", "contextUpdate"]
+    properties:
+      status:
+        type: "string"
+        enum: ["requirements_analyzed", "calendar_generated", "risks_identified", "analysis_error"]
+      
+      contextUpdate:
+        type: "object"
+        required: ["operation", "data", "reasoning"]
+        properties:
+          operation:
+            type: "string"
+            description: "Compliance analysis operation performed"
+          
+          data:
+            type: "object"
+            properties:
+              compliance_requirements:
+                type: "array"
+                description: "Entity-specific compliance requirements with deadlines"
+              
+              risk_assessment:
+                type: "object"
+                description: "Compliance risk analysis and prioritization"
+              
+              compliance_calendar:
+                type: "object"
+                description: "Structured compliance calendar with specific dates"
+          
+          reasoning:
+            type: "string"
+            description: "Entity-specific compliance analysis reasoning"
 
-  toolchain:
-    required:
-      - regulatory_database_lookup
-      - deadline_calculator
-      - compliance_calendar_generator
-      - risk_assessor
-    
-    optional:
-      - cost_estimator
-      - document_generator
-      - renewal_scheduler
-      - penalty_calculator
+# Available operations for compliance analysis
+operations:
+  analyze_entity_compliance:
+    description: "Analyze business entity for comprehensive compliance requirements"
+    parameters:
+      business_entity:
+        type: "object"
+        required: true
+        description: "Complete business entity information and characteristics"
+      
+      analysis_scope:
+        type: "string"
+        enum: ["comprehensive", "annual_requirements", "immediate_deadlines", "risk_assessment"]
+        default: "comprehensive"
+        description: "Scope of compliance analysis to perform"
 
-  success_metrics:
-    - requirement_completeness: "> 95%"
-    - deadline_accuracy: "> 98%"
-    - risk_identification: "> 90%"
-    - calendar_usability: "> 4.5/5.0"
-    - client_preparation_time: "< 2 weeks for critical items"
+# Entity-specific compliance frameworks
+compliance_frameworks:
+  llc:
+    formation_requirements:
+      - "Articles of Organization filing"
+      - "Operating Agreement drafting"
+      - "EIN application"
+    
+    ongoing_obligations:
+      - "Annual reports (state-specific deadlines)"
+      - "Franchise tax payments"
+      - "Registered agent maintenance"
+  
+  corporation:
+    formation_requirements:
+      - "Articles of Incorporation filing"
+      - "Corporate bylaws adoption"
+      - "Initial board resolutions"
+    
+    ongoing_obligations:
+      - "Annual board meetings"
+      - "Corporate resolutions"
+      - "Annual reports and franchise taxes"
 
-  integration_points:
-    upstream_agents:
-      - profile_collection_agent: "Business details and entity information"
-      - business_discovery_agent: "Existing compliance status from public records"
-    
-    downstream_agents:
-      - ux_optimization_agent: "Calendar presentation and user experience"
-      - celebration_agent: "Milestone recognition for completed requirements"
-    
-    external_apis:
-      - state_sos_apis: "Current filing requirements and deadlines"
-      - irs_apis: "Federal tax obligations and forms"
-      - licensing_boards: "Professional license requirements"
+# Risk assessment categories
+risk_levels:
+  critical:
+    description: "Immediate compliance failures with severe consequences"
+    examples: ["Operating without required licenses", "Missing tax deadlines"]
+    response_time: "immediate"
+  
+  high:
+    description: "Upcoming deadlines with significant impact"
+    examples: ["Annual report due within 30 days", "License renewal required"]
+    response_time: "within_week"
+  
+  medium:
+    description: "Important but not immediately critical"
+    examples: ["Governance documentation updates", "Optional tax elections"]
+    response_time: "within_month"
+
+# Tools for compliance analysis
+tools:
+  regulatory_research:
+    - "regulatory_database_lookup"
+    - "deadline_calculator"
+    - "compliance_calendar_generator"
+  
+  risk_assessment:
+    - "risk_assessor"
+    - "penalty_calculator"
+    - "compliance_gap_analyzer"

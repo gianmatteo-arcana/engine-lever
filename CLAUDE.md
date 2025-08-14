@@ -99,6 +99,104 @@ User Request → Master Orchestrator Agent → Specialist Agents → MCP Tools �
 
 ## 🚨 CRITICAL ARCHITECTURE RULES 🚨
 
+**UNIVERSAL DEVELOPMENT PRINCIPLES (Apply to ALL Repositories)**
+
+These principles are derived from PR review feedback and production lessons learned. They apply universally across all SmallBizAlly repositories:
+
+### 🔴 MANDATORY ARCHITECTURAL PATTERNS
+
+#### 1. **Dependency Injection Over Singletons** (CRITICAL)
+```typescript
+// ✅ CORRECT: Factory pattern with dependency injection
+export function createOrchestratorService(userToken: string): OrchestratorService {
+  return new OrchestratorService(userToken);
+}
+
+// ❌ FORBIDDEN: Singleton patterns
+export class OrchestratorService {
+  private static instance: OrchestratorService;
+  static getInstance() { return this.instance; }  // NO!
+}
+```
+**WHY**: Singletons prevent proper testing, session isolation, and cause state management issues.
+
+#### 2. **Database as Single Source of Truth** (CRITICAL)
+```typescript
+// ✅ CORRECT: Database stores state, objects aggregate it
+class TaskContext {
+  // This is a FACADE - aggregates database state, doesn't store it
+  constructor(private dbData: TaskContextData) {}
+  get status() { return this.dbData.status; }
+}
+
+// ❌ FORBIDDEN: Objects storing state independently
+class TaskManager {
+  private tasks: Task[] = [];  // NO! State must live in database
+}
+```
+**WHY**: Multiple sources of truth cause data inconsistency and synchronization issues.
+
+#### 3. **Facade Pattern for State Management** (CRITICAL)
+```typescript
+// ✅ CORRECT: Objects are facades over database state
+interface TaskContext {
+  // Read-only aggregation of database state
+  readonly contextId: string;
+  readonly currentState: TaskState;  // Computed from history
+  readonly history: ContextEntry[];  // From database
+}
+
+// ❌ FORBIDDEN: Objects maintaining independent state
+class TaskProcessor {
+  private currentStatus: string;  // NO! Status must come from database
+}
+```
+**WHY**: Facade pattern ensures single source of truth while providing convenient access.
+
+#### 4. **Comprehensive Documentation Required** (MANDATORY)
+- **Minimum 200+ lines** of architectural documentation for significant features
+- **Every class** must explain its purpose, workflow, and integration patterns
+- **Usage examples** and architectural decisions must be documented
+- **WHY and HOW**, not just WHAT
+
+#### 5. **Test Coverage is Non-Negotiable** (MANDATORY)
+- **100% pass rate** - NO failing or skipped tests allowed
+- **Every component** must have comprehensive tests
+- **All code paths** including error handling and edge cases
+- **Integration tests** for component interactions
+- **TypeScript compilation** must pass (`npx tsc --noEmit`)
+
+#### 6. **Production Code Hygiene** (MANDATORY)
+```typescript
+// ✅ CORRECT: Production code only
+src/
+├── components/
+├── services/
+├── utils/
+
+// ✅ CORRECT: Demo and test code in appropriate locations
+src/__tests__/
+src/test-utils/
+demos/ (separate directory)
+
+// ❌ FORBIDDEN: Demo code in production paths
+src/components/OrchestratorDemo.tsx  // NO!
+src/pages/TestPage.tsx              // NO!
+```
+**WHY**: Demo code in production paths increases bundle size and creates confusion.
+
+### 🔍 ENFORCEMENT CHECKLIST
+
+Before ANY commit:
+- [ ] No singleton patterns used
+- [ ] All state lives in database, objects are facades
+- [ ] Dependency injection pattern followed
+- [ ] 200+ lines of documentation for significant features
+- [ ] 100% test pass rate
+- [ ] `npx tsc --noEmit` passes
+- [ ] No demo code in production paths
+- [ ] All architectural principles followed
+
 ### 1. Schema Changes MUST Follow The Sacred 6-Step Cycle:
 
 1. **Create migration files** in FRONTEND repo (`biz-buddy-ally-now/supabase/migrations/`)
