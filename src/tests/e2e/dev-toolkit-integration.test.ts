@@ -467,7 +467,7 @@ describe('Dev Toolkit Integration', () => {
         templateSnapshot: {} as any
       };
       
-      const agent = new BusinessDiscovery();
+      const agent = new BusinessDiscovery('test_business_dev', 'test_user_dev');
       const startTime = Date.now();
       
       // Make request

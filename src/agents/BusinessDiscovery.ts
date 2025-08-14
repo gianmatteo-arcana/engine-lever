@@ -6,7 +6,7 @@
  * Uses intelligent search strategies to minimize user input
  */
 
-import { Agent } from './base/Agent';
+import { BaseAgent } from './base/BaseAgent';
 import { 
   TaskContext, 
   ContextEntry, 
@@ -45,9 +45,9 @@ interface SearchClues {
 /**
  * Business Discovery - Finds business information in public records
  */
-export class BusinessDiscovery extends Agent {
-  constructor() {
-    super('business_discovery_agent.yaml');
+export class BusinessDiscovery extends BaseAgent {
+  constructor(businessId: string, userId?: string) {
+    super('business_discovery_agent.yaml', businessId, userId);
   }
 
   /**
@@ -398,11 +398,16 @@ export class BusinessDiscovery extends Agent {
       actor: {
         type: 'agent',
         id: 'business_discovery_agent',
-        version: this.config.version
+        version: (this as any).specializedTemplate?.agent?.version || '1.0.0'
       },
       operation: entry.operation || 'unknown',
       data: entry.data || {},
-      reasoning: entry.reasoning
+      reasoning: entry.reasoning || 'Business discovery action',
+      trigger: entry.trigger || {
+        type: 'agent_request',
+        source: 'business_discovery',
+        details: {}
+      }
     };
 
     if (!context.history) {

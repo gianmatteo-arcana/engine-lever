@@ -24,7 +24,9 @@ describe('ProfileCollector', () => {
   let mockContext: TaskContext;
 
   beforeEach(() => {
-    agent = new ProfileCollector();
+    const testBusinessId = 'test_business_profile';
+    const testUserId = 'test_user_profile';
+    agent = new ProfileCollector(testBusinessId, testUserId);
     
     mockContext = {
       contextId: 'test_context_456',
@@ -535,7 +537,9 @@ describe('ProfileCollector Performance', () => {
   let agent: ProfileCollector;
 
   beforeEach(() => {
-    agent = new ProfileCollector();
+    const testBusinessId = 'test_business_profile';
+    const testUserId = 'test_user_profile';
+    agent = new ProfileCollector(testBusinessId, testUserId);
   });
 
   test('should complete profile collection within time limits', async () => {

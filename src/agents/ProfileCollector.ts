@@ -6,7 +6,7 @@
  * Uses smart defaults, progressive disclosure, and optimized forms
  */
 
-import { Agent } from './base/Agent';
+import { BaseAgent } from './base/BaseAgent';
 import { 
   TaskContext, 
   ContextEntry, 
@@ -51,9 +51,9 @@ interface SmartDefaults {
 /**
  * Profile Collector - Collects user profile data efficiently
  */
-export class ProfileCollector extends Agent {
-  constructor() {
-    super('profile_collection_agent.yaml');
+export class ProfileCollector extends BaseAgent {
+  constructor(businessId: string, userId?: string) {
+    super('profile_collection_agent.yaml', businessId, userId);
   }
 
   /**
@@ -544,11 +544,16 @@ export class ProfileCollector extends Agent {
       actor: {
         type: 'agent',
         id: 'profile_collector',
-        version: this.config.version
+        version: (this as any).specializedTemplate?.agent?.version || '1.0.0'
       },
       operation: entry.operation || 'unknown',
       data: entry.data || {},
-      reasoning: entry.reasoning
+      reasoning: entry.reasoning || 'Profile collection action',
+      trigger: entry.trigger || {
+        type: 'agent_request',
+        source: 'profile_collector',
+        details: {}
+      }
     };
 
     if (!context.history) {

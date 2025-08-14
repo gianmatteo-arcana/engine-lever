@@ -12,9 +12,11 @@ import { TaskContext, AgentRequest } from '../../types/engine-types';
 describe('BusinessDiscovery', () => {
   let agent: BusinessDiscovery;
   let mockContext: TaskContext;
+  const testBusinessId = 'test_business_123';
+  const testUserId = 'test_user_456';
 
   beforeEach(() => {
-    agent = new BusinessDiscovery();
+    agent = new BusinessDiscovery(testBusinessId, testUserId);
     
     mockContext = {
       contextId: 'test_context_123',
@@ -373,9 +375,11 @@ describe('BusinessDiscovery', () => {
  */
 describe('BusinessDiscovery Integration Tests', () => {
   let agent: BusinessDiscovery;
+  const testBusinessId = 'test_business_ca_sos';
+  const testUserId = 'test_user_ca_sos';
 
   beforeEach(() => {
-    agent = new BusinessDiscovery();
+    agent = new BusinessDiscovery(testBusinessId, testUserId);
   });
 
   // NOTE: These would connect to real state APIs in production
@@ -395,9 +399,11 @@ describe('BusinessDiscovery Integration Tests', () => {
  */
 describe('BusinessDiscovery Performance', () => {
   let agent: BusinessDiscovery;
+  const testBusinessId = 'test_business_perf';
+  const testUserId = 'test_user_perf';
 
   beforeEach(() => {
-    agent = new BusinessDiscovery();
+    agent = new BusinessDiscovery(testBusinessId, testUserId);
   });
 
   test('should complete search within time limits', async () => {

@@ -197,7 +197,7 @@ describe('E2E Onboarding Flow', () => {
       expect(orchestrationResult.phase).toBe('discovery');
 
       // Step 3: Business Discovery Phase
-      const businessDiscovery = new BusinessDiscovery();
+      const businessDiscovery = new BusinessDiscovery('test_business_e2e', 'test_user_e2e');
       const discoveryRequest: AgentRequest = {
         requestId: 'req_discovery',
         agentRole: 'business_discovery',
@@ -217,7 +217,7 @@ describe('E2E Onboarding Flow', () => {
       expect(discoveryResponse.nextAgent).toBe('profile_collector');
 
       // Step 4: Profile Collection Phase
-      const profileCollector = new ProfileCollector();
+      const profileCollector = new ProfileCollector('test_business_e2e', 'test_user_e2e');
       const profileRequest: AgentRequest = {
         requestId: 'req_profile',
         agentRole: 'profile_collector',
@@ -256,7 +256,7 @@ describe('E2E Onboarding Flow', () => {
       taskContext.currentState.completeness = 50;
 
       // Step 6: Compliance Analysis Phase
-      const complianceAnalyzer = new ComplianceAnalyzer();
+      const complianceAnalyzer = new ComplianceAnalyzer('test_business_e2e', 'test_user_e2e');
       const complianceRequest: AgentRequest = {
         requestId: 'req_compliance',
         agentRole: 'compliance_analyzer',
@@ -277,7 +277,7 @@ describe('E2E Onboarding Flow', () => {
       expect(complianceResponse.data.requirements.length).toBeGreaterThan(0);
 
       // Step 7: Form Optimization Phase
-      const formOptimizer = new FormOptimizer();
+      const formOptimizer = new FormOptimizer('test_business_e2e', 'test_user_e2e');
       const optimizeRequest: AgentRequest = {
         requestId: 'req_optimize',
         agentRole: 'ux_optimization_agent',
@@ -304,7 +304,7 @@ describe('E2E Onboarding Flow', () => {
       taskContext.currentState.completeness = 100;
 
       // Step 9: Achievement and Celebration Phase
-      const achievementTracker = new AchievementTracker();
+      const achievementTracker = new AchievementTracker('test_business_e2e', 'test_user_e2e');
       const achievementRequest: AgentRequest = {
         requestId: 'req_achievement',
         agentRole: 'achievement_tracker',
@@ -358,7 +358,7 @@ describe('E2E Onboarding Flow', () => {
       });
 
       // Begin business discovery
-      const businessDiscovery = new BusinessDiscovery();
+      const businessDiscovery = new BusinessDiscovery('test_business_e2e', 'test_user_e2e');
       const discoveryRequest: AgentRequest = {
         requestId: 'req_abandon',
         agentRole: 'business_discovery',
@@ -384,7 +384,7 @@ describe('E2E Onboarding Flow', () => {
         data: { resuming: true }
       };
 
-      const profileCollector = new ProfileCollector();
+      const profileCollector = new ProfileCollector('test_business_e2e', 'test_user_e2e');
       const resumeResponse = await profileCollector.processRequest(resumeRequest, taskContext);
       
       expect(resumeResponse.status).toBe('needs_input');
@@ -501,7 +501,7 @@ describe('E2E Onboarding Flow', () => {
       // Simulate network error
       dbService.createContextHistoryEntry.mockRejectedValueOnce(new Error('Network timeout'));
 
-      const businessDiscovery = new BusinessDiscovery();
+      const businessDiscovery = new BusinessDiscovery('test_business_e2e', 'test_user_e2e');
       const request: AgentRequest = {
         requestId: 'req_network_fail',
         agentRole: 'business_discovery',
@@ -517,7 +517,7 @@ describe('E2E Onboarding Flow', () => {
     });
 
     it('should handle invalid user input', async () => {
-      const profileCollector = new ProfileCollector();
+      const profileCollector = new ProfileCollector('test_business_e2e', 'test_user_e2e');
       const request: AgentRequest = {
         requestId: 'req_invalid',
         agentRole: 'profile_collector',
@@ -539,9 +539,9 @@ describe('E2E Onboarding Flow', () => {
 
     it('should handle concurrent agent requests', async () => {
       const agents = [
-        new BusinessDiscovery(),
-        new ProfileCollector(),
-        new ComplianceAnalyzer()
+        new BusinessDiscovery('test_business_e2e', 'test_user_e2e'),
+        new ProfileCollector('test_business_e2e', 'test_user_e2e'),
+        new ComplianceAnalyzer('test_business_e2e', 'test_user_e2e')
       ];
 
       const requests = agents.map((agent, index) => ({
@@ -584,9 +584,9 @@ describe('E2E Onboarding Flow', () => {
 
       // Execute agent sequence
       const agentSequence = [
-        { agent: new BusinessDiscovery(), role: 'business_discovery' },
-        { agent: new ProfileCollector(), role: 'profile_collector' },
-        { agent: new ComplianceAnalyzer(), role: 'compliance_analyzer' }
+        { agent: new BusinessDiscovery('test_business_e2e', 'test_user_e2e'), role: 'business_discovery' },
+        { agent: new ProfileCollector('test_business_e2e', 'test_user_e2e'), role: 'profile_collector' },
+        { agent: new ComplianceAnalyzer('test_business_e2e', 'test_user_e2e'), role: 'compliance_analyzer' }
       ];
 
       for (const { agent, role } of agentSequence) {

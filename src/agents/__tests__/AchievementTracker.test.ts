@@ -11,9 +11,11 @@ import { TaskContext, AgentRequest } from '../../types/engine-types';
 describe('AchievementTracker', () => {
   let agent: AchievementTracker;
   let mockContext: TaskContext;
+  const testBusinessId = 'test_business_123';
+  const testUserId = 'test_user_456';
 
   beforeEach(() => {
-    agent = new AchievementTracker();
+    agent = new AchievementTracker(testBusinessId, testUserId);
     
     mockContext = {
       contextId: 'test_context_celebration',
@@ -716,9 +718,11 @@ describe('AchievementTracker', () => {
  */
 describe('AchievementTracker Performance', () => {
   let agent: AchievementTracker;
+  const testBusinessId = 'test_business_perf';
+  const testUserId = 'test_user_perf';
 
   beforeEach(() => {
-    agent = new AchievementTracker();
+    agent = new AchievementTracker(testBusinessId, testUserId);
   });
 
   test('should complete celebration within time limits', async () => {

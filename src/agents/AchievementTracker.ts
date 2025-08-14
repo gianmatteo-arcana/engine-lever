@@ -6,10 +6,10 @@
  * and motivates users through positive reinforcement
  */
 
-import { Agent } from './base/Agent';
+import { BaseAgent } from './base/BaseAgent';
 import { 
   TaskContext, 
-  ContextEntry, 
+  ContextEntry,
   AgentRequest, 
   AgentResponse,
   UIRequest,
@@ -62,9 +62,9 @@ interface MotivationalContext {
 /**
  * Achievement Tracker - Creates delightful moments of accomplishment
  */
-export class AchievementTracker extends Agent {
-  constructor() {
-    super('celebration_agent.yaml');
+export class AchievementTracker extends BaseAgent {
+  constructor(businessId: string, userId?: string) {
+    super('celebration_agent.yaml', businessId, userId);
   }
 
   /**
@@ -617,11 +617,16 @@ export class AchievementTracker extends Agent {
       actor: {
         type: 'agent',
         id: 'celebration_agent',
-        version: this.config.version
+        version: (this as any).specializedTemplate?.agent?.version || '1.0.0'
       },
       operation: entry.operation || 'unknown',
       data: entry.data || {},
-      reasoning: entry.reasoning
+      reasoning: entry.reasoning || 'Achievement tracking action',
+      trigger: entry.trigger || {
+        type: 'agent_request',
+        source: 'achievement_tracker',
+        details: {}
+      }
     };
 
     if (!context.history) {

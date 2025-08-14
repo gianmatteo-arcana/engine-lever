@@ -39,7 +39,7 @@ describe('FormOptimizer', () => {
   let mockContext: TaskContext;
 
   beforeEach(() => {
-    agent = new FormOptimizer();
+    agent = new FormOptimizer('test_business_ux', 'test_user_ux');
     
     mockContext = {
       contextId: 'test_context_ux',
@@ -502,7 +502,7 @@ describe('FormOptimizer Performance', () => {
   let agent: FormOptimizer;
 
   beforeEach(() => {
-    agent = new FormOptimizer();
+    agent = new FormOptimizer('test_business_ux', 'test_user_ux');
   });
 
   test('should optimize within time limits', async () => {

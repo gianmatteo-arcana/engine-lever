@@ -6,7 +6,7 @@
  * actionable compliance calendars based on business profile data
  */
 
-import { Agent } from './base/Agent';
+import { BaseAgent } from './base/BaseAgent';
 import { 
   TaskContext, 
   ContextEntry, 
@@ -64,9 +64,9 @@ interface RiskAssessment {
 /**
  * Compliance Analyzer - Determines regulatory requirements
  */
-export class ComplianceAnalyzer extends Agent {
-  constructor() {
-    super('entity_compliance_agent.yaml');
+export class ComplianceAnalyzer extends BaseAgent {
+  constructor(businessId: string, userId?: string) {
+    super('entity_compliance_agent.yaml', businessId, userId);
   }
 
   /**
@@ -658,11 +658,16 @@ export class ComplianceAnalyzer extends Agent {
       actor: {
         type: 'agent',
         id: 'compliance_analyzer',
-        version: this.config.version
+        version: (this as any).specializedTemplate?.agent?.version || '1.0.0'
       },
       operation: entry.operation || 'unknown',
       data: entry.data || {},
-      reasoning: entry.reasoning
+      reasoning: entry.reasoning || 'Compliance analysis action',
+      trigger: entry.trigger || {
+        type: 'agent_request',
+        source: 'compliance_analyzer',
+        details: {}
+      }
     };
 
     if (!context.history) {

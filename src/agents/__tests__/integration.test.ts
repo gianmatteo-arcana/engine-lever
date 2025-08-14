@@ -35,11 +35,14 @@ describe('Agent Integration Tests', () => {
 
   beforeEach(() => {
     // Initialize agents
-    businessDiscovery = new BusinessDiscovery();
-    profileCollector = new ProfileCollector();
-    complianceAnalyzer = new ComplianceAnalyzer();
-    achievementTracker = new AchievementTracker();
-    uxOptimizer = new FormOptimizer();
+    const testBusinessId = 'test_business_integration';
+    const testUserId = 'test_user_integration';
+    
+    businessDiscovery = new BusinessDiscovery(testBusinessId, testUserId);
+    profileCollector = new ProfileCollector(testBusinessId, testUserId);
+    complianceAnalyzer = new ComplianceAnalyzer(testBusinessId, testUserId);
+    achievementTracker = new AchievementTracker(testBusinessId, testUserId);
+    uxOptimizer = new FormOptimizer(testBusinessId, testUserId);
 
     // Setup mock database with proper client mock
     const mockUserClient = {
@@ -681,7 +684,7 @@ describe('Agent Integration Tests', () => {
 
     it('should handle timeout scenarios between agents', async () => {
       // Simulate slow agent response
-      const slowAgent = new BusinessDiscovery();
+      const slowAgent = new BusinessDiscovery('test_business_integration', 'test_user_integration');
       const originalProcess = slowAgent.processRequest;
       
       slowAgent.processRequest = jest.fn().mockImplementation(async (request, context) => {

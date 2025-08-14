@@ -24,7 +24,7 @@ describe('ComplianceAnalyzer', () => {
   let mockContext: TaskContext;
 
   beforeEach(() => {
-    agent = new ComplianceAnalyzer();
+    agent = new ComplianceAnalyzer('test_business_compliance', 'test_user_compliance');
     
     mockContext = {
       contextId: 'test_context_789',
@@ -626,7 +626,7 @@ describe('ComplianceAnalyzer Performance', () => {
   let agent: ComplianceAnalyzer;
 
   beforeEach(() => {
-    agent = new ComplianceAnalyzer();
+    agent = new ComplianceAnalyzer('test_business_compliance', 'test_user_compliance');
   });
 
   test('should complete analysis within time limits', async () => {
