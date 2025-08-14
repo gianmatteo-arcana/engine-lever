@@ -2,8 +2,13 @@
  * Legal Compliance Agent
  * Migrated from EventEmitter to Consolidated BaseAgent Pattern
  * 
- * Specialized agent that analyzes business compliance requirements and translates
- * complex regulations into actionable steps with deadline tracking and risk assessment.
+ * AGENT MISSION: Analyze business compliance requirements and translate complex 
+ * regulations into actionable steps. Identify deadlines, assess risks, and provide 
+ * clear guidance for regulatory obligations.
+ * 
+ * This agent is GENERAL PURPOSE - it works with Task Templates for specific
+ * compliance tasks (SOI, tax filings, etc.). The agent provides legal analysis
+ * capabilities while Task Templates define the specific workflow logic.
  */
 
 import { BaseAgent } from './base/BaseAgent';
@@ -17,13 +22,14 @@ import {
 } from '../types/engine-types';
 import { DatabaseService } from '../services/database';
 
-interface SOIRequirements {
+interface FilingRequirements {
   isRequired: boolean;
   dueDate?: Date;
   filingPeriod: string;
   fee: number;
   requiredDocuments: string[];
   formNumber: string;
+  filingType: string;
 }
 
 interface ComplianceRequirement {
@@ -72,10 +78,10 @@ export class LegalComplianceAgent extends BaseAgent {
         reasoning: 'Starting comprehensive compliance analysis for business entity and filing requirements'
       });
 
-      // Route based on instruction
+      // Route based on instruction - GENERAL COMPLIANCE OPERATIONS
       switch (request.instruction) {
-        case 'validate_soi_requirements':
-          return await this.validateSOIRequirements(request, context, businessEntity);
+        case 'validate_filing_requirements':
+          return await this.validateFilingRequirements(request, context, businessEntity);
         
         case 'analyze_entity_compliance':
           return await this.analyzeEntityCompliance(request, context, businessEntity);
@@ -83,8 +89,8 @@ export class LegalComplianceAgent extends BaseAgent {
         case 'assess_compliance_risk':
           return await this.assessComplianceRisk(request, context, businessEntity);
         
-        case 'prepare_compliance_form':
-          return await this.prepareComplianceForm(request, context, businessEntity);
+        case 'prepare_compliance_guidance':
+          return await this.prepareComplianceGuidance(request, context, businessEntity);
         
         default:
           await this.recordContextEntry(context, {
@@ -116,52 +122,58 @@ export class LegalComplianceAgent extends BaseAgent {
   }
 
   /**
-   * Validate Statement of Information requirements
+   * Validate filing requirements for any compliance task type
+   * Task Templates provide the specific filing type logic
    */
-  private async validateSOIRequirements(
+  private async validateFilingRequirements(
     request: AgentRequest, 
     context: TaskContext, 
     businessEntity: any
   ): Promise<AgentResponse> {
     
-    // SOI analysis logic
-    const soiRequirements: SOIRequirements = {
-      isRequired: this.isSOIRequired(businessEntity),
-      dueDate: this.calculateSOIDueDate(businessEntity),
-      filingPeriod: this.getSOIFilingPeriod(businessEntity),
-      fee: this.getSOIFee(businessEntity),
-      requiredDocuments: this.getSOIRequiredDocuments(businessEntity),
-      formNumber: this.getSOIFormNumber(businessEntity)
+    // Get filing type from request (provided by Task Template)
+    const filingType = request.data?.filingType || 'general';
+    
+    // General filing requirements analysis - specific logic comes from Task Templates
+    const filingRequirements: FilingRequirements = {
+      isRequired: this.isFilingRequired(businessEntity, filingType),
+      dueDate: this.calculateFilingDueDate(businessEntity, filingType),
+      filingPeriod: this.getFilingPeriod(businessEntity, filingType),
+      fee: this.getFilingFee(businessEntity, filingType),
+      requiredDocuments: this.getRequiredDocuments(businessEntity, filingType),
+      formNumber: this.getFormNumber(businessEntity, filingType),
+      filingType
     };
 
     await this.recordContextEntry(context, {
-      operation: 'soi_requirements_validated',
+      operation: 'filing_requirements_validated',
       data: { 
-        soiRequirements,
-        isRequired: soiRequirements.isRequired,
-        dueDate: soiRequirements.dueDate,
-        fee: soiRequirements.fee
+        filingRequirements,
+        filingType,
+        isRequired: filingRequirements.isRequired,
+        dueDate: filingRequirements.dueDate,
+        fee: filingRequirements.fee
       },
-      reasoning: `SOI analysis completed for ${businessEntity.entityType} in ${businessEntity.jurisdiction}. Required: ${soiRequirements.isRequired}, Due: ${soiRequirements.dueDate}`
+      reasoning: `Filing requirements analysis completed for ${filingType} filing. Entity: ${businessEntity.entityType} in ${businessEntity.jurisdiction}. Required: ${filingRequirements.isRequired}, Due: ${filingRequirements.dueDate}`
     });
 
     // Generate compliance guidance UI
-    const uiRequest = this.createSOIGuidanceUI(soiRequirements, businessEntity);
+    const uiRequest = this.createFilingGuidanceUI(filingRequirements, businessEntity);
 
     return {
       status: 'needs_input',
       data: { 
-        soiRequirements,
+        filingRequirements,
         entityAnalysis: businessEntity,
         guidance: {
-          isRequired: soiRequirements.isRequired,
-          nextSteps: soiRequirements.isRequired 
-            ? ['Gather business information', 'Complete SOI form', 'Submit with fee']
-            : ['No SOI filing required for this entity type']
+          isRequired: filingRequirements.isRequired,
+          nextSteps: filingRequirements.isRequired 
+            ? ['Gather required information', `Complete ${filingType} filing`, 'Submit with required fee']
+            : [`No ${filingType} filing required for this entity type`]
         }
       },
       uiRequests: [uiRequest],
-      reasoning: 'SOI requirements validated, providing compliance guidance to user',
+      reasoning: `${filingType} filing requirements validated, providing compliance guidance to user`,
       nextAgent: 'data_collection'
     };
   }
@@ -250,37 +262,38 @@ export class LegalComplianceAgent extends BaseAgent {
   }
 
   /**
-   * Prepare compliance forms
+   * Prepare compliance guidance for any filing type
+   * Task Templates specify the exact form requirements
    */
-  private async prepareComplianceForm(
+  private async prepareComplianceGuidance(
     request: AgentRequest, 
     context: TaskContext, 
     businessEntity: any
   ): Promise<AgentResponse> {
     
-    const formType = request.data?.formType || 'soi';
-    const formTemplate = this.getFormTemplate(formType, businessEntity);
-    const prefilledData = this.generatePrefilledData(businessEntity, formType);
+    const filingType = request.data?.filingType || 'general';
+    const guidanceTemplate = this.getGuidanceTemplate(filingType, businessEntity);
+    const prefilledData = this.generatePrefilledData(businessEntity, filingType);
 
     await this.recordContextEntry(context, {
-      operation: 'compliance_form_prepared',
+      operation: 'compliance_guidance_prepared',
       data: { 
-        formType,
+        filingType,
         entityType: businessEntity.entityType,
         prefilledFields: Object.keys(prefilledData).length
       },
-      reasoning: `Prepared ${formType} form template with ${Object.keys(prefilledData).length} pre-filled fields`
+      reasoning: `Prepared ${filingType} compliance guidance with ${Object.keys(prefilledData).length} pre-filled fields`
     });
 
     return {
       status: 'completed',
       data: {
-        formTemplate,
+        guidanceTemplate,
         prefilledData,
-        instructions: this.getFormInstructions(formType),
-        submissionGuidance: this.getSubmissionGuidance(formType, businessEntity)
+        instructions: this.getFilingInstructions(filingType),
+        submissionGuidance: this.getSubmissionGuidance(filingType, businessEntity)
       },
-      reasoning: 'Compliance form prepared with pre-filled data and submission guidance'
+      reasoning: `${filingType} compliance guidance prepared with pre-filled data and submission instructions`
     };
   }
 
@@ -300,69 +313,120 @@ export class LegalComplianceAgent extends BaseAgent {
     };
   }
 
-  private isSOIRequired(entity: any): boolean {
-    // SOI is required for most CA entity types
-    const soiRequiredTypes = ['Corporation', 'LLC', 'Limited Partnership'];
-    return entity.jurisdiction === 'CA' && soiRequiredTypes.includes(entity.entityType);
+  private isFilingRequired(entity: any, filingType: string): boolean {
+    // General filing requirement logic - specific rules come from Task Templates
+    // This is a fallback implementation
+    
+    switch (filingType) {
+      case 'soi':
+        const soiRequiredTypes = ['Corporation', 'LLC', 'Limited Partnership'];
+        return entity.jurisdiction === 'CA' && soiRequiredTypes.includes(entity.entityType);
+      
+      case 'franchise_tax':
+        return entity.jurisdiction === 'CA' && ['Corporation', 'LLC'].includes(entity.entityType);
+      
+      default:
+        // Conservative approach: assume filing is required unless proven otherwise
+        return true;
+    }
   }
 
-  private calculateSOIDueDate(entity: any): Date | undefined {
-    if (!this.isSOIRequired(entity) || !entity.formationDate) return undefined;
+  private calculateFilingDueDate(entity: any, filingType: string): Date | undefined {
+    if (!this.isFilingRequired(entity, filingType) || !entity.formationDate) return undefined;
     
     const formationDate = new Date(entity.formationDate);
     const dueDate = new Date(formationDate);
     
-    if (entity.entityType === 'Corporation') {
-      // Corporations: 90 days after formation, then biennial
-      dueDate.setDate(dueDate.getDate() + 90);
-    } else if (entity.entityType === 'LLC') {
-      // LLCs: Initial due 90 days after formation
-      dueDate.setDate(dueDate.getDate() + 90);
+    switch (filingType) {
+      case 'soi':
+        if (entity.entityType === 'Corporation' || entity.entityType === 'LLC') {
+          // Initial due 90 days after formation, then biennial
+          dueDate.setDate(dueDate.getDate() + 90);
+        }
+        break;
+      
+      case 'franchise_tax':
+        // Franchise tax due on 15th day of 4th month after year end
+        const nextYear = new Date(formationDate.getFullYear() + 1, 3, 15); // April 15
+        return nextYear;
+      
+      default:
+        // Default: assume 90 days for new filings
+        dueDate.setDate(dueDate.getDate() + 90);
     }
     
     return dueDate;
   }
 
-  private getSOIFilingPeriod(entity: any): string {
-    if (entity.entityType === 'Corporation') return 'Biennial';
-    if (entity.entityType === 'LLC') return 'Biennial';
+  private getFilingPeriod(entity: any, filingType: string): string {
+    switch (filingType) {
+      case 'soi':
+        if (entity.entityType === 'Corporation' || entity.entityType === 'LLC') return 'Biennial';
+        break;
+      case 'franchise_tax':
+        return 'Annual';
+      default:
+        return 'As Required';
+    }
     return 'N/A';
   }
 
-  private getSOIFee(entity: any): number {
-    if (entity.entityType === 'Corporation') return 25;
-    if (entity.entityType === 'LLC') return 20;
+  private getFilingFee(entity: any, filingType: string): number {
+    switch (filingType) {
+      case 'soi':
+        if (entity.entityType === 'Corporation') return 25;
+        if (entity.entityType === 'LLC') return 20;
+        break;
+      case 'franchise_tax':
+        return 800; // CA minimum franchise tax
+      default:
+        return 0;
+    }
     return 0;
   }
 
-  private getSOIRequiredDocuments(entity: any): string[] {
-    const docs = ['Business entity information', 'Current business address'];
-    if (entity.entityType === 'Corporation') {
-      docs.push('Officer and director information', 'Stock information');
-    } else if (entity.entityType === 'LLC') {
-      docs.push('Member and manager information');
+  private getRequiredDocuments(entity: any, filingType: string): string[] {
+    switch (filingType) {
+      case 'soi':
+        const docs = ['Business entity information', 'Current business address'];
+        if (entity.entityType === 'Corporation') {
+          docs.push('Officer and director information', 'Stock information');
+        } else if (entity.entityType === 'LLC') {
+          docs.push('Member and manager information');
+        }
+        return docs;
+      case 'franchise_tax':
+        return ['Financial statements', 'Tax calculation worksheets'];
+      default:
+        return ['Business entity information'];
     }
-    return docs;
   }
 
-  private getSOIFormNumber(entity: any): string {
-    if (entity.entityType === 'Corporation') return 'SI-550';
-    if (entity.entityType === 'LLC') return 'SI-550';
+  private getFormNumber(entity: any, filingType: string): string {
+    switch (filingType) {
+      case 'soi':
+        if (entity.entityType === 'Corporation' || entity.entityType === 'LLC') return 'SI-550';
+        break;
+      case 'franchise_tax':
+        return '100';
+      default:
+        return 'TBD';
+    }
     return 'N/A';
   }
 
   private identifyComplianceRequirements(entity: any): ComplianceRequirement[] {
     const requirements: ComplianceRequirement[] = [];
 
-    // SOI requirement
-    if (this.isSOIRequired(entity)) {
+    // SOI requirement (if applicable)
+    if (this.isFilingRequired(entity, 'soi')) {
       requirements.push({
         type: 'Statement of Information',
-        deadline: this.calculateSOIDueDate(entity)?.toISOString() || '',
+        deadline: this.calculateFilingDueDate(entity, 'soi')?.toISOString() || '',
         status: 'due',
         priority: 'high',
-        fee: this.getSOIFee(entity),
-        forms: [this.getSOIFormNumber(entity)],
+        fee: this.getFilingFee(entity, 'soi'),
+        forms: [this.getFormNumber(entity, 'soi')],
         description: 'Required business information filing with CA Secretary of State'
       });
     }
@@ -407,29 +471,29 @@ export class LegalComplianceAgent extends BaseAgent {
     return { level, factors, consequences, mitigationSteps };
   }
 
-  private createSOIGuidanceUI(requirements: SOIRequirements, entity: any): UIRequest {
+  private createFilingGuidanceUI(requirements: FilingRequirements, entity: any): UIRequest {
     return {
-      requestId: `soi_guidance_${Date.now()}`,
+      requestId: `filing_guidance_${Date.now()}`,
       templateType: UITemplateType.InstructionPanel,
       semanticData: {
         agentRole: 'legal_compliance_agent',
-        title: 'Statement of Information Requirements',
+        title: `${requirements.filingType.toUpperCase()} Filing Requirements`,
         description: requirements.isRequired 
-          ? `Your ${entity.entityType} requires SOI filing by ${requirements.dueDate?.toLocaleDateString()}`
-          : `No SOI filing required for your ${entity.entityType}`,
+          ? `Your ${entity.entityType} requires ${requirements.filingType} filing by ${requirements.dueDate?.toLocaleDateString()}`
+          : `No ${requirements.filingType} filing required for your ${entity.entityType}`,
         requirements,
         entity,
         actions: {
           proceed: {
             type: 'submit',
-            label: 'Start Filing Process',
+            label: `Start ${requirements.filingType.toUpperCase()} Filing`,
             primary: true,
-            handler: () => ({ action: 'start_soi_filing', requirements })
+            handler: () => ({ action: `start_${requirements.filingType}_filing`, requirements })
           },
           learn_more: {
             type: 'custom',
             label: 'Learn More',
-            handler: () => ({ action: 'show_soi_details' })
+            handler: () => ({ action: `show_${requirements.filingType}_details` })
           }
         }
       },
@@ -478,56 +542,110 @@ export class LegalComplianceAgent extends BaseAgent {
     } as any;
   }
 
-  private getFormTemplate(formType: string, entity: any): any {
-    // Return form template structure
+  private getGuidanceTemplate(filingType: string, entity: any): any {
+    // Return guidance template structure - specific forms come from Task Templates
     return {
-      formType,
+      filingType,
       sections: ['Business Information', 'Contact Details', 'Filing Information'],
-      fields: this.getFormFields(formType, entity)
+      fields: this.getRequiredFields(filingType, entity)
     };
   }
 
-  private getFormFields(formType: string, _entity: any): any[] {
-    if (formType === 'soi') {
-      return [
-        { id: 'businessName', label: 'Business Name', type: 'text', required: true },
-        { id: 'entityType', label: 'Entity Type', type: 'select', required: true },
-        { id: 'businessAddress', label: 'Business Address', type: 'address', required: true },
-        { id: 'mailingAddress', label: 'Mailing Address', type: 'address', required: true }
-      ];
+  private getRequiredFields(filingType: string, _entity: any): any[] {
+    switch (filingType) {
+      case 'soi':
+        return [
+          { id: 'businessName', label: 'Business Name', type: 'text', required: true },
+          { id: 'entityType', label: 'Entity Type', type: 'select', required: true },
+          { id: 'businessAddress', label: 'Business Address', type: 'address', required: true },
+          { id: 'mailingAddress', label: 'Mailing Address', type: 'address', required: true }
+        ];
+      case 'franchise_tax':
+        return [
+          { id: 'businessName', label: 'Business Name', type: 'text', required: true },
+          { id: 'taxYear', label: 'Tax Year', type: 'number', required: true },
+          { id: 'totalIncome', label: 'Total Income', type: 'currency', required: true }
+        ];
+      default:
+        return [
+          { id: 'businessName', label: 'Business Name', type: 'text', required: true },
+          { id: 'entityType', label: 'Entity Type', type: 'select', required: true }
+        ];
     }
-    return [];
   }
 
-  private generatePrefilledData(entity: any, _formType: string): any {
-    return {
+  private generatePrefilledData(entity: any, filingType: string): any {
+    const baseData = {
       businessName: entity.name,
       entityType: entity.entityType,
       jurisdiction: entity.jurisdiction,
       formationDate: entity.formationDate
     };
-  }
 
-  private getFormInstructions(formType: string): string[] {
-    if (formType === 'soi') {
-      return [
-        'Complete all required fields accurately',
-        'Ensure business address is current',
-        'Include all required attachments',
-        'Submit with appropriate filing fee'
-      ];
+    // Add filing-specific data
+    switch (filingType) {
+      case 'franchise_tax':
+        return {
+          ...baseData,
+          taxYear: new Date().getFullYear() - 1
+        };
+      default:
+        return baseData;
     }
-    return [];
   }
 
-  private getSubmissionGuidance(formType: string, entity: any): any {
-    return {
-      method: 'online',
-      url: 'https://bizfileonline.sos.ca.gov',
-      fee: this.getSOIFee(entity),
-      processingTime: '1-2 business days',
-      confirmationMethod: 'email'
-    };
+  private getFilingInstructions(filingType: string): string[] {
+    switch (filingType) {
+      case 'soi':
+        return [
+          'Complete all required fields accurately',
+          'Ensure business address is current',
+          'Include all required attachments',
+          'Submit with appropriate filing fee'
+        ];
+      case 'franchise_tax':
+        return [
+          'Review financial statements for accuracy',
+          'Calculate minimum tax or income-based tax',
+          'Submit by April 15th deadline',
+          'Pay minimum $800 franchise tax'
+        ];
+      default:
+        return [
+          'Review all information for accuracy',
+          'Submit by required deadline',
+          'Include all required documentation'
+        ];
+    }
+  }
+
+  private getSubmissionGuidance(filingType: string, entity: any): any {
+    switch (filingType) {
+      case 'soi':
+        return {
+          method: 'online',
+          url: 'https://bizfileonline.sos.ca.gov',
+          fee: this.getFilingFee(entity, filingType),
+          processingTime: '1-2 business days',
+          confirmationMethod: 'email'
+        };
+      case 'franchise_tax':
+        return {
+          method: 'online',
+          url: 'https://www.ftb.ca.gov',
+          fee: this.getFilingFee(entity, filingType),
+          processingTime: '3-5 business days',
+          confirmationMethod: 'mail and email'
+        };
+      default:
+        return {
+          method: 'varies',
+          url: 'Contact agency directly',
+          fee: this.getFilingFee(entity, filingType),
+          processingTime: 'varies',
+          confirmationMethod: 'varies'
+        };
+    }
   }
 
   /**

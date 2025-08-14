@@ -83,13 +83,14 @@ describe('LegalComplianceAgent', () => {
     };
   });
 
-  describe('SOI Requirements Validation', () => {
-    it('should validate SOI requirements for CA LLC', async () => {
+  describe('Filing Requirements Validation', () => {
+    it('should validate SOI filing requirements for CA LLC', async () => {
       const request: AgentRequest = {
         requestId: 'req_soi_validation',
         agentRole: 'legal_compliance',
-        instruction: 'validate_soi_requirements',
+        instruction: 'validate_filing_requirements',
         data: { 
+          filingType: 'soi',
           entityType: 'LLC',
           jurisdiction: 'CA',
           formationDate: '2023-01-15'
@@ -104,10 +105,11 @@ describe('LegalComplianceAgent', () => {
       const response = await agent.processRequest(request, mockTaskContext);
 
       expect(response.status).toBe('needs_input');
-      expect(response.data.soiRequirements).toBeDefined();
-      expect(response.data.soiRequirements.isRequired).toBe(true);
-      expect(response.data.soiRequirements.fee).toBe(20);
-      expect(response.data.soiRequirements.formNumber).toBe('SI-550');
+      expect(response.data.filingRequirements).toBeDefined();
+      expect(response.data.filingRequirements.isRequired).toBe(true);
+      expect(response.data.filingRequirements.fee).toBe(20);
+      expect(response.data.filingRequirements.formNumber).toBe('SI-550');
+      expect(response.data.filingRequirements.filingType).toBe('soi');
       expect(response.nextAgent).toBe('data_collection');
       expect(response.uiRequests).toHaveLength(1);
     });
@@ -119,32 +121,38 @@ describe('LegalComplianceAgent', () => {
       const request: AgentRequest = {
         requestId: 'req_soi_sole_prop',
         agentRole: 'legal_compliance',
-        instruction: 'validate_soi_requirements',
-        data: { entityType: 'Sole Proprietorship' }
+        instruction: 'validate_filing_requirements',
+        data: { 
+          filingType: 'soi',
+          entityType: 'Sole Proprietorship' 
+        }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
 
-      expect(response.data.soiRequirements.isRequired).toBe(false);
-      expect(response.data.guidance.nextSteps[0]).toContain('No SOI filing required');
+      expect(response.data.filingRequirements.isRequired).toBe(false);
+      expect(response.data.guidance.nextSteps[0]).toContain('No soi filing required');
     });
 
-    it('should calculate correct SOI due date', async () => {
+    it('should calculate correct filing due date', async () => {
       const request: AgentRequest = {
         requestId: 'req_soi_due_date',
         agentRole: 'legal_compliance',
-        instruction: 'validate_soi_requirements',
-        data: { formationDate: '2023-01-15' }
+        instruction: 'validate_filing_requirements',
+        data: { 
+          filingType: 'soi',
+          formationDate: '2023-01-15' 
+        }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
 
-      expect(response.data.soiRequirements.dueDate).toBeDefined();
+      expect(response.data.filingRequirements.dueDate).toBeDefined();
       // Should be 90 days after formation date
       const expectedDueDate = new Date('2023-01-15');
       expectedDueDate.setDate(expectedDueDate.getDate() + 90);
       
-      const actualDueDate = new Date(response.data.soiRequirements.dueDate);
+      const actualDueDate = new Date(response.data.filingRequirements.dueDate);
       expect(actualDueDate.toDateString()).toBe(expectedDueDate.toDateString());
     });
   });
@@ -265,19 +273,19 @@ describe('LegalComplianceAgent', () => {
     });
   });
 
-  describe('Form Preparation', () => {
-    it('should prepare SOI form with prefilled data', async () => {
+  describe('Compliance Guidance Preparation', () => {
+    it('should prepare SOI compliance guidance with prefilled data', async () => {
       const request: AgentRequest = {
-        requestId: 'req_form_prep',
+        requestId: 'req_guidance_prep',
         agentRole: 'legal_compliance',
-        instruction: 'prepare_compliance_form',
-        data: { formType: 'soi' }
+        instruction: 'prepare_compliance_guidance',
+        data: { filingType: 'soi' }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
 
       expect(response.status).toBe('completed');
-      expect(response.data.formTemplate).toBeDefined();
+      expect(response.data.guidanceTemplate).toBeDefined();
       expect(response.data.prefilledData).toBeDefined();
       expect(response.data.instructions).toBeDefined();
       expect(response.data.submissionGuidance).toBeDefined();
@@ -287,18 +295,18 @@ describe('LegalComplianceAgent', () => {
       expect(response.data.prefilledData.entityType).toBe('LLC');
       expect(response.data.prefilledData.jurisdiction).toBe('CA');
 
-      // Check form template structure
-      expect(response.data.formTemplate.formType).toBe('soi');
-      expect(Array.isArray(response.data.formTemplate.sections)).toBe(true);
-      expect(Array.isArray(response.data.formTemplate.fields)).toBe(true);
+      // Check guidance template structure
+      expect(response.data.guidanceTemplate.filingType).toBe('soi');
+      expect(Array.isArray(response.data.guidanceTemplate.sections)).toBe(true);
+      expect(Array.isArray(response.data.guidanceTemplate.fields)).toBe(true);
     });
 
     it('should provide submission guidance', async () => {
       const request: AgentRequest = {
         requestId: 'req_submission_guidance',
         agentRole: 'legal_compliance',
-        instruction: 'prepare_compliance_form',
-        data: { formType: 'soi' }
+        instruction: 'prepare_compliance_guidance',
+        data: { filingType: 'soi' }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
@@ -375,8 +383,8 @@ describe('LegalComplianceAgent', () => {
       const request: AgentRequest = {
         requestId: 'req_error_test',
         agentRole: 'legal_compliance',
-        instruction: 'validate_soi_requirements',
-        data: {}
+        instruction: 'validate_filing_requirements',
+        data: { filingType: 'soi' }
       };
 
       const response = await agent.processRequest(request, corruptedContext as any);
@@ -393,25 +401,25 @@ describe('LegalComplianceAgent', () => {
       const request: AgentRequest = {
         requestId: 'req_db_fail',
         agentRole: 'legal_compliance',
-        instruction: 'validate_soi_requirements',
-        data: {}
+        instruction: 'validate_filing_requirements',
+        data: { filingType: 'soi' }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
 
       // Should still process successfully despite database error
       expect(response.status).toBe('needs_input');
-      expect(response.data.soiRequirements).toBeDefined();
+      expect(response.data.filingRequirements).toBeDefined();
     });
   });
 
   describe('Integration with Agent Flow', () => {
-    it('should specify correct next agent after SOI validation', async () => {
+    it('should specify correct next agent after filing validation', async () => {
       const request: AgentRequest = {
         requestId: 'req_next_agent',
         agentRole: 'legal_compliance',
-        instruction: 'validate_soi_requirements',
-        data: {}
+        instruction: 'validate_filing_requirements',
+        data: { filingType: 'soi' }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
