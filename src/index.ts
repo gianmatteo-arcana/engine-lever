@@ -114,6 +114,10 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api', apiRoutes); // v1 - legacy routes
 
+// Universal tasks API - fixes type synchronization issues  
+import universalTasksRouter from './routes/universal-tasks';
+app.use('/api', universalTasksRouter);
+
 // API v2 - Clean architecture with universal endpoints
 import { apiV2Routes } from './api/v2';
 app.use('/api/v2', apiV2Routes);

@@ -292,6 +292,14 @@ export class DatabaseService {
     this.userClients.clear();
   }
 
+  /**
+   * Get service client for backend task operations
+   * PUBLIC version for use in task service
+   */
+  public getServiceClientForTasks(): SupabaseClient {
+    return this.getServiceClient();
+  }
+
   // Helper method to convert TaskPriority enum to string
   private convertPriority(priority: TaskPriority): 'critical' | 'high' | 'medium' | 'low' {
     switch (priority) {

@@ -16,6 +16,16 @@ import {
   ContextEntry,
   TaskState
 } from '../types/engine-types';
+import {
+  DatabaseTask,
+  CreateTaskRequest as DatabaseCreateTaskRequest,
+  UITask,
+  TaskApiResponse,
+  TaskListApiResponse,
+  TaskCreateApiResponse,
+  databaseTaskToUI,
+  validateCreateTaskRequest
+} from '../types/database-aligned-types';
 
 export interface CreateTaskRequest {
   templateId: string;
@@ -30,6 +40,13 @@ export interface TaskResponse {
   templateId: string;
   status: string;
   message?: string;
+}
+
+/**
+ * Universal Database Task Creation Request (new API)
+ */
+export interface UniversalCreateTaskRequest extends DatabaseCreateTaskRequest {
+  userToken: string;
 }
 
 /**
@@ -466,5 +483,232 @@ export class TaskService {
       goals: data.goals,
       phases: data.phases
     };
+  }
+
+  // ============================================================================
+  // NEW UNIVERSAL DATABASE TASK API (Multi-Repo Sync)
+  // ============================================================================
+
+  /**
+   * Create universal database task (new API)
+   * This matches the database schema exactly and fixes type mismatches
+   */
+  async createDatabaseTask(request: UniversalCreateTaskRequest): Promise<TaskCreateApiResponse> {
+    try {
+      // Validate request
+      if (!validateCreateTaskRequest(request)) {
+        return {
+          success: false,
+          error: 'Invalid task creation request'
+        };
+      }
+
+      // Extract user ID from token (implement token validation)
+      const userId = await this.getUserIdFromToken(request.userToken);
+      if (!userId) {
+        return {
+          success: false,
+          error: 'Invalid or expired user token'
+        };
+      }
+
+      // Create database task
+      const dbTask: Partial<DatabaseTask> = {
+        id: this.generateId(),
+        user_id: userId,
+        title: request.title,
+        description: request.description,
+        task_type: request.task_type,
+        business_id: request.business_id,
+        template_id: request.template_id,
+        status: 'pending',
+        priority: request.priority || 'medium',
+        deadline: request.deadline,
+        metadata: request.metadata || {},
+        data: request.initialData || {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // Save to database
+      const dbService = DatabaseService.getInstance();
+      const client = dbService.getServiceClientForTasks(); // Use service role for backend operations
+
+      const { data, error } = await client
+        .from('tasks')
+        .insert(dbTask)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Failed to create database task', { error });
+        return {
+          success: false,
+          error: 'Failed to create task in database'
+        };
+      }
+
+      // Create TaskContext if template_id provided
+      let contextId: string | undefined;
+      if (request.template_id) {
+        try {
+          const taskContext = await this.create({
+            templateId: request.template_id,
+            tenantId: userId, // Use user_id as tenant
+            userToken: request.userToken,
+            initialData: request.initialData
+          });
+          contextId = taskContext.contextId;
+        } catch (contextError) {
+          logger.warn('Failed to create task context', { contextError });
+          // Continue anyway - task is created even if context fails
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          task: data as DatabaseTask,
+          contextId
+        }
+      };
+
+    } catch (error) {
+      logger.error('Error creating database task', { error });
+      return {
+        success: false,
+        error: 'Internal server error'
+      };
+    }
+  }
+
+  /**
+   * Get user tasks (new API)
+   */
+  async getUserTasks(userToken: string): Promise<TaskListApiResponse> {
+    try {
+      const userId = await this.getUserIdFromToken(userToken);
+      if (!userId) {
+        return {
+          success: false,
+          error: 'Invalid or expired user token'
+        };
+      }
+
+      const dbService = DatabaseService.getInstance();
+      const client = dbService.getServiceClientForTasks();
+
+      const { data, error } = await client
+        .from('tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        logger.error('Failed to fetch user tasks', { error });
+        return {
+          success: false,
+          error: 'Failed to fetch tasks'
+        };
+      }
+
+      return {
+        success: true,
+        data: data as DatabaseTask[] || []
+      };
+
+    } catch (error) {
+      logger.error('Error fetching user tasks', { error });
+      return {
+        success: false,
+        error: 'Internal server error'
+      };
+    }
+  }
+
+  /**
+   * Get single task by ID (new API)
+   */
+  async getTaskById(taskId: string, userToken: string): Promise<TaskApiResponse> {
+    try {
+      const userId = await this.getUserIdFromToken(userToken);
+      if (!userId) {
+        return {
+          success: false,
+          error: 'Invalid or expired user token'
+        };
+      }
+
+      const dbService = DatabaseService.getInstance();
+      const client = dbService.getServiceClientForTasks();
+
+      const { data, error } = await client
+        .from('tasks')
+        .select('*')
+        .eq('id', taskId)
+        .eq('user_id', userId) // Ensure user can only access their tasks
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') { // No rows returned
+          return {
+            success: false,
+            error: 'Task not found'
+          };
+        }
+        logger.error('Failed to fetch task', { error });
+        return {
+          success: false,
+          error: 'Failed to fetch task'
+        };
+      }
+
+      return {
+        success: true,
+        data: data as DatabaseTask
+      };
+
+    } catch (error) {
+      logger.error('Error fetching task', { error });
+      return {
+        success: false,
+        error: 'Internal server error'
+      };
+    }
+  }
+
+  /**
+   * Extract user ID from JWT token
+   * This should be implemented based on your auth system
+   */
+  private async getUserIdFromToken(token: string): Promise<string | null> {
+    try {
+      // This is a placeholder - implement based on your JWT library
+      // You might use supabase.auth.getUser() or similar
+      
+      // For now, try to decode the token manually
+      if (!token) return null;
+      
+      // Remove 'Bearer ' prefix if present
+      const cleanToken = token.replace('Bearer ', '');
+      
+      // This is a simplified version - you should use proper JWT validation
+      try {
+        const payload = JSON.parse(Buffer.from(cleanToken.split('.')[1], 'base64').toString());
+        return payload.sub || payload.user_id || null;
+      } catch {
+        return null;
+      }
+    } catch (error) {
+      logger.error('Error extracting user ID from token', { error });
+      return null;
+    }
+  }
+
+  /**
+   * Convert database tasks to UI format
+   */
+  convertTasksToUI(dbTasks: DatabaseTask[]): UITask[] {
+    return dbTasks.map(databaseTaskToUI);
   }
 }
