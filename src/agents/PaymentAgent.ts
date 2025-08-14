@@ -471,11 +471,11 @@ export class PaymentAgent extends BaseAgent {
       amount,
       paymentMethod: await this.mockVerifyPaymentMethod(paymentMethodId),
       recipient: recipient || {
-        name: 'California Secretary of State',
-        type: 'government',
-        account: 'gov_ca_sos'
+        name: 'Payment Recipient',
+        type: 'external',
+        account: 'external_recipient'
       },
-      description: description || 'Government filing fee',
+      description: description || 'Processing fee',
       requiresApproval: amount > 100, // Require approval for amounts over $100
       expiresAt: expiresAt.toISOString()
     };

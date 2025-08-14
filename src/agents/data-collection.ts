@@ -37,7 +37,7 @@ export class DataCollectionAgent extends BaseAgent {
       {
         canInitiateTasks: false,
         canDelegateTasks: false,
-        requiredTools: ['quickbooks', 'plaid', 'document-parser'],
+        requiredTools: ['accounting-integration', 'banking-integration', 'document-parser'],
         maxConcurrentTasks: 3,
         supportedMessageTypes: ['request', 'response', 'notification']
       }
@@ -77,7 +77,7 @@ export class DataCollectionAgent extends BaseAgent {
       action: 'collect_and_validate',
       reasoning: 'Gathering required business data from available sources',
       confidence: 0.85,
-      requiredResources: ['quickbooks', 'plaid'],
+      requiredResources: ['accounting-integration', 'banking-integration'],
       estimatedDuration: 600000 // 10 minutes
     };
   }

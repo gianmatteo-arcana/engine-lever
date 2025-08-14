@@ -384,7 +384,7 @@ describe('ProfileCollector', () => {
         actor: { type: 'agent', id: 'business_discovery_agent', version: '1.0.0' },
         operation: 'business_found',
         data: {
-          business: { name: 'Confirmed LLC', entityType: 'LLC', state: 'California' },
+          business: { name: 'Confirmed LLC', entityType: 'LLC', state: 'State1' },
           confidence: 0.95
         },
         reasoning: 'High confidence business match'
@@ -449,7 +449,7 @@ describe('ProfileCollector', () => {
       expect((agent as any).getStateFromLocation('San Francisco, CA')).toBe('CA');
       expect((agent as any).getStateFromLocation('New York')).toBe('NY');
       expect((agent as any).getStateFromLocation('Seattle')).toBe('WA');
-      expect((agent as any).getStateFromLocation('Unknown City')).toBe('CA'); // Default
+      expect((agent as any).getStateFromLocation('Unknown City')).toBe(''); // No default
     });
 
     test('should infer entity type based on context', () => {

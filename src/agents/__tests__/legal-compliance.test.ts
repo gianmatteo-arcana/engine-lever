@@ -31,7 +31,7 @@ describe('LegalComplianceAgent', () => {
       expect(agent.getRole()).toBe(AgentRole.LEGAL_COMPLIANCE);
       const persona = agent.getPersona();
       expect(persona.name).toBe('Legal Compliance Specialist');
-      expect(persona.expertise).toContain('California business compliance');
+      expect(persona.expertise).toContain('Business regulatory compliance');
       const capabilities = agent.getCapabilities();
       expect(capabilities.canInitiateTasks).toBe(false);
     });
@@ -57,7 +57,7 @@ describe('LegalComplianceAgent', () => {
   });
 
   describe('getSOIRequirements', () => {
-    it('should correctly identify SOI requirements for California LLC', async () => {
+    it('should correctly identify SOI requirements for LLC entity', async () => {
       const requirements = await (agent as any).getSOIRequirements(mockContext);
       
       expect(requirements.isRequired).toBe(true);

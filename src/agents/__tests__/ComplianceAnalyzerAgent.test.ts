@@ -131,7 +131,7 @@ describe('ComplianceAnalyzer', () => {
   });
 
   describe('State-Specific Requirements', () => {
-    test('should calculate California annual report deadline', async () => {
+    test('should calculate state annual report deadline', async () => {
       const request: AgentRequest = {
         requestId: 'req_304',
         agentRole: 'entity_compliance_agent',
@@ -261,7 +261,7 @@ describe('ComplianceAnalyzer', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const ein = calendar.requirements.find((r: any) => r.id === 'federal_ein');
+      const ein = calendar.requirements.find((r: any) => r.id === 'tax_identification');
       
       expect(ein).toBeDefined();
       expect(ein?.priority).toBe('critical');
@@ -281,7 +281,7 @@ describe('ComplianceAnalyzer', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const ein = calendar.requirements.find((r: any) => r.id === 'federal_ein');
+      const ein = calendar.requirements.find((r: any) => r.id === 'tax_identification');
       
       expect(ein).toBeUndefined();
     });

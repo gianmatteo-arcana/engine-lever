@@ -175,7 +175,7 @@ describe('CommunicationAgent', () => {
           approvalType: 'payment_authorization',
           details: {
             amount: 45.00,
-            recipient: 'California Secretary of State',
+            recipient: 'Regulatory Agency',
             breakdown: {
               government_fee: 25.00,
               processing_fee: 15.00,

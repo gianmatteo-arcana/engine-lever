@@ -388,12 +388,12 @@ export class ComplianceAnalyzerAgent extends BaseAgent {
   private getFederalTaxRequirements(profile: BusinessProfile): ComplianceRequirement[] {
     const requirements: ComplianceRequirement[] = [];
 
-    // EIN application if not sole proprietorship
+    // Tax identification if not sole proprietorship
     if (profile.entityType !== 'Sole Proprietorship') {
       requirements.push({
-        id: 'federal_ein',
-        name: 'Federal EIN Application',
-        description: 'Apply for Employer Identification Number with IRS',
+        id: 'tax_identification',
+        name: 'Tax Identification Application',
+        description: 'Apply for tax identification number',
         category: 'tax',
         priority: 'critical',
         deadline: this.addDays(new Date(), 15),
@@ -587,7 +587,7 @@ export class ComplianceAnalyzerAgent extends BaseAgent {
 
     switch (state) {
       case 'CA':
-        // California varies by entity type and formation date
+        // Varies by entity type and formation date
         deadline.setMonth(11, 31); // December 31st default
         break;
       case 'DE':

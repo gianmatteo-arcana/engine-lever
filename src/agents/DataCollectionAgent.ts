@@ -45,16 +45,17 @@ export class DataCollectionAgent extends BaseAgent {
   }
   
   /**
-   * Specialized method for business discovery
+   * Specialized method for entity discovery
+   * Task Templates define which specific sources to search
    */
   async discoverBusiness(email: string, taskContext: any): Promise<BaseAgentResponse> {
     const request: BaseAgentRequest = {
       taskContext,
-      operation: 'business_discovery',
+      operation: 'entity_discovery',
       parameters: { 
         email,
         searchStrategy: 'comprehensive',
-        sources: ['ca_sos', 'federal_ein', 'business_registries']
+        sources: taskContext.templateData?.dataSources || ['public_records', 'registries']
       },
       urgency: 'high'
     };

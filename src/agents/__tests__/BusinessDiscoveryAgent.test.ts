@@ -375,17 +375,17 @@ describe('BusinessDiscovery', () => {
  */
 describe('BusinessDiscovery Integration Tests', () => {
   let agent: BusinessDiscoveryAgent;
-  const testBusinessId = 'test_business_ca_sos';
-  const testUserId = 'test_user_ca_sos';
+  const testBusinessId = 'test_business_registry';
+  const testUserId = 'test_user_registry';
 
   beforeEach(() => {
     agent = new BusinessDiscoveryAgent(testBusinessId, testUserId);
   });
 
   // NOTE: These would connect to real state APIs in production
-  test.skip('should connect to California SOS API', async () => {
+  test.skip('should connect to public registry API', async () => {
     // Skip during development - implement when real API access available
-    // This test would verify real API connection to California Secretary of State
+    // This test would verify real API connection to public business registry
   });
 
   test.skip('should connect to Delaware entity search', async () => {

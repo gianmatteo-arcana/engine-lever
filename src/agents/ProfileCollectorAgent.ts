@@ -473,7 +473,8 @@ export class ProfileCollectorAgent extends BaseAgent {
         return state;
       }
     }
-    return 'CA'; // Default to California
+    // Return empty string if no state found - let Task Template provide default
+    return '';
   }
 
   private inferEntityType(userData: any, _context: TaskContext): string {
@@ -508,14 +509,13 @@ export class ProfileCollectorAgent extends BaseAgent {
   }
 
   private getStateOptions() {
+    // Task Templates provide jurisdiction-specific options
+    // This is just a generic list for demonstration
     return [
-      { value: 'CA', label: 'California' },
-      { value: 'DE', label: 'Delaware' },
-      { value: 'NY', label: 'New York' },
-      { value: 'TX', label: 'Texas' },
-      { value: 'FL', label: 'Florida' },
-      { value: 'WA', label: 'Washington' },
-      // Add more states as needed
+      { value: 'STATE_1', label: 'State 1' },
+      { value: 'STATE_2', label: 'State 2' },
+      { value: 'STATE_3', label: 'State 3' },
+      // Task Templates will override with actual states
     ];
   }
 

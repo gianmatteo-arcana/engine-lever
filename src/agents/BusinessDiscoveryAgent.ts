@@ -169,7 +169,7 @@ export class BusinessDiscoveryAgent extends BaseAgent {
     const nameVariations = this.getNameVariations(clues);
     
     // Determine search priority order (PRD strategy)
-    const searchStates = this.prioritizeSearchStates(clues);
+    const searchStates = this.prioritizeSearchStates(clues, context);
 
     // Search each state in priority order
     for (const state of searchStates) {
@@ -248,7 +248,7 @@ export class BusinessDiscoveryAgent extends BaseAgent {
   /**
    * Prioritize states to search based on clues (PRD strategy)
    */
-  private prioritizeSearchStates(clues: SearchClues): string[] {
+  private prioritizeSearchStates(clues: SearchClues, context: TaskContext): string[] {
     const states: string[] = [];
 
     // Tech company signals → Delaware first
@@ -264,9 +264,10 @@ export class BusinessDiscoveryAgent extends BaseAgent {
       }
     }
 
-    // California for west coast bias
-    if (!states.includes('california')) {
-      states.push('california');
+    // Add default state from task template if specified
+    const defaultState = context.metadata?.defaultState;
+    if (defaultState && !states.includes(defaultState)) {
+      states.push(defaultState);
     }
 
     // Limit to 3 states maximum (PRD constraint)
@@ -285,9 +286,7 @@ export class BusinessDiscoveryAgent extends BaseAgent {
     // For now, return not found to force proper UI flow
     
     // TODO: Integrate with real state APIs:
-    // - California Secretary of State API
-    // - Delaware Division of Corporations API
-    // - Other state business registries
+    // Task Templates will specify which APIs to use based on jurisdiction
     
     // Proper implementation would:
     // 1. Call state-specific API with businessName
@@ -317,7 +316,7 @@ export class BusinessDiscoveryAgent extends BaseAgent {
         businessData,
         confidence: {
           score: confidence,
-          source: businessData.state + ' Secretary of State',
+          source: businessData.state + ' Public Records',
           lastUpdated: new Date().toISOString()
         },
         actions: {
@@ -369,14 +368,8 @@ export class BusinessDiscoveryAgent extends BaseAgent {
 
   private extractStateFromLocation(location: string): string | null {
     // Simple location to state mapping (extend as needed)
-    const stateMap: Record<string, string> = {
-      'san francisco': 'california',
-      'los angeles': 'california',
-      'palo alto': 'california',
-      'new york': 'new_york',
-      'austin': 'texas',
-      'seattle': 'washington'
-    };
+    // Task Templates provide location-to-state mapping for specific jurisdictions
+    const stateMap: Record<string, string> = {};
     
     const locationLower = location.toLowerCase();
     for (const [city, state] of Object.entries(stateMap)) {

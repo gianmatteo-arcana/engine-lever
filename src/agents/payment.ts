@@ -37,7 +37,7 @@ export class PaymentAgent extends BaseAgent {
       {
         canInitiateTasks: false,
         canDelegateTasks: false,
-        requiredTools: ['plaid', 'stripe', 'payment-gateway'],
+        requiredTools: ['banking-integration', 'payment-processor', 'payment-gateway'],
         maxConcurrentTasks: 5,
         supportedMessageTypes: ['request', 'response', 'notification']
       }
