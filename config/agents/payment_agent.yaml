@@ -1,0 +1,154 @@
+# Payment Agent Configuration
+# ENGINE PRD Compliant - Financial Operations and Payment Processing
+
+agent:
+  id: "payment_agent"
+  name: "Financial Operations Specialist Agent"
+  version: "1.0.0"
+  role: "payment_specialist"
+  
+  # Agent mission - secure payment processing and financial operations
+  mission: |
+    You are a Payment Agent specialized in secure financial operations for business compliance.
+    You handle payment processing, fund verification, and transaction management for government
+    fees, taxes, and regulatory filings.
+    
+    Your primary responsibility is to ensure secure, compliant payment processing while providing
+    transparent cost breakdowns and maintaining detailed financial audit trails.
+    
+    CORE PRINCIPLES:
+    - Security First: All financial operations follow PCI DSS and security best practices
+    - Transparency: Clear cost breakdowns and fee explanations for all transactions
+    - Compliance: Proper handling of government payments and tax obligations
+    - Audit Trail: Detailed transaction logging for financial accountability
+    
+  agent_card:
+    skills:
+      - "Secure payment processing and transaction management"
+      - "Government fee calculation and payment routing"
+      - "Financial account verification and validation"
+      - "Cost analysis and transparent fee breakdown"
+    
+    payment_methods:
+      - "ACH bank transfers for government payments"
+      - "Credit card processing for service fees"
+      - "Business bank account verification"
+      - "Automated payment scheduling and recurring billing"
+    
+    output_formats:
+      - "Payment authorization requests with cost breakdowns"
+      - "Transaction confirmations with reference numbers"
+      - "Financial summaries with audit trails"
+      - "Payment status updates and error handling"
+
+# Response schemas for payment operations
+schemas:
+  output:
+    type: "object"
+    required: ["status", "contextUpdate"]
+    properties:
+      status:
+        type: "string"
+        enum: ["payment_authorized", "transaction_completed", "verification_required", "payment_failed", "error"]
+      
+      contextUpdate:
+        type: "object"
+        required: ["operation", "data", "reasoning"]
+        properties:
+          operation:
+            type: "string"
+            description: "Payment operation performed"
+          
+          data:
+            type: "object"
+            properties:
+              transaction:
+                type: "object"
+                description: "Transaction details and reference information"
+              
+              cost_breakdown:
+                type: "object"
+                description: "Detailed fee breakdown and cost analysis"
+              
+              payment_status:
+                type: "string"
+                description: "Current payment processing status"
+          
+          reasoning:
+            type: "string"
+            description: "Financial reasoning and payment method selection"
+
+# Available operations for payment processing
+operations:
+  calculate_fees:
+    description: "Calculate total costs for compliance filing including government fees"
+    parameters:
+      filingType:
+        type: "string"
+        required: true
+        description: "Type of government filing (soi, business_registration, etc.)"
+      
+      businessEntity:
+        type: "object"
+        required: true
+        description: "Business entity details affecting fee calculation"
+
+  process_payment:
+    description: "Process payment for government fees and service charges"
+    parameters:
+      amount:
+        type: "number"
+        required: true
+        description: "Total payment amount"
+      
+      paymentMethod:
+        type: "object"
+        required: true
+        description: "Payment method details and authorization"
+      
+      recipient:
+        type: "string"
+        enum: ["ca_sos", "irs", "ftb", "service_fee"]
+        description: "Payment recipient (government agency or service fee)"
+
+# Fee schedules and cost structures
+fee_schedules:
+  california_sos:
+    statement_of_information:
+      corporation: 25.00
+      llc: 20.00
+      partnership: 20.00
+    
+    expedited_processing:
+      same_day: 500.00
+      24_hour: 350.00
+      standard: 0.00
+  
+  service_fees:
+    processing_fee: 15.00
+    convenience_fee_percentage: 2.9
+    expedited_service: 50.00
+
+# Payment method configurations
+payment_methods:
+  government_payments:
+    preferred: "ach_transfer"
+    backup: "certified_check"
+    processing_time: "1-3 business days"
+  
+  service_payments:
+    preferred: "credit_card"
+    backup: "ach_transfer"
+    processing_time: "immediate"
+
+# Tools for payment processing
+tools:
+  payment_processing:
+    - "stripe_payment_processor"
+    - "ach_transfer_service"
+    - "bank_verification_service"
+  
+  financial_operations:
+    - "fee_calculator"
+    - "cost_analyzer"
+    - "transaction_tracker"

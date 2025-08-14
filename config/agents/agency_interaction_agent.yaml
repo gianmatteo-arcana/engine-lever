@@ -1,0 +1,161 @@
+# Agency Interaction Agent Configuration
+# ENGINE PRD Compliant - Government Portal Navigation and Form Submission
+
+agent:
+  id: "agency_interaction_agent"
+  name: "Government Liaison Specialist Agent"
+  version: "1.0.0"
+  role: "agency_interaction_specialist"
+  
+  # Agent mission - government portal navigation and submission management
+  mission: |
+    You are an Agency Interaction Agent specialized in navigating government portals and
+    managing official form submissions. You serve as the digital liaison between businesses
+    and government agencies, ensuring accurate and timely filing of compliance documents.
+    
+    Your primary responsibility is to automate complex government portal interactions,
+    handle form submissions with precision, and monitor filing status until completion.
+    
+    CORE PRINCIPLES:
+    - Portal Expertise: Deep knowledge of government portal navigation and procedures
+    - Submission Accuracy: Ensure precise form completion and error-free submissions
+    - Status Monitoring: Track submission progress and handle agency responses
+    - Compliance Verification: Confirm successful filing and obtain confirmation documents
+    
+  agent_card:
+    skills:
+      - "Government portal navigation and automation"
+      - "Legal form completion and validation"
+      - "Submission status monitoring and tracking"
+      - "Document retrieval and confirmation management"
+    
+    supported_agencies:
+      - "California Secretary of State (bizfile portal)"
+      - "IRS Business Services (irs.gov)"
+      - "California Franchise Tax Board (ftb.ca.gov)"
+      - "Local business licensing portals"
+    
+    output_formats:
+      - "Form submission confirmations with reference numbers"
+      - "Filing status updates and processing timelines"
+      - "Document retrieval and compliance verification"
+      - "Error handling and resubmission procedures"
+
+# Response schemas for agency interactions
+schemas:
+  output:
+    type: "object"
+    required: ["status", "contextUpdate"]
+    properties:
+      status:
+        type: "string"
+        enum: ["form_submitted", "submission_confirmed", "processing_in_progress", "filing_completed", "submission_error"]
+      
+      contextUpdate:
+        type: "object"
+        required: ["operation", "data", "reasoning"]
+        properties:
+          operation:
+            type: "string"
+            description: "Agency interaction operation performed"
+          
+          data:
+            type: "object"
+            properties:
+              submission:
+                type: "object"
+                description: "Form submission details and confirmation information"
+              
+              status_tracking:
+                type: "object"
+                description: "Current processing status and expected timelines"
+              
+              documents:
+                type: "array"
+                description: "Retrieved documents and confirmation files"
+          
+          reasoning:
+            type: "string"
+            description: "Process reasoning and submission strategy"
+
+# Available operations for agency interactions
+operations:
+  submit_form:
+    description: "Submit completed form to government agency portal"
+    parameters:
+      agency:
+        type: "string"
+        enum: ["ca_sos", "irs", "ftb", "local_licensing"]
+        required: true
+        description: "Target government agency"
+      
+      formData:
+        type: "object"
+        required: true
+        description: "Completed form data for submission"
+      
+      attachments:
+        type: "array"
+        description: "Supporting documents and attachments"
+
+  check_submission_status:
+    description: "Monitor submission status and retrieve updates"
+    parameters:
+      confirmationNumber:
+        type: "string"
+        required: true
+        description: "Submission confirmation or reference number"
+      
+      agency:
+        type: "string"
+        required: true
+        description: "Agency where submission was filed"
+
+# Portal configurations and procedures
+portal_procedures:
+  california_sos:
+    bizfile_portal:
+      login_required: true
+      submission_format: "online_form"
+      processing_time: "1-3 business days"
+      confirmation_method: "email_and_portal"
+    
+    statement_of_information:
+      form_type: "SI-550"
+      required_fields: ["entity_name", "entity_number", "address", "officers"]
+      payment_required: true
+      expedited_options: ["same_day", "24_hour"]
+
+  irs_business:
+    submission_methods: ["online", "mail", "fax"]
+    processing_times:
+      online: "immediate_acknowledgment"
+      mail: "4-6_weeks"
+    required_authentication: "business_ein"
+
+# Error handling procedures
+error_handling:
+  common_errors:
+    invalid_entity_number:
+      recovery: "verify_entity_information"
+      retry_delay: "immediate"
+    
+    payment_failure:
+      recovery: "update_payment_method"
+      retry_delay: "immediate"
+    
+    portal_timeout:
+      recovery: "resubmit_after_delay"
+      retry_delay: "15_minutes"
+
+# Tools for agency interactions
+tools:
+  portal_automation:
+    - "web_scraper"
+    - "form_filler"
+    - "captcha_solver"
+  
+  document_management:
+    - "pdf_generator"
+    - "document_validator"
+    - "file_converter"

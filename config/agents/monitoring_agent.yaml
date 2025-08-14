@@ -1,0 +1,176 @@
+# Monitoring Agent Configuration
+# ENGINE PRD Compliant - Quality Assurance and System Monitoring
+
+agent:
+  id: "monitoring_agent"
+  name: "Quality Assurance Specialist Agent"
+  version: "1.0.0"
+  role: "monitoring_specialist"
+  
+  # Agent mission - quality assurance and system monitoring
+  mission: |
+    You are a Monitoring Agent specialized in quality assurance, system monitoring, and
+    audit trail management. You ensure all compliance workflows execute correctly,
+    track deadlines, and maintain comprehensive audit records.
+    
+    Your primary responsibility is to monitor system health, verify task completion,
+    detect anomalies, and maintain detailed audit trails for compliance and debugging.
+    
+    CORE PRINCIPLES:
+    - Quality Assurance: Verify successful completion of all workflow steps
+    - Proactive Monitoring: Detect issues before they impact user experience
+    - Audit Compliance: Maintain detailed records for regulatory and debugging purposes
+    - Exception Handling: Identify and escalate system anomalies and failures
+    
+  agent_card:
+    skills:
+      - "System health monitoring and performance tracking"
+      - "Workflow verification and quality assurance"
+      - "Audit trail management and compliance reporting"
+      - "Anomaly detection and exception handling"
+    
+    monitoring_domains:
+      - "Agent performance and execution metrics"
+      - "Government portal connectivity and response times"
+      - "Payment processing success rates and failures"
+      - "Task completion rates and deadline tracking"
+    
+    output_formats:
+      - "System health reports with performance metrics"
+      - "Audit trail summaries with compliance verification"
+      - "Alert notifications for anomalies and failures"
+      - "Quality assurance reports with recommendations"
+
+# Response schemas for monitoring operations
+schemas:
+  output:
+    type: "object"
+    required: ["status", "contextUpdate"]
+    properties:
+      status:
+        type: "string"
+        enum: ["monitoring_active", "alert_generated", "audit_completed", "anomaly_detected", "system_healthy"]
+      
+      contextUpdate:
+        type: "object"
+        required: ["operation", "data", "reasoning"]
+        properties:
+          operation:
+            type: "string"
+            description: "Monitoring operation performed"
+          
+          data:
+            type: "object"
+            properties:
+              metrics:
+                type: "object"
+                description: "System performance and health metrics"
+              
+              alerts:
+                type: "array"
+                description: "Generated alerts and anomaly notifications"
+              
+              audit_summary:
+                type: "object"
+                description: "Audit trail summary and compliance status"
+          
+          reasoning:
+            type: "string"
+            description: "Monitoring analysis and alert rationale"
+
+# Available operations for monitoring
+operations:
+  monitor_system_health:
+    description: "Check overall system health and performance metrics"
+    parameters:
+      components:
+        type: "array"
+        default: ["agents", "database", "external_apis", "payment_systems"]
+        description: "System components to monitor"
+
+  verify_task_completion:
+    description: "Verify successful completion of workflow tasks"
+    parameters:
+      taskId:
+        type: "string"
+        required: true
+        description: "Task ID to verify completion status"
+      
+      expectedOutcomes:
+        type: "array"
+        required: true
+        description: "Expected completion criteria and deliverables"
+
+  generate_audit_report:
+    description: "Generate comprehensive audit report for compliance"
+    parameters:
+      timeRange:
+        type: "object"
+        required: true
+        description: "Time range for audit report generation"
+      
+      scope:
+        type: "string"
+        enum: ["user_session", "task_workflow", "system_operations", "compliance_filing"]
+        description: "Scope of audit report"
+
+# Monitoring thresholds and alerting rules
+monitoring_thresholds:
+  performance:
+    agent_response_time: 5000  # milliseconds
+    database_query_time: 2000  # milliseconds
+    external_api_timeout: 30000  # milliseconds
+  
+  reliability:
+    agent_success_rate: 95  # percentage
+    payment_success_rate: 98  # percentage
+    portal_connectivity: 99  # percentage
+  
+  compliance:
+    audit_trail_retention: 2555  # days (7 years)
+    deadline_warning_days: 30
+    critical_deadline_days: 7
+
+# Alert escalation procedures
+alert_escalation:
+  severity_levels:
+    info:
+      response_time: "24_hours"
+      notification: "log_only"
+    
+    warning:
+      response_time: "4_hours"
+      notification: "email_alert"
+    
+    critical:
+      response_time: "15_minutes"
+      notification: "immediate_escalation"
+
+# Audit trail categories
+audit_categories:
+  user_actions:
+    - "task_creation"
+    - "data_input"
+    - "approval_workflow"
+  
+  system_operations:
+    - "agent_executions"
+    - "payment_processing"
+    - "form_submissions"
+  
+  compliance_events:
+    - "filing_completions"
+    - "deadline_tracking"
+    - "document_retrieval"
+
+# Tools for monitoring and auditing
+tools:
+  monitoring:
+    - "health_checker"
+    - "performance_profiler"
+    - "anomaly_detector"
+  
+  auditing:
+    - "audit_logger"
+    - "compliance_tracker"
+    - "report_generator"

@@ -1,0 +1,181 @@
+# Communication Agent Configuration
+# ENGINE PRD Compliant - Customer Communication and Notification Management
+
+agent:
+  id: "communication_agent"
+  name: "Customer Service Representative Agent"
+  version: "1.0.0"
+  role: "communication_specialist"
+  
+  # Agent mission - customer communication and notification management
+  mission: |
+    You are a Communication Agent specialized in customer service and notification management.
+    You handle all user-facing communications, approval workflows, status updates, and
+    customer support interactions throughout the compliance process.
+    
+    Your primary responsibility is to keep users informed, request approvals when needed,
+    and provide clear, helpful communication that builds confidence and trust.
+    
+    CORE PRINCIPLES:
+    - Clear Communication: Use plain language and avoid technical jargon
+    - Proactive Updates: Keep users informed throughout the process
+    - Empathetic Support: Understand user concerns and provide reassuring guidance
+    - Timely Response: Respond promptly to user questions and approval requests
+    
+  agent_card:
+    skills:
+      - "Customer communication and notification management"
+      - "Approval workflow coordination and status updates"
+      - "Multi-channel messaging (email, SMS, in-app notifications)"
+      - "Customer support and issue resolution"
+    
+    communication_channels:
+      - "In-app notifications and status updates"
+      - "Email notifications with detailed progress reports"
+      - "SMS alerts for time-sensitive updates"
+      - "Customer support chat and help documentation"
+    
+    output_formats:
+      - "User notifications with clear next steps"
+      - "Approval requests with context and options"
+      - "Status updates with progress visualization"
+      - "Support responses with helpful guidance"
+
+# Response schemas for communication operations
+schemas:
+  output:
+    type: "object"
+    required: ["status", "contextUpdate"]
+    properties:
+      status:
+        type: "string"
+        enum: ["notification_sent", "approval_requested", "update_delivered", "support_provided", "communication_error"]
+      
+      contextUpdate:
+        type: "object"
+        required: ["operation", "data", "reasoning"]
+        properties:
+          operation:
+            type: "string"
+            description: "Communication operation performed"
+          
+          data:
+            type: "object"
+            properties:
+              message:
+                type: "object"
+                description: "Communication content and delivery details"
+              
+              channel:
+                type: "string"
+                description: "Communication channel used"
+              
+              response_required:
+                type: "boolean"
+                description: "Whether user response or approval is needed"
+          
+          reasoning:
+            type: "string"
+            description: "Communication strategy and channel selection reasoning"
+
+# Available operations for communication
+operations:
+  send_notification:
+    description: "Send status update or information to user"
+    parameters:
+      messageType:
+        type: "string"
+        enum: ["status_update", "completion_notification", "error_alert", "deadline_reminder"]
+        required: true
+        description: "Type of notification to send"
+      
+      content:
+        type: "object"
+        required: true
+        description: "Message content and context"
+      
+      urgency:
+        type: "string"
+        enum: ["low", "medium", "high", "urgent"]
+        default: "medium"
+        description: "Message urgency level affecting delivery channel"
+
+  request_approval:
+    description: "Request user approval for specific action or decision"
+    parameters:
+      approvalType:
+        type: "string"
+        enum: ["form_submission", "payment_authorization", "document_review", "schedule_confirmation"]
+        required: true
+        description: "Type of approval being requested"
+      
+      details:
+        type: "object"
+        required: true
+        description: "Context and details for approval decision"
+
+# Message templates for different communication types
+message_templates:
+  status_updates:
+    task_started:
+      subject: "Your {{task_type}} filing has begun"
+      content: "We've started processing your {{task_type}}. We'll keep you updated on our progress."
+    
+    milestone_reached:
+      subject: "Progress update: {{milestone}} completed"
+      content: "Good news! We've completed {{milestone}} for your {{task_type}}. Next up: {{next_step}}."
+    
+    task_completed:
+      subject: "Success! Your {{task_type}} is complete"
+      content: "Great news! Your {{task_type}} has been successfully filed. Here's your confirmation: {{confirmation_number}}"
+
+  approval_requests:
+    form_review:
+      subject: "Please review your {{form_type}} before submission"
+      content: "We've prepared your {{form_type}} form. Please review the details and approve submission."
+    
+    payment_authorization:
+      subject: "Payment authorization required: ${{amount}}"
+      content: "To complete your filing, we need authorization to process a payment of ${{amount}} to {{recipient}}."
+
+# Communication preferences and channel selection
+channel_preferences:
+  notifications:
+    low_urgency: ["in_app"]
+    medium_urgency: ["in_app", "email"]
+    high_urgency: ["in_app", "email", "sms"]
+    urgent: ["sms", "push_notification", "email"]
+  
+  approvals:
+    always: ["in_app", "email"]
+    timeout_escalation: "sms"
+    escalation_delay: 24  # hours
+
+# User persona communication adjustments
+persona_adaptations:
+  first_timer:
+    tone: "encouraging_and_detailed"
+    explanation_level: "comprehensive"
+    check_ins: "frequent"
+  
+  power_user:
+    tone: "efficient_and_brief"
+    explanation_level: "summary"
+    check_ins: "milestone_only"
+  
+  struggling:
+    tone: "supportive_and_patient"
+    explanation_level: "step_by_step"
+    check_ins: "proactive"
+
+# Tools for communication management
+tools:
+  messaging:
+    - "email_service"
+    - "sms_gateway"
+    - "push_notification_service"
+  
+  content_generation:
+    - "template_engine"
+    - "personalization_service"
+    - "language_optimizer"

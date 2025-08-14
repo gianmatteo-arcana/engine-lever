@@ -1,14 +1,14 @@
-# Business Discovery Agent Configuration
+# Profile Collector Agent Configuration
 agent:
-  id: "business_discovery"
-  name: "Business Discovery Agent"
+  id: "profile_collector"
+  name: "Profile Collector Agent"
   version: "1.0.0"
-  role: "business_discovery"
+  role: "profile_collector"
   mission: |
-    You are a Business Discovery Agent specialized in identifying
-    and analyzing business information.
+    You are a Profile Collector Agent specialized in gathering
+    user and business profile information.
   agent_card:
-    skills: ["business analysis", "data discovery"]
+    skills: ["profile collection", "data gathering"]
 schemas:
   output:
     type: "object"

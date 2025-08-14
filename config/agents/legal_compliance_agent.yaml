@@ -1,0 +1,131 @@
+# Legal Compliance Agent Configuration
+# ENGINE PRD Compliant - Legal Analysis and Compliance Requirements
+
+agent:
+  id: "legal_compliance_agent"
+  name: "Legal Compliance Specialist Agent"
+  version: "1.0.0"
+  role: "legal_compliance_specialist"
+  
+  # Agent mission - legal analysis and compliance guidance
+  mission: |
+    You are a Legal Compliance Agent with paralegal expertise in business regulatory requirements.
+    You analyze business entities, interpret legal obligations, and provide precise compliance guidance
+    for small businesses navigating government regulations.
+    
+    Your primary responsibility is to translate complex legal requirements into actionable compliance
+    steps, ensuring businesses meet all regulatory obligations while minimizing risk and complexity.
+    
+    CORE PRINCIPLES:
+    - Regulatory Expertise: Deep knowledge of business compliance requirements
+    - Risk Assessment: Identify compliance gaps and potential legal issues
+    - Practical Guidance: Convert legal complexity into clear action items
+    - Documentation: Maintain detailed reasoning for all compliance decisions
+    
+  agent_card:
+    skills:
+      - "Business entity legal analysis and classification"
+      - "Regulatory requirement interpretation and mapping"
+      - "Compliance deadline tracking and prioritization"
+      - "Risk assessment and mitigation strategies"
+    
+    specializations:
+      - "California business regulations (CA SOS, Franchise Tax Board)"
+      - "Federal tax compliance (IRS forms, reporting requirements)"
+      - "Business licensing and permit requirements"
+      - "Corporate governance and regulatory filings"
+    
+    output_formats:
+      - "Compliance requirement analysis with deadlines"
+      - "Risk assessment reports with mitigation strategies"
+      - "Legal document preparation guidance"
+      - "Regulatory filing checklists and procedures"
+
+# Response schemas for compliance analysis
+schemas:
+  output:
+    type: "object"
+    required: ["status", "contextUpdate"]
+    properties:
+      status:
+        type: "string"
+        enum: ["requirements_identified", "analysis_completed", "guidance_provided", "error"]
+      
+      contextUpdate:
+        type: "object"
+        required: ["operation", "data", "reasoning"]
+        properties:
+          operation:
+            type: "string"
+            description: "Legal analysis operation performed"
+          
+          data:
+            type: "object"
+            properties:
+              compliance_requirements:
+                type: "array"
+                description: "Identified compliance obligations and deadlines"
+              
+              risk_assessment:
+                type: "object"
+                description: "Risk analysis and mitigation recommendations"
+              
+              action_items:
+                type: "array"
+                description: "Specific steps to achieve compliance"
+          
+          reasoning:
+            type: "string"
+            description: "Legal reasoning and regulatory interpretation"
+
+# Available operations for legal analysis
+operations:
+  analyze_entity_compliance:
+    description: "Analyze business entity for compliance requirements"
+    parameters:
+      businessEntity:
+        type: "object"
+        required: true
+        description: "Business entity details (type, jurisdiction, industry)"
+      
+      filingType:
+        type: "string"
+        enum: ["soi", "annual_report", "tax_filing", "licensing"]
+        description: "Type of compliance filing to analyze"
+
+  assess_compliance_risk:
+    description: "Evaluate compliance risks and provide mitigation strategies"
+    parameters:
+      currentStatus:
+        type: "object"
+        required: true
+        description: "Current compliance status and filing history"
+
+# Compliance knowledge base
+compliance_frameworks:
+  california_corporations:
+    filing_requirements:
+      - "Statement of Information (SI-550)"
+      - "Annual Franchise Tax Return"
+      - "Workers Compensation Insurance"
+    deadlines:
+      soi: "Within 90 days of filing Articles, then biennial"
+      franchise_tax: "15th day of 4th month after year end"
+  
+  federal_requirements:
+    tax_obligations:
+      - "Federal Income Tax Return"
+      - "Quarterly Employment Tax Returns" 
+      - "1099-NEC for contractors ($600+ annually)"
+
+# Tools for legal compliance analysis
+tools:
+  legal_research:
+    - "regulation_database"
+    - "case_law_analyzer"
+    - "compliance_tracker"
+  
+  document_analysis:
+    - "legal_document_parser"
+    - "requirement_extractor"
+    - "deadline_calculator"

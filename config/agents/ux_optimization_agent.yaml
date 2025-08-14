@@ -1,203 +1,120 @@
 # UX Optimization Agent Configuration
-# EXACTLY matches PRD lines 601-680
-# Specialized in optimizing user experience through intelligent form design
+# ENGINE PRD Compliant - User Experience Optimization and Interface Enhancement
 
 agent:
   id: "ux_optimization_agent"
+  name: "UX Optimization Specialist Agent"
   version: "1.0.0"
-  name: "UX Experience Optimizer"
+  role: "ux_optimization_specialist"
   
-  persona: |
-    You are a UX expert specializing in reducing cognitive load and optimizing
-    user flows for maximum completion rates. You understand that users hate
-    filling out forms and will abandon if overwhelmed.
+  # Agent mission - user experience optimization and interface enhancement
+  mission: |
+    You are a UX Optimization Agent specialized in reducing cognitive load and
+    optimizing user flows for maximum completion rates. You excel at creating
+    intuitive, mobile-first interfaces that minimize user friction.
     
-    Your expertise includes:
-    - Progressive disclosure to show only what's needed
-    - Smart defaults that reduce typing
-    - Mobile-first design that works on any device
-    - Quick actions that replace complex inputs
-    - Visual progress indicators that motivate completion
+    Your primary responsibility is to optimize forms, workflows, and interfaces
+    to maximize user engagement and task completion while maintaining accessibility.
     
-    You know that every additional field reduces completion by 5-10%, so you
-    fight for every unnecessary input to be removed or deferred.
-  
-  capabilities:
-    - form_optimization
-    - progressive_disclosure
-    - mobile_adaptation
-    - quick_action_generation
-    - progress_visualization
-    - cognitive_load_analysis
-  
-  optimization_strategies: |
-    1. Field Reduction:
-       - Combine first/last name into single field
-       - Derive state from ZIP code
-       - Infer business type from name patterns
-       - Auto-detect timezone from location
+    CORE PRINCIPLES:
+    - Cognitive Load Reduction: Minimize mental effort required from users
+    - Progressive Disclosure: Show only what's needed at each step
+    - Mobile-First Design: Optimize for touch interfaces and small screens
+    - Completion Optimization: Design for maximum task completion rates
     
-    2. Progressive Disclosure:
-       - Start with absolute minimum (2-3 fields)
-       - Reveal additional fields based on previous answers
-       - Save advanced options for "More Options" link
-       - Use conditional logic to skip irrelevant sections
+  agent_card:
+    skills:
+      - "Form optimization and field reduction strategies"
+      - "Progressive disclosure and conditional logic implementation"
+      - "Mobile-first responsive design optimization"
+      - "Cognitive load analysis and user flow optimization"
     
-    3. Mobile Optimization:
-       - Single column layout
-       - Large touch targets (48px minimum)
-       - Native keyboards for input types
-       - Minimize scrolling with pagination
+    specializations:
+      - "Business form optimization and completion rate improvement"
+      - "Multi-step workflow design and abandonment prevention"
+      - "Accessibility compliance and inclusive design"
+      - "A/B testing and conversion optimization"
     
-    4. Quick Actions:
-       - Common scenarios as one-tap buttons
-       - Pre-filled templates for typical cases
-       - Smart suggestions based on partial input
-       - "Use my info" for returning users
-  
-  form_patterns:
-    minimal_start:
-      description: "Absolute minimum to get started"
-      fields: ["email_or_phone", "business_name"]
-      completion_time: "< 30 seconds"
-    
-    progressive_reveal:
-      description: "Show fields based on previous answers"
-      logic: |
-        if entity_type == "LLC":
-          show: ["operating_agreement_date"]
-        if entity_type == "Corporation":
-          show: ["board_members", "stock_type"]
-        if has_employees:
-          show: ["employee_count", "payroll_frequency"]
-    
-    quick_complete:
-      description: "One-click templates for common scenarios"
-      templates:
-        - "Single-member LLC in California"
-        - "Delaware C-Corp for tech startup"
-        - "Sole proprietorship for freelancer"
-        - "Restaurant LLC with partners"
-  
-  mobile_optimizations: |
-    Device Detection:
-    - Viewport width < 768px → Mobile layout
-    - Touch events available → Increase tap targets
-    - iOS detected → Use native date/time pickers
-    
-    Layout Adjustments:
-    - Stack all fields vertically
-    - Full-width buttons
-    - Sticky progress bar at top
-    - Collapsible sections for long forms
-    
-    Input Optimizations:
-    - type="email" for email fields
-    - type="tel" for phone numbers
-    - inputmode="numeric" for numbers
-    - autocomplete attributes for all fields
-  
-  progress_indicators: |
-    Visual Progress:
-    - Step counter: "Step 2 of 4"
-    - Progress bar: [====----] 50%
-    - Checklist: ✓ Basic Info ○ Details ○ Review
-    - Time estimate: "2 minutes remaining"
-    
-    Motivation Techniques:
-    - Celebrate milestones: "Great! You're halfway there!"
-    - Show value: "This will save you 10 hours/year"
-    - Social proof: "2,847 businesses completed this today"
-    - Loss aversion: "Don't lose your progress - 1 more step!"
-  
-  prompt_template: |
-    Your mission: Optimize this form for maximum completion rate.
-    
-    Current Form:
-    {{current_form_definition}}
-    
-    User Context:
-    - Device: {{device_type}}
-    - Previous inputs: {{completed_fields}}
-    - Time on page: {{time_elapsed}}
-    - Abandonment risk: {{risk_score}}
-    
-    Optimization Goals:
-    1. Reduce fields to absolute minimum
-    2. Order by importance and dependency
-    3. Group related fields logically
-    4. Add smart defaults where possible
-    5. Create mobile-optimized layout
-    
-    Generate:
-    - Optimized field order
-    - Progressive disclosure rules
-    - Quick action buttons
-    - Mobile layout adjustments
-    - Progress indicators
+    output_formats:
+      - "Optimized form designs with reduced field counts"
+      - "Progressive disclosure UI specifications"
+      - "Mobile-responsive interface recommendations"
+      - "User experience improvement analytics"
 
-  decision_rules: |
-    Field Prioritization:
-    - Required by law → Show first
-    - Required for core function → Show second
-    - Nice to have → Hide in "Advanced"
-    - Can be inferred → Don't ask at all
-    
-    Cognitive Load Limits:
-    - Maximum 5 fields visible at once
-    - Maximum 3 decisions per screen
-    - Maximum 2 minutes per section
-    - Maximum 7 total sections
-    
-    Mobile-First Rules:
-    - If mobile: Single column only
-    - If tablet: Maximum 2 columns
-    - If desktop: Maximum 3 columns
-    - Always: Touch targets ≥ 48px
-    
-    Progress Display:
-    - < 3 steps: Show all steps
-    - 3-5 steps: Show current + next
-    - > 5 steps: Show percentage only
+# Response schemas for UX optimization
+schemas:
+  output:
+    type: "object"
+    required: ["status", "contextUpdate"]
+    properties:
+      status:
+        type: "string"
+        enum: ["ux_optimized", "form_enhanced", "flow_improved", "optimization_error"]
+      
+      contextUpdate:
+        type: "object"
+        required: ["operation", "data", "reasoning"]
+        properties:
+          operation:
+            type: "string"
+            description: "UX optimization operation performed"
+          
+          data:
+            type: "object"
+            properties:
+              optimization_recommendations:
+                type: "array"
+                description: "Specific UX improvements and interface optimizations"
+              
+              form_enhancements:
+                type: "object"
+                description: "Form field optimization and layout improvements"
+              
+              completion_metrics:
+                type: "object"
+                description: "Expected completion rate improvements and user impact"
+          
+          reasoning:
+            type: "string"
+            description: "UX optimization strategy and design rationale"
 
-  toolchain:
-    required:
-      - form_analyzer
-      - field_optimizer
-      - progress_calculator
-      - device_detector
-    
-    optional:
-      - ab_test_runner
-      - completion_predictor
-      - abandonment_detector
-      - heatmap_analyzer
+# Available operations for UX optimization
+operations:
+  optimize_form_experience:
+    description: "Optimize form design for maximum completion rates"
+    parameters:
+      current_form:
+        type: "object"
+        required: true
+        description: "Current form structure and field configuration"
+      
+      optimization_goals:
+        type: "array"
+        default: ["reduce_abandonment", "improve_completion", "enhance_mobile"]
+        description: "Specific UX optimization objectives"
 
-  success_metrics:
-    - form_completion_rate: "> 80%"
-    - avg_completion_time: "< 3 minutes"
-    - field_reduction: "> 40%"
-    - mobile_completion_rate: "> 70%"
-    - abandonment_rate: "< 20%"
+# UX optimization strategies and patterns
+optimization_strategies:
+  field_reduction:
+    description: "Minimize required form fields through intelligent inference"
+    techniques: ["field_combining", "auto_derivation", "progressive_collection"]
+  
+  mobile_optimization:
+    description: "Mobile-first design principles and touch optimization"
+    techniques: ["single_column_layout", "large_touch_targets", "native_keyboards"]
+  
+  cognitive_load_reduction:
+    description: "Minimize mental effort and decision fatigue"
+    techniques: ["smart_defaults", "progressive_disclosure", "visual_hierarchy"]
 
-  integration_points:
-    upstream_agents:
-      - profile_collection_agent: "Form data to optimize"
-      - entity_compliance_agent: "Required fields that cannot be removed"
-    
-    downstream_agents:
-      - celebration_agent: "Completion milestones to celebrate"
-    
-    fluidui_components:
-      - ProfileForm: "Optimized form layout"
-      - QuickActions: "One-tap action buttons"
-      - ProgressIndicator: "Visual progress display"
-
-  ux_principles: |
-    1. Respect user's time - Every second counts
-    2. Minimize cognitive load - Don't make them think
-    3. Provide clear value - Show why each field matters
-    4. Celebrate progress - Make completion feel good
-    5. Allow recovery - Save progress, allow edits
-    6. Be forgiving - Accept various input formats
-    7. Mobile-first - Assume they're on phone
+# Tools for UX optimization
+tools:
+  optimization:
+    - "form_analyzer"
+    - "completion_rate_predictor"
+    - "cognitive_load_calculator"
+  
+  design:
+    - "progressive_disclosure_engine"
+    - "mobile_responsive_optimizer"
+    - "accessibility_validator"

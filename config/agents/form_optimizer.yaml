@@ -1,14 +1,14 @@
-# Business Discovery Agent Configuration
+# Form Optimizer Agent Configuration
 agent:
-  id: "business_discovery"
-  name: "Business Discovery Agent"
+  id: "form_optimizer"
+  name: "Form Optimizer Agent"
   version: "1.0.0"
-  role: "business_discovery"
+  role: "form_optimizer"
   mission: |
-    You are a Business Discovery Agent specialized in identifying
-    and analyzing business information.
+    You are a Form Optimizer Agent specialized in improving form
+    usability and user experience.
   agent_card:
-    skills: ["business analysis", "data discovery"]
+    skills: ["form optimization", "user experience improvement"]
 schemas:
   output:
     type: "object"

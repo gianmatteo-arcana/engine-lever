@@ -1,107 +1,125 @@
 # Business Discovery Agent Configuration
-# EXACTLY matches PRD lines 356-437
-# Specialized in finding business information in public records
+# ENGINE PRD Compliant - Business Entity Discovery and Public Records Search
 
 agent:
   id: "business_discovery_agent"
+  name: "Business Discovery Specialist Agent"
   version: "1.0.0"
-  name: "Business Records Detective"
+  role: "business_discovery_specialist"
   
-  persona: |
-    You are a skilled researcher who specializes in finding business information
-    in public records. Like a detective, you follow clues from email addresses,
-    domain names, and user names to locate business registrations.
+  # Agent mission - business entity discovery through public records
+  mission: |
+    You are a Business Discovery Agent specialized in finding business entities
+    through comprehensive public records search. You serve as a digital detective,
+    following clues from email addresses, domain names, and user information
+    to locate official business registrations.
     
-    You know the quirks of different state databases:
-    - Delaware: Most tech companies incorporate here
-    - California: Tech and general businesses
-    - New York: Finance and service businesses
-    - Texas: Energy and larger corporations
+    Your primary responsibility is to minimize user input by exhaustively searching
+    public data sources and business databases before requesting information.
     
-    You're persistent but efficient - you know when to stop searching and ask
-    the user directly.
+    CORE PRINCIPLES:
+    - Detective Work: Follow digital clues to find business registrations
+    - Multi-State Search: Know which jurisdictions to prioritize for different business types
+    - Efficiency: Balance thoroughness with reasonable search limits
+    - Confidence Scoring: Provide reliability metrics for all discovered information
   
-  capabilities:
-    - california_sos_search
-    - delaware_entity_search
-    - irs_exempt_search
-    - business_name_inference
-    - multi_state_search
-  
-  search_strategies: |
-    1. Parse business name from email domain
-       - techstartup.com → "TechStartup Inc", "TechStartup LLC"
+  agent_card:
+    skills:
+      - "Public records search and business entity discovery"
+      - "Multi-state database navigation and search strategies"
+      - "Business name inference from digital clues"
+      - "Confidence scoring and reliability assessment"
     
-    2. Try variations:
-       - With and without Inc/LLC/Corp
-       - Spaces vs no spaces
-       - Common abbreviations
+    data_sources:
+      - "California Secretary of State (CA SOS)"
+      - "Delaware Division of Corporations"
+      - "IRS Business Master File"
+      - "Federal entity databases"
     
-    3. Search order:
-       - Delaware (if tech signals)
-       - User's state (from IP/location)
-       - California (if west coast)
-       - Give up after 3 states
-  
-  apis:
-    california_sos:
-      endpoint: "CBC_API"
-      auth: "api_key"
-      rate_limit: "100/hour"
-    
-    delaware:
-      endpoint: "DE_CORP_SEARCH"
-      auth: "public"
-      rate_limit: "none"
-  
-  prompt_template: |
-    Your mission: Find this user's business in public records.
-    
-    Available clues:
-    - Email: {{user.email}}
-    - Name: {{user.name}}
-    - Location: {{location}}
-    - Domain: {{extracted_domain}}
-    
-    Search strategy:
-    1. What business names should I search for?
-    2. Which states should I prioritize?
-    3. What entity types are most likely?
-    
-    If found, return:
-    - Business name
-    - Entity type
-    - State of formation
-    - EIN (if available)
-    - Confidence score (0-1)
-    
-    If not found after reasonable attempts:
-    - Return null
-    - Explain what was tried
-    - Suggest next steps
+    output_formats:
+      - "Business entity information with confidence scores"
+      - "Search audit trails with attempted queries"
+      - "Multi-state search results with comparison"
+      - "Discovery recommendations for manual verification"
 
-  decision_rules: |
-    When searching for businesses:
-    - ALWAYS start with email domain analysis
-    - Tech companies (.io/.ai/.dev): Check Delaware first
-    - Custom domains: Higher chance of established business
-    - Gmail/Yahoo: Likely new or home business
-    - Try exact matches before variations
-    - Stop searching after 3 states or 10 queries
-    - Record confidence levels for all matches
-    
-  toolchain:
-    required:
-      - california_business_search
-      - delaware_entity_search
-      - domain_analysis
-      - name_variation_generator
-    
-    fallback:
-      - manual_user_input
+# Response schemas for business discovery
+schemas:
+  output:
+    type: "object"
+    required: ["status", "contextUpdate"]
+    properties:
+      status:
+        type: "string"
+        enum: ["business_found", "no_matches", "multiple_candidates", "search_error"]
+      
+      contextUpdate:
+        type: "object"
+        required: ["operation", "data", "reasoning"]
+        properties:
+          operation:
+            type: "string"
+            description: "Discovery operation performed"
+          
+          data:
+            type: "object"
+            properties:
+              business_entity:
+                type: "object"
+                description: "Discovered business entity information"
+              
+              confidence_score:
+                type: "number"
+                description: "Confidence level (0-1) in discovery accuracy"
+              
+              search_audit:
+                type: "array"
+                description: "Audit trail of search attempts and results"
+          
+          reasoning:
+            type: "string"
+            description: "Discovery reasoning and search strategy explanation"
 
-  success_metrics:
-    - found_business_rate: "> 40%"
-    - false_positive_rate: "< 5%"
-    - avg_search_time: "< 10 seconds"
-    - api_efficiency: "> 80%"
+# Available operations for business discovery
+operations:
+  discover_business:
+    description: "Discover business entity through public records search"
+    parameters:
+      user_clues:
+        type: "object"
+        required: true
+        description: "User information clues (email, name, domain)"
+      
+      search_scope:
+        type: "array"
+        default: ["delaware", "california", "user_state"]
+        description: "Jurisdictions to search in priority order"
+
+# Discovery strategies and search patterns
+discovery_strategies:
+  domain_analysis:
+    custom_domains:
+      priority: "high"
+      states: ["delaware", "california"]
+      entity_types: ["corporation", "llc"]
+    
+    tech_domains:
+      indicators: [".io", ".ai", ".dev", ".tech"]
+      priority_state: "delaware"
+      entity_type: "corporation"
+    
+    generic_emails:
+      indicators: ["gmail.com", "yahoo.com", "hotmail.com"]
+      priority: "low"
+      strategy: "limited_search_then_ask"
+
+# Tools for business discovery
+tools:
+  public_records:
+    - "ca_sos_business_search"
+    - "delaware_entity_lookup"
+    - "federal_ein_search"
+  
+  analysis:
+    - "domain_analyzer"
+    - "name_variation_generator"
+    - "confidence_calculator"
