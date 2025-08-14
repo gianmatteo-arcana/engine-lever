@@ -95,6 +95,87 @@ const userClient = createClient(userToken);  // NEVER!
 const data = await supabase.from('tasks');   // NEVER!
 ```
 
+### 5. Universal Agent Architecture (CRITICAL)
+
+#### Context Threading Pattern (MANDATORY)
+```typescript
+// ✅ CORRECT: All agent methods must receive TaskContext
+private extractBusinessProfile(context: TaskContext): BusinessProfile {
+  // Access Task Template metadata
+  const defaultLocation = context.metadata?.defaultLocation;
+  const entityRules = context.metadata?.entityRules;
+  const locationMapping = context.metadata?.locationMapping;
+}
+
+// ❌ FORBIDDEN: Methods without context parameter
+private extractBusinessProfile(): BusinessProfile {
+  // Cannot access Task Template configuration - ARCHITECTURAL VIOLATION!
+}
+```
+
+#### Generic Type Mapping (MANDATORY)
+```typescript
+// ✅ CORRECT: Generic types + Task Template mapping
+const mapDiscoveredEntityType = (discoveredType: string, context: TaskContext) => {
+  const entityTypeMap = context.metadata?.entityTypeMapping || {};
+  
+  // Task Template defines: LLC → registered_entity, Corp → registered_entity
+  if (entityTypeMap[discoveredType]) {
+    return entityTypeMap[discoveredType];
+  }
+  
+  // Fallback generic mapping
+  if (discoveredType.includes('llc') || discoveredType.includes('corp')) {
+    return 'registered_entity';
+  }
+  return 'individual_entity';
+};
+
+// ❌ FORBIDDEN: Hardcoded specific types
+type EntityType = 'LLC' | 'Corporation' | 'Partnership'; // NOT universal!
+if (entityType === 'LLC') { /* hardcoded logic */ }     // NEVER!
+```
+
+#### Task Template Metadata Architecture (MANDATORY)
+```typescript
+// ✅ CORRECT: Universal metadata structure
+interface TaskTemplateMetadata {
+  // Entity-specific rules from Task Template
+  entityRules?: {
+    [entityType: string]: {
+      governanceRequirements?: any[];
+      nameRegistrationRules?: any;
+      taxRequirements?: any;
+    }
+  };
+  
+  // Jurisdiction-specific rules  
+  jurisdictionRules?: {
+    [location: string]: {
+      annualReporting?: boolean;
+      fees?: Record<string, number>;
+      deadlineRules?: any;
+    }
+  };
+  
+  // Normalization mappings
+  locationMapping?: Record<string, string>; // 'austin' → 'TX'
+  entityTypeMapping?: Record<string, string>; // 'LLC' → 'registered_entity'
+  
+  // Default configurations
+  defaultEntityTypes?: {
+    businessEmail?: string;
+    personalEmail?: string;
+  };
+  defaultLocation?: string;
+}
+
+// ❌ FORBIDDEN: Hardcoded business logic in agents
+if (location === 'California') {
+  // Task Template should define this via jurisdictionRules!
+}
+```
+
 ### 2. JWT Authentication ONLY
 
 ```typescript
@@ -165,6 +246,63 @@ POST /api/compliance/submit     // NEVER!
 - **TDD practices** - write test first
 - **Mocked unit tests** - no real DB/API calls
 
+#### Test-Driven Architecture Evolution (CRITICAL)
+```typescript
+// ✅ MANDATORY: Let tests guide architecture discovery
+// When major refactoring breaks tests:
+// 1. Update test expectations to match new universal patterns
+// 2. Let test requirements reveal optimal architecture
+// 3. Architecture emerges from test constraints
+
+describe('ProfileCollectorAgent', () => {
+  test('should use generic entity types from Task Template', () => {
+    // Test reveals need for generic mapping
+    expect(result.entityType).toBe('registered_entity'); // not 'LLC'
+  });
+  
+  test('should access location mapping from context metadata', () => {
+    // Test reveals need for context threading
+    mockContext.metadata = {
+      locationMapping: { 'austin': 'TX', 'texas': 'TX' }
+    };
+    expect(agent.processRequest(request, mockContext)).toWork();
+  });
+});
+
+// ❌ FORBIDDEN: Ignoring test architectural guidance
+// Tests are failing after refactoring → Fix tests, discover architecture
+```
+
+#### Comprehensive Test Metadata (MANDATORY)
+```typescript
+// ✅ CORRECT: Mock complete Task Template metadata
+const mockContext: TaskContext = {
+  metadata: {
+    entityRules: {
+      'registered_entity': {
+        governanceRequirements: [{
+          id: 'operating_agreement',
+          priority: 'high',
+          daysToComplete: 90
+        }]
+      }
+    },
+    jurisdictionRules: {
+      'CA': { annualReporting: true, fees: { annualReport: 50 } }
+    },
+    locationMapping: { 'austin': 'TX', 'san francisco': 'CA' },
+    defaultEntityTypes: {
+      businessEmail: 'registered_entity',
+      personalEmail: 'individual_entity'
+    }
+  }
+  // ... rest of context
+};
+
+// ❌ FORBIDDEN: Minimal test metadata
+const mockContext = { metadata: {} }; // Inadequate for universal agents
+```
+
 ### 4. Pre-Push Enforcement
 
 ```bash
@@ -174,6 +312,118 @@ POST /api/compliance/submit     // NEVER!
 - No direct Supabase access
 - Proper naming conventions
 - Test coverage > 95%
+```
+
+---
+
+## 🛡️ DATABASE RESILIENCE PATTERNS (CRITICAL)
+
+### Graceful Failure Handling (MANDATORY)
+```typescript
+// ✅ CORRECT: Database operations must not block agent execution
+private async recordContextEntry(context: TaskContext, entry: Partial<ContextEntry>): Promise<void> {
+  const contextEntry: ContextEntry = {
+    entryId: `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: new Date().toISOString(),
+    // ... construct entry
+  };
+
+  // Always add to in-memory context first
+  if (!context.history) {
+    context.history = [];
+  }
+  context.history.push(contextEntry);
+
+  // Database persistence is best-effort, not blocking
+  if (context.contextId) {
+    try {
+      const db = DatabaseService.getInstance();
+      await db.createContextHistoryEntry(context.contextId, contextEntry);
+    } catch (error) {
+      console.error('Failed to persist context entry to database:', error);
+      // CRITICAL: Continue execution - agent flow must not break
+      // In-memory state maintains system operation
+    }
+  }
+}
+
+// ❌ FORBIDDEN: Blocking on database operations
+await db.createContextHistoryEntry(context.contextId, contextEntry); // Can break agent flow!
+```
+
+### Context State Management (MANDATORY)
+```typescript
+// ✅ CORRECT: In-memory context as primary, database as persistence
+const context: TaskContext = {
+  contextId: 'ctx_123',
+  history: [], // In-memory state - always available
+  // ... other context data
+};
+
+// Database writes are for persistence, not state management
+// Agent continues working even if database is unavailable
+
+// ❌ FORBIDDEN: Database as primary state source during execution
+const history = await db.getContextHistory(contextId); // Don't depend on this during agent execution
+```
+
+---
+
+## 🤖 AGENT ARCHITECTURE PATTERNS (CRITICAL)
+
+### Agent Capability vs Workflow Separation (MANDATORY)
+```typescript
+// ✅ CORRECT: Agents provide CAPABILITIES
+class ProfileCollectorAgent extends BaseAgent {
+  // Capability: Collect profile data using any configuration
+  // Task Template defines: which fields, validation rules, default mappings
+  
+  async processRequest(request: AgentRequest, context: TaskContext): Promise<AgentResponse> {
+    // Generic profile collection capability
+    const formFields = this.createFormFields(context.metadata?.formConfiguration);
+    const validation = this.applyValidation(context.metadata?.validationRules);
+    // Configuration drives behavior, not hardcoded logic
+  }
+}
+
+// ❌ FORBIDDEN: Agents define WORKFLOWS
+class CaliforniaLLCProfileCollector extends BaseAgent {
+  // Too specific - limits reusability across jurisdictions
+  // Hardcodes California + LLC logic in agent code
+}
+```
+
+### Configuration-First Development (MANDATORY)
+```typescript
+// ✅ CORRECT: Start with Task Template metadata schema
+// 1. Define comprehensive metadata interface first
+// 2. Write agent to consume any metadata configuration
+// 3. Agent behavior emerges from Task Template configuration
+// 4. Same agent works for any jurisdiction/entity type
+
+interface TaskTemplateMetadata {
+  entityRules: Record<string, EntityRuleSet>;
+  jurisdictionRules: Record<string, JurisdictionRuleSet>;
+  // Define complete schema first
+}
+
+class UniversalComplianceAgent {
+  processRequest(request: AgentRequest, context: TaskContext) {
+    // Behavior driven by context.metadata configuration
+    const rules = context.metadata?.entityRules?.[entityType];
+    const jurisdictionRules = context.metadata?.jurisdictionRules?.[location];
+    // Same code, different behavior via configuration
+  }
+}
+
+// ❌ FORBIDDEN: Code-first, configure-later approach
+class ComplianceAgent {
+  processRequest() {
+    if (entityType === 'LLC' && location === 'CA') {
+      // Hardcoded logic limits universality
+    }
+  }
+}
 ```
 
 ---
@@ -202,6 +452,13 @@ router.post('/api/soi/file', ...);         // Task-specific endpoints
 class PRDOrchestrator { ... }              // Document references
 services/TaskService.ts                     // Wrong case
 agents/compliance-analyzer.ts               // Wrong case
+
+// ❌ Universal Agent Architecture Violations
+private extractProfile(): ProfileData { ... }              // Missing context parameter
+if (entityType === 'LLC') { /* logic */ }                  // Hardcoded entity logic
+type EntityType = 'LLC' | 'Corporation';                   // Non-generic types
+await db.createContextHistoryEntry(contextId, entry);      // Blocking database operation
+const mockContext = { metadata: {} };                      // Inadequate test metadata
 ```
 
 ---
@@ -216,6 +473,9 @@ agents/compliance-analyzer.ts               // Wrong case
 - [ ] **Confirmed universal pattern** (not task-specific)
 - [ ] **Confirmed no getSession() calls**
 - [ ] **Confirmed proper naming conventions**
+- [ ] **Confirmed context threading pattern** (TaskContext parameter in all agent methods)
+- [ ] **Confirmed generic type mapping** (no hardcoded entity types)
+- [ ] **Confirmed graceful database failure** (try/catch with continue execution)
 
 ### Before Committing:
 
@@ -224,6 +484,10 @@ agents/compliance-analyzer.ts               // Wrong case
 - [ ] **Build succeeds** (npm run build)
 - [ ] **No forbidden patterns** (grep checks)
 - [ ] **No parallel implementations**
+- [ ] **Context threading implemented** (all agent methods receive TaskContext)
+- [ ] **Generic types used** (registered_entity, not LLC)
+- [ ] **Database operations graceful** (try/catch with continue)
+- [ ] **Comprehensive test metadata** (entityRules, jurisdictionRules, etc.)
 
 ### Success Criteria:
 
@@ -247,6 +511,12 @@ grep -r "supabase.auth" src/ --include="*.ts"
 grep -r "getUserClient" src/ --include="*.ts"
 grep -r "if.*taskType.*===" src/ --include="*.ts"
 
+# Check for Universal Agent Architecture violations:
+grep -r "if.*entityType.*===.*LLC" src/ --include="*.ts"      # Hardcoded entity types
+grep -r "if.*location.*===.*California" src/ --include="*.ts" # Hardcoded locations
+grep -rn "private.*(): " src/agents/ --include="*.ts"         # Methods missing context param
+grep -r "await.*createContextHistoryEntry" src/ --include="*.ts" | grep -v "try"  # Blocking DB ops
+
 # Check for existing implementations:
 find src -name "*[Oo]rchestrat*.ts" -type f
 find src -name "*[Aa]gent*.ts" -type f
@@ -255,6 +525,9 @@ ls -la src/api/*.ts | grep -E "(onboarding|soi|compliance)"
 # Check naming conventions:
 find src/services -name "*[A-Z]*.ts" -type f  # Should be empty
 find src/agents -name "*-*.ts" -type f         # Should be empty
+
+# Check test metadata completeness:
+grep -r "metadata: {}" src/__tests__/ --include="*.ts"       # Should be empty - needs comprehensive metadata
 ```
 
 ---
@@ -278,5 +551,5 @@ This document is:
 
 **Violations = Automatic Rejection**
 
-Last Updated: 2024-01-13
-Version: 2.0.0
+Last Updated: 2025-08-14
+Version: 2.1.0 - Universal Agent Architecture Guidelines

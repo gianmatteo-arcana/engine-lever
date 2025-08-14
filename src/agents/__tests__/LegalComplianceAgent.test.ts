@@ -13,7 +13,7 @@ jest.mock('../../services/llm-provider', () => ({
   LLMProvider: {
     getInstance: jest.fn().mockReturnValue({
       complete: jest.fn().mockResolvedValue({
-        content: 'Mock LLM response for legal compliance analysis',
+        content: 'Mock LLM response for legal analysis',
         model: 'mock-model',
         usage: { promptTokens: 150, completionTokens: 75, totalTokens: 225 }
       }),
@@ -40,19 +40,19 @@ describe('LegalComplianceAgent', () => {
 
     // Setup mock task context
     mockTaskContext = {
-      contextId: 'ctx_legal_compliance_test',
-      taskTemplateId: 'legal_compliance_analysis',
+      contextId: 'ctx_legal_analysis_test',
+      taskTemplateId: 'regulatory_analysis',
       tenantId: 'tenant_test',
       createdAt: new Date().toISOString(),
       currentState: {
         status: 'pending',
-        phase: 'compliance_analysis',
+        phase: 'regulatory_analysis',
         completeness: 0,
         data: {
           business: {
-            name: 'TechCorp LLC',
-            entityType: 'LLC',
-            state: 'CA',
+            name: 'TestEntity',
+            entityType: 'Entity',
+            state: 'TestState',
             formationDate: '2023-01-15T00:00:00.000Z',
             industry: 'Technology',
             ein: '12-3456789'
@@ -60,23 +60,23 @@ describe('LegalComplianceAgent', () => {
           user: {
             firstName: 'John',
             lastName: 'Smith',
-            email: 'john@techcorp.com'
+            email: 'john@testentity.com'
           }
         }
       },
       history: [],
       templateSnapshot: {
-        id: 'legal_compliance_analysis',
+        id: 'regulatory_analysis',
         version: '1.0',
         metadata: {
-          name: 'Legal Compliance Analysis',
-          description: 'Analyze business compliance requirements',
+          name: 'Regulatory Analysis',
+          description: 'Analyze entity regulatory requirements',
           category: 'legal'
         },
         goals: {
           primary: [
-            { id: 'identify_requirements', description: 'Identify compliance obligations', required: true },
-            { id: 'assess_risk', description: 'Assess compliance risks', required: true }
+            { id: 'identify_requirements', description: 'Identify regulatory obligations', required: true },
+            { id: 'assess_risk', description: 'Assess regulatory risks', required: true }
           ]
         }
       }
@@ -84,16 +84,20 @@ describe('LegalComplianceAgent', () => {
   });
 
   describe('Filing Requirements Validation', () => {
-    it('should validate SOI filing requirements for CA LLC', async () => {
+    it('should validate filing requirements with template data', async () => {
       const request: AgentRequest = {
-        requestId: 'req_soi_validation',
-        agentRole: 'legal_compliance',
+        requestId: 'req_filing_validation',
+        agentRole: 'legal_analysis',
         instruction: 'validate_filing_requirements',
         data: { 
-          filingType: 'soi',
-          entityType: 'LLC',
-          jurisdiction: 'CA',
-          formationDate: '2023-01-15'
+          filingType: 'annual_report',
+          requirements: {
+            required: true,
+            fee: 50,
+            period: 'Annual',
+            documents: ['Entity information', 'Financial summary'],
+            formId: 'AR-100'
+          }
         },
         context: {
           userProgress: 0,
@@ -107,68 +111,83 @@ describe('LegalComplianceAgent', () => {
       expect(response.status).toBe('needs_input');
       expect(response.data.filingRequirements).toBeDefined();
       expect(response.data.filingRequirements.isRequired).toBe(true);
-      expect(response.data.filingRequirements.fee).toBe(20);
-      expect(response.data.filingRequirements.formNumber).toBe('SI-550');
-      expect(response.data.filingRequirements.filingType).toBe('soi');
+      expect(response.data.filingRequirements.fee).toBe(50);
+      expect(response.data.filingRequirements.formIdentifier).toBe('AR-100');
+      expect(response.data.filingRequirements.filingType).toBe('annual_report');
       expect(response.nextAgent).toBe('data_collection');
       expect(response.uiRequests).toHaveLength(1);
     });
 
-    it('should indicate SOI not required for sole proprietorship', async () => {
-      // Update context for sole proprietorship
-      mockTaskContext.currentState.data.business.entityType = 'Sole Proprietorship';
-
+    it('should indicate filing not required when template specifies', async () => {
       const request: AgentRequest = {
-        requestId: 'req_soi_sole_prop',
-        agentRole: 'legal_compliance',
+        requestId: 'req_filing_not_required',
+        agentRole: 'legal_analysis',
         instruction: 'validate_filing_requirements',
         data: { 
-          filingType: 'soi',
-          entityType: 'Sole Proprietorship' 
+          filingType: 'optional_filing',
+          requirements: {
+            required: false
+          }
         }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
 
       expect(response.data.filingRequirements.isRequired).toBe(false);
-      expect(response.data.guidance.nextSteps[0]).toContain('No soi filing required');
+      expect(response.data.guidance.nextSteps[0]).toContain('No optional_filing filing required');
     });
 
-    it('should calculate correct filing due date', async () => {
+    it('should calculate correct filing due date from template data', async () => {
       const request: AgentRequest = {
-        requestId: 'req_soi_due_date',
-        agentRole: 'legal_compliance',
+        requestId: 'req_due_date',
+        agentRole: 'legal_analysis',
         instruction: 'validate_filing_requirements',
         data: { 
-          filingType: 'soi',
-          formationDate: '2023-01-15' 
+          filingType: 'quarterly_report',
+          requirements: {
+            daysFromNow: 30
+          }
         }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
 
       expect(response.data.filingRequirements.dueDate).toBeDefined();
-      // Should be 90 days after formation date
-      const expectedDueDate = new Date('2023-01-15');
-      expectedDueDate.setDate(expectedDueDate.getDate() + 90);
+      // Should be 30 days from now
+      const expectedDueDate = new Date();
+      expectedDueDate.setDate(expectedDueDate.getDate() + 30);
       
       const actualDueDate = new Date(response.data.filingRequirements.dueDate);
       expect(actualDueDate.toDateString()).toBe(expectedDueDate.toDateString());
     });
   });
 
-  describe('Entity Compliance Analysis', () => {
-    it('should perform comprehensive compliance analysis', async () => {
+  describe('Entity Requirements Analysis', () => {
+    it('should perform comprehensive regulatory analysis', async () => {
       const request: AgentRequest = {
         requestId: 'req_entity_analysis',
-        agentRole: 'legal_compliance',
-        instruction: 'analyze_entity_compliance',
+        agentRole: 'legal_analysis',
+        instruction: 'analyze_entity_requirements',
         data: {
-          businessEntity: {
-            name: 'TechCorp LLC',
-            entityType: 'LLC',
-            jurisdiction: 'CA',
-            formationDate: '2023-01-15'
+          scope: {
+            requirements: [
+              {
+                type: 'Annual Filing',
+                deadline: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
+                status: 'upcoming',
+                priority: 'high',
+                fee: 100,
+                description: 'Annual regulatory filing'
+              },
+              {
+                type: 'Quarterly Report',
+                deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                status: 'due',
+                priority: 'medium',
+                fee: 25,
+                description: 'Quarterly activity report'
+              }
+            ]
           }
         }
       };
@@ -176,9 +195,9 @@ describe('LegalComplianceAgent', () => {
       const response = await agent.processRequest(request, mockTaskContext);
 
       expect(response.status).toBe('needs_input');
-      expect(response.data.complianceRequirements).toBeDefined();
-      expect(Array.isArray(response.data.complianceRequirements)).toBe(true);
-      expect(response.data.complianceRequirements.length).toBeGreaterThan(0);
+      expect(response.data.requirements).toBeDefined();
+      expect(Array.isArray(response.data.requirements)).toBe(true);
+      expect(response.data.requirements.length).toBe(2);
       
       expect(response.data.riskAssessment).toBeDefined();
       expect(response.data.riskAssessment.level).toMatch(/^(high|medium|low)$/);
@@ -189,56 +208,78 @@ describe('LegalComplianceAgent', () => {
       expect(response.uiRequests).toHaveLength(1);
     });
 
-    it('should identify SOI and franchise tax requirements for LLC', async () => {
+    it('should identify requirements from template scope', async () => {
       const request: AgentRequest = {
-        requestId: 'req_llc_requirements',
-        agentRole: 'legal_compliance',
-        instruction: 'analyze_entity_compliance',
-        data: {}
+        requestId: 'req_template_requirements',
+        agentRole: 'legal_analysis',
+        instruction: 'analyze_entity_requirements',
+        data: {
+          scope: {
+            requirements: [
+              { type: 'Registration Renewal', priority: 'high', fee: 50 },
+              { type: 'Tax Filing', priority: 'critical', fee: 800 }
+            ]
+          }
+        }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
 
-      const requirements = response.data.complianceRequirements;
-      expect(requirements).toHaveLength(2); // SOI + Franchise Tax
+      const requirements = response.data.requirements;
+      expect(requirements).toHaveLength(2);
 
-      // Check SOI requirement
-      const soiRequirement = requirements.find((r: any) => r.type === 'Statement of Information');
-      expect(soiRequirement).toBeDefined();
-      expect(soiRequirement.priority).toBe('high');
-      expect(soiRequirement.fee).toBe(20);
+      // Check first requirement
+      const renewalRequirement = requirements.find((r: any) => r.type === 'Registration Renewal');
+      expect(renewalRequirement).toBeDefined();
+      expect(renewalRequirement.priority).toBe('high');
+      expect(renewalRequirement.fee).toBe(50);
 
-      // Check Franchise Tax requirement
-      const franchiseTaxRequirement = requirements.find((r: any) => r.type === 'Franchise Tax Return');
-      expect(franchiseTaxRequirement).toBeDefined();
-      expect(franchiseTaxRequirement.priority).toBe('critical');
-      expect(franchiseTaxRequirement.fee).toBe(800);
+      // Check second requirement
+      const taxRequirement = requirements.find((r: any) => r.type === 'Tax Filing');
+      expect(taxRequirement).toBeDefined();
+      expect(taxRequirement.priority).toBe('critical');
+      expect(taxRequirement.fee).toBe(800);
     });
 
     it('should provide accurate summary statistics', async () => {
       const request: AgentRequest = {
         requestId: 'req_summary_stats',
-        agentRole: 'legal_compliance',
-        instruction: 'analyze_entity_compliance',
-        data: {}
+        agentRole: 'legal_analysis',
+        instruction: 'analyze_entity_requirements',
+        data: {
+          scope: {
+            requirements: [
+              { type: 'Filing A', priority: 'critical' },
+              { type: 'Filing B', priority: 'high' },
+              { type: 'Filing C', priority: 'medium' }
+            ]
+          }
+        }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
 
       expect(response.data.summary).toBeDefined();
-      expect(response.data.summary.totalRequirements).toBe(2);
-      expect(response.data.summary.criticalCount).toBe(1); // Franchise tax
+      expect(response.data.summary.totalRequirements).toBe(3);
+      expect(response.data.summary.criticalCount).toBe(1);
       expect(typeof response.data.summary.upcomingDeadlines).toBe('number');
     });
   });
 
   describe('Risk Assessment', () => {
-    it('should assess compliance risks accurately', async () => {
+    it('should assess regulatory risks accurately', async () => {
       const request: AgentRequest = {
         requestId: 'req_risk_assessment',
-        agentRole: 'legal_compliance',
-        instruction: 'assess_compliance_risk',
-        data: {}
+        agentRole: 'legal_analysis',
+        instruction: 'assess_regulatory_risk',
+        data: {
+          scope: {
+            requirements: [
+              { type: 'Filing A', status: 'upcoming', priority: 'medium' },
+              { type: 'Filing B', status: 'due', priority: 'high' }
+            ]
+          }
+        }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
@@ -252,111 +293,158 @@ describe('LegalComplianceAgent', () => {
     });
 
     it('should identify high risk for overdue requirements', async () => {
-      // Mock overdue SOI requirement by setting formation date in the past
-      const pastDate = new Date();
-      pastDate.setFullYear(pastDate.getFullYear() - 1);
-      mockTaskContext.currentState.data.business.formationDate = pastDate.toISOString();
-
       const request: AgentRequest = {
         requestId: 'req_overdue_risk',
-        agentRole: 'legal_compliance',
-        instruction: 'assess_compliance_risk',
-        data: {}
+        agentRole: 'legal_analysis',
+        instruction: 'assess_regulatory_risk',
+        data: {
+          scope: {
+            requirements: [
+              { type: 'Critical Filing', status: 'overdue', priority: 'critical' },
+              { type: 'Important Report', status: 'overdue', priority: 'high' }
+            ]
+          }
+        }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
 
-      // Note: This test depends on the specific risk assessment logic
-      // The actual risk level may vary based on implementation
-      expect(response.data.riskAssessment.factors.length).toBeGreaterThan(0);
+      expect(response.data.riskAssessment.level).toBe('high');
+      expect(response.data.riskAssessment.factors).toContain('Overdue regulatory obligations');
       expect(response.data.riskAssessment.mitigationSteps.length).toBeGreaterThan(0);
     });
   });
 
-  describe('Compliance Guidance Preparation', () => {
-    it('should prepare SOI compliance guidance with prefilled data', async () => {
+  describe('Regulatory Guidance Preparation', () => {
+    it('should prepare regulatory guidance with prefilled data', async () => {
       const request: AgentRequest = {
         requestId: 'req_guidance_prep',
-        agentRole: 'legal_compliance',
-        instruction: 'prepare_compliance_guidance',
-        data: { filingType: 'soi' }
+        agentRole: 'legal_analysis',
+        instruction: 'prepare_regulatory_guidance',
+        data: { 
+          filingType: 'standard_report',
+          templateData: {
+            sections: ['Section A', 'Section B', 'Section C'],
+            fields: [
+              { id: 'field1', label: 'Field 1', required: true },
+              { id: 'field2', label: 'Field 2', required: false }
+            ],
+            prefillMapping: {
+              field1: 'name',
+              field2: 'industry'
+            }
+          }
+        }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
 
       expect(response.status).toBe('completed');
       expect(response.data.guidanceTemplate).toBeDefined();
+      expect(response.data.guidanceTemplate.sections).toHaveLength(3);
+      expect(response.data.guidanceTemplate.fields).toHaveLength(2);
+      
       expect(response.data.prefilledData).toBeDefined();
+      expect(response.data.prefilledData.entityName).toBe('TestEntity');
+      expect(response.data.prefilledData.field1).toBe('TestEntity'); // Mapped from name
+      expect(response.data.prefilledData.field2).toBe('Technology'); // Mapped from industry
+      
       expect(response.data.instructions).toBeDefined();
-      expect(response.data.submissionGuidance).toBeDefined();
-
-      // Check prefilled data
-      expect(response.data.prefilledData.businessName).toBe('TechCorp LLC');
-      expect(response.data.prefilledData.entityType).toBe('LLC');
-      expect(response.data.prefilledData.jurisdiction).toBe('CA');
-
-      // Check guidance template structure
-      expect(response.data.guidanceTemplate.filingType).toBe('soi');
-      expect(Array.isArray(response.data.guidanceTemplate.sections)).toBe(true);
-      expect(Array.isArray(response.data.guidanceTemplate.fields)).toBe(true);
+      expect(Array.isArray(response.data.instructions)).toBe(true);
     });
 
-    it('should provide submission guidance', async () => {
+    it('should generate submission guidance from template', async () => {
       const request: AgentRequest = {
         requestId: 'req_submission_guidance',
-        agentRole: 'legal_compliance',
-        instruction: 'prepare_compliance_guidance',
-        data: { filingType: 'soi' }
+        agentRole: 'legal_analysis',
+        instruction: 'prepare_regulatory_guidance',
+        data: { 
+          filingType: 'electronic_filing',
+          templateData: {
+            submission: {
+              method: 'online',
+              url: 'https://example.gov/submit',
+              fee: 75,
+              processingTime: '2-3 business days',
+              confirmationMethod: 'email'
+            }
+          }
+        }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
 
-      const guidance = response.data.submissionGuidance;
-      expect(guidance.method).toBe('online');
-      expect(guidance.url).toContain('sos.ca.gov');
-      expect(guidance.fee).toBe(20);
-      expect(guidance.processingTime).toBeDefined();
+      expect(response.data.submissionGuidance).toBeDefined();
+      expect(response.data.submissionGuidance.method).toBe('online');
+      expect(response.data.submissionGuidance.url).toBe('https://example.gov/submit');
+      expect(response.data.submissionGuidance.fee).toBe(75);
+      expect(response.data.submissionGuidance.processingTime).toBe('2-3 business days');
+    });
+
+    it('should provide default guidance when template data not provided', async () => {
+      const request: AgentRequest = {
+        requestId: 'req_default_guidance',
+        agentRole: 'legal_analysis',
+        instruction: 'prepare_regulatory_guidance',
+        data: { 
+          filingType: 'generic_filing'
+        }
+      };
+
+      const response = await agent.processRequest(request, mockTaskContext);
+
+      expect(response.status).toBe('completed');
+      expect(response.data.instructions).toContain('Review all information for accuracy');
+      expect(response.data.submissionGuidance.method).toBe('varies');
     });
   });
 
   describe('Context Recording', () => {
-    it('should record context entries for analysis initiation', async () => {
+    it('should record regulatory analysis initiation with proper reasoning', async () => {
       const request: AgentRequest = {
         requestId: 'req_context_test',
-        agentRole: 'legal_compliance',
-        instruction: 'validate_soi_requirements',
-        data: {}
+        agentRole: 'legal_analysis',
+        instruction: 'validate_filing_requirements',
+        data: { 
+          filingType: 'test_filing',
+          requirements: { required: true }
+        }
       };
 
       await agent.processRequest(request, mockTaskContext);
 
-      // Verify context entry was added to history
-      expect(mockTaskContext.history.length).toBeGreaterThan(0);
-      
-      const initiationEntry = mockTaskContext.history.find(entry => 
-        entry.operation === 'compliance_analysis_initiated'
+      expect(mockDbService.createContextHistoryEntry).toHaveBeenCalledWith(
+        mockTaskContext.contextId,
+        expect.objectContaining({
+          operation: 'regulatory_analysis_initiated',
+          reasoning: 'Starting comprehensive regulatory analysis for entity and filing requirements'
+        })
       );
-      expect(initiationEntry).toBeDefined();
-      expect(initiationEntry!.reasoning).toContain('compliance analysis');
-      expect(initiationEntry!.actor.id).toBe('legal_compliance_agent');
     });
 
-    it('should record context entries for completed analysis', async () => {
+    it('should record filing validation with entity details', async () => {
       const request: AgentRequest = {
-        requestId: 'req_completed_analysis',
-        agentRole: 'legal_compliance',
-        instruction: 'assess_compliance_risk',
-        data: {}
+        requestId: 'req_filing_context',
+        agentRole: 'legal_analysis',
+        instruction: 'validate_filing_requirements',
+        data: { 
+          filingType: 'periodic_report',
+          requirements: { required: true, fee: 100 }
+        }
       };
 
       await agent.processRequest(request, mockTaskContext);
 
-      const riskEntry = mockTaskContext.history.find(entry => 
-        entry.operation === 'compliance_risk_assessed'
+      expect(mockDbService.createContextHistoryEntry).toHaveBeenCalledWith(
+        mockTaskContext.contextId,
+        expect.objectContaining({
+          operation: 'filing_requirements_validated',
+          data: expect.objectContaining({
+            filingType: 'periodic_report',
+            fee: 100
+          })
+        })
       );
-      expect(riskEntry).toBeDefined();
-      expect(riskEntry!.data.riskLevel).toMatch(/^(high|medium|low)$/);
-      expect(riskEntry!.reasoning).toContain('Risk assessment completed');
     });
   });
 
@@ -364,8 +452,8 @@ describe('LegalComplianceAgent', () => {
     it('should handle unknown instructions gracefully', async () => {
       const request: AgentRequest = {
         requestId: 'req_unknown',
-        agentRole: 'legal_compliance',
-        instruction: 'unknown_instruction',
+        agentRole: 'legal_analysis',
+        instruction: 'unknown_legal_operation',
         data: {}
       };
 
@@ -373,25 +461,25 @@ describe('LegalComplianceAgent', () => {
 
       expect(response.status).toBe('error');
       expect(response.data.error).toContain('Unknown instruction');
-      expect(response.reasoning).toContain('unrecognized instruction');
+      expect(response.reasoning).toContain('unrecognized instruction type');
     });
 
-    it('should handle processing errors', async () => {
+    it('should handle processing errors gracefully', async () => {
       // Force an error by corrupting the context
       const corruptedContext = { ...mockTaskContext, currentState: null };
 
       const request: AgentRequest = {
         requestId: 'req_error_test',
-        agentRole: 'legal_compliance',
+        agentRole: 'legal_analysis',
         instruction: 'validate_filing_requirements',
-        data: { filingType: 'soi' }
+        data: { filingType: 'test' }
       };
 
       const response = await agent.processRequest(request, corruptedContext as any);
 
       expect(response.status).toBe('error');
       expect(response.data.error).toBeDefined();
-      expect(response.reasoning).toContain('Technical error');
+      expect(response.reasoning).toContain('Technical error during regulatory analysis');
     });
 
     it('should continue processing even if database write fails', async () => {
@@ -400,9 +488,12 @@ describe('LegalComplianceAgent', () => {
 
       const request: AgentRequest = {
         requestId: 'req_db_fail',
-        agentRole: 'legal_compliance',
+        agentRole: 'legal_analysis',
         instruction: 'validate_filing_requirements',
-        data: { filingType: 'soi' }
+        data: { 
+          filingType: 'test_filing',
+          requirements: { required: true }
+        }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
@@ -413,69 +504,74 @@ describe('LegalComplianceAgent', () => {
     });
   });
 
-  describe('Integration with Agent Flow', () => {
-    it('should specify correct next agent after filing validation', async () => {
+  describe('UI Request Generation', () => {
+    it('should generate filing guidance UI with proper structure', async () => {
       const request: AgentRequest = {
-        requestId: 'req_next_agent',
-        agentRole: 'legal_compliance',
+        requestId: 'req_ui_guidance',
+        agentRole: 'legal_analysis',
         instruction: 'validate_filing_requirements',
-        data: { filingType: 'soi' }
-      };
-
-      const response = await agent.processRequest(request, mockTaskContext);
-
-      expect(response.nextAgent).toBe('data_collection');
-    });
-
-    it('should specify correct next agent after entity analysis', async () => {
-      const request: AgentRequest = {
-        requestId: 'req_entity_next',
-        agentRole: 'legal_compliance',
-        instruction: 'analyze_entity_compliance',
-        data: {}
-      };
-
-      const response = await agent.processRequest(request, mockTaskContext);
-
-      expect(response.nextAgent).toBe('ux_optimization_agent');
-    });
-
-    it('should generate appropriate UI requests', async () => {
-      const request: AgentRequest = {
-        requestId: 'req_ui_generation',
-        agentRole: 'legal_compliance',
-        instruction: 'analyze_entity_compliance',
-        data: {}
+        data: { 
+          filingType: 'ui_test_filing',
+          requirements: { required: true, fee: 50 }
+        }
       };
 
       const response = await agent.processRequest(request, mockTaskContext);
 
       expect(response.uiRequests).toHaveLength(1);
-      
-      const uiRequest = response.uiRequests![0];
-      expect(uiRequest.requestId).toContain('compliance_roadmap_');
-      expect(uiRequest.semanticData.agentRole).toBe('legal_compliance_agent');
-      expect(uiRequest.semanticData.title).toContain('Compliance Roadmap');
-      expect(uiRequest.semanticData.actions).toBeDefined();
-      expect(uiRequest.context?.urgency).toMatch(/^(high|medium|low)$/);
+      const ui = response.uiRequests![0];
+      expect(ui.semanticData.agentRole).toBe('legal_analysis_agent');
+      expect(ui.semanticData.title).toContain('UI_TEST_FILING Filing Requirements');
+      expect(ui.semanticData.actions.proceed).toBeDefined();
+      expect(ui.semanticData.actions.learn_more).toBeDefined();
+    });
+
+    it('should generate regulatory roadmap UI for entity analysis', async () => {
+      const request: AgentRequest = {
+        requestId: 'req_ui_roadmap',
+        agentRole: 'legal_analysis',
+        instruction: 'analyze_entity_requirements',
+        data: {
+          scope: {
+            requirements: [
+              { type: 'Filing A', priority: 'high', fee: 100 },
+              { type: 'Filing B', priority: 'critical', fee: 200 }
+            ]
+          }
+        }
+      };
+
+      const response = await agent.processRequest(request, mockTaskContext);
+
+      expect(response.uiRequests).toHaveLength(1);
+      const ui = response.uiRequests![0];
+      expect(ui.semanticData.agentRole).toBe('legal_analysis_agent');
+      expect(ui.semanticData.title).toBe('Your Regulatory Roadmap');
+      expect(ui.semanticData.summary.totalEstimatedFees).toBe(300);
+      expect(ui.semanticData.actions.start).toBeDefined();
+      expect(ui.semanticData.actions.customize).toBeDefined();
     });
   });
 
   describe('LegalComplianceAgent Performance', () => {
-    it('should complete compliance analysis within time limits', async () => {
+    it('should complete operations within time limits', async () => {
       const startTime = Date.now();
 
       const request: AgentRequest = {
         requestId: 'req_performance_test',
-        agentRole: 'legal_compliance',
-        instruction: 'analyze_entity_compliance',
-        data: {}
+        agentRole: 'legal_analysis',
+        instruction: 'validate_filing_requirements',
+        data: { 
+          filingType: 'performance_test',
+          requirements: { required: true }
+        }
       };
 
-      await agent.processRequest(request, mockTaskContext);
-
+      const response = await agent.processRequest(request, mockTaskContext);
       const duration = Date.now() - startTime;
-      expect(duration).toBeLessThan(5000); // Should complete within 5 seconds
+
+      expect(response.status).toBe('needs_input');
+      expect(duration).toBeLessThan(1000); // Should complete within 1 second
     });
   });
 });

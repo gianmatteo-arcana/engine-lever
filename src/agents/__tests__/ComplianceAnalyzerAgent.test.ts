@@ -57,6 +57,89 @@ describe('ComplianceAnalyzer', () => {
         version: '2.0',
         metadata: { name: 'Test Template', description: 'Test', category: 'test' },
         goals: { primary: [] }
+      },
+      metadata: {
+        // Task Template metadata for compliance analysis
+        entityRules: {
+          'LLC': {
+            governanceRequirements: [
+              {
+                id: 'llc_operating_agreement',
+                name: 'Operating Agreement',
+                description: 'Create operating agreement for LLC',
+                priority: 'high',
+                daysToComplete: 90,
+                estimatedCost: 500,
+                consequences: 'Legal and tax complications'
+              }
+            ]
+          },
+          'Corporation': {
+            governanceRequirements: [
+              {
+                id: 'corp_bylaws',
+                name: 'Corporate Bylaws',
+                description: 'Establish corporate bylaws',
+                priority: 'critical',
+                daysToComplete: 30,
+                estimatedCost: 750
+              },
+              {
+                id: 'annual_board_meeting',
+                name: 'Annual Board Meeting',
+                description: 'Hold annual board meeting',
+                priority: 'high',
+                frequency: 'annual',
+                estimatedCost: 0
+              }
+            ]
+          },
+          'Sole Proprietorship': {
+            governanceRequirements: [
+              {
+                id: 'dba_filing',
+                name: 'DBA Filing',
+                description: 'File Doing Business As name',
+                priority: 'critical',
+                daysToComplete: 30,
+                estimatedCost: 75
+              }
+            ]
+          }
+        },
+        jurisdictionRules: {
+          'CA': {
+            annualReporting: true,
+            annualReportName: 'CA Annual Report',
+            annualReportFee: 20,
+            annualReportPriority: 'critical',
+            requiresRegisteredAgent: true,
+            agentName: 'Registered Agent',
+            agentCost: 150,
+            agentConditions: {
+              excludedEntityTypes: ['Sole Proprietorship']
+            }
+          }
+        },
+        taxRequirements: {
+          requiresTaxId: true,
+          taxIdName: 'EIN Application',
+          taxIdDescription: 'Apply for Employer Identification Number',
+          taxIdDeadlineDays: 15,
+          taxIdConsequences: 'Cannot open business bank account',
+          taxIdConditions: {
+            excludedEntityTypes: ['Sole Proprietorship']
+          }
+        },
+        taxForms: {
+          'LLC': 'Form 1065 or 1040 Schedule C',
+          'Corporation': 'Form 1120',
+          'Partnership': 'Form 1065',
+          'Sole Proprietorship': 'Form 1040 Schedule C',
+          'default': 'Tax Return Form'
+        },
+        defaultEntityType: 'Sole Proprietorship',
+        defaultLocation: 'CA'
       }
     };
   });
@@ -131,7 +214,7 @@ describe('ComplianceAnalyzer', () => {
   });
 
   describe('State-Specific Requirements', () => {
-    test('should calculate California annual report deadline', async () => {
+    test('should calculate state annual report deadline', async () => {
       const request: AgentRequest = {
         requestId: 'req_304',
         agentRole: 'entity_compliance_agent',
@@ -261,7 +344,7 @@ describe('ComplianceAnalyzer', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const ein = calendar.requirements.find((r: any) => r.id === 'federal_ein');
+      const ein = calendar.requirements.find((r: any) => r.id === 'tax_identification');
       
       expect(ein).toBeDefined();
       expect(ein?.priority).toBe('critical');
@@ -281,7 +364,7 @@ describe('ComplianceAnalyzer', () => {
       const response = await agent.processRequest(request, mockContext);
 
       const calendar = response.data.complianceCalendar;
-      const ein = calendar.requirements.find((r: any) => r.id === 'federal_ein');
+      const ein = calendar.requirements.find((r: any) => r.id === 'tax_identification');
       
       expect(ein).toBeUndefined();
     });
@@ -545,7 +628,7 @@ describe('ComplianceAnalyzer', () => {
       // Should still work with defaults
       expect(response.status).toBe('needs_input');
       expect(response.data.businessProfile.entityType).toBe('Sole Proprietorship'); // Default
-      expect(response.data.businessProfile.state).toBe('CA'); // Default
+      expect(response.data.businessProfile.location).toBe('CA'); // Default (location field, not state)
     });
 
     test('should handle processing errors', async () => {
@@ -614,7 +697,7 @@ describe('ComplianceAnalyzer', () => {
       const response = await agent.processRequest(request, mockContext);
 
       // Should use profile data over current state
-      expect(response.data.businessProfile.state).toBe('NY');
+      expect(response.data.businessProfile.location).toBe('NY'); // location field, not state
     });
   });
 });

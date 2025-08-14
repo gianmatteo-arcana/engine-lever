@@ -335,7 +335,7 @@ export class FormOptimizerAgent extends BaseAgent {
         title: 'Compliance Requirements',
         fields: complianceFields.map(f => f.id),
         collapsed: true,
-        showCondition: 'entityType !== "Sole Proprietorship"'
+        showCondition: this.getEntityCondition('compliance_required')
       });
     }
 
@@ -395,52 +395,80 @@ export class FormOptimizerAgent extends BaseAgent {
 
   /**
    * Generate quick actions for common scenarios
+   * Task Templates provide scenario-specific quick actions
    */
   private generateQuickActions(fields: FormField[]): QuickAction[] {
     const actions: QuickAction[] = [];
 
-    // Single-member LLC quick action
+    // TODO: Get quick actions from ToolChain based on Task Template
+    // const quickActionGenerator = await this.toolChain.getTool('quick_action_generator');
+    // const templateActions = await quickActionGenerator.generateActions({
+    //   fields: fields,
+    //   jurisdiction: context.metadata?.jurisdiction,
+    //   industry: context.metadata?.industry
+    // });
+    // 
+    // Examples of tools this agent would ideally access:
+    // - Form template library
+    // - Industry-specific form generators
+    // - Jurisdiction-specific prefill services
+    // - AI-powered form optimization engines
+
+    // Generic quick actions - Task Templates provide specific ones
     actions.push({
-      id: 'single_llc',
-      label: 'Single-member LLC',
+      id: 'individual_entity',
+      label: 'Individual Entity',
       icon: '👤',
-      action: 'prefill_single_llc',
+      action: 'prefill_individual',
       prefilledData: {
-        entityType: 'LLC',
-        memberCount: 1,
-        operatingAgreement: false
+        entityType: 'individual_entity',
+        memberCount: 1
       }
     });
 
-    // Tech startup quick action
+    // Tech-focused entity
     if (fields.some(f => f.id === 'industry')) {
       actions.push({
-        id: 'tech_startup',
-        label: 'Tech Startup',
+        id: 'tech_entity',
+        label: 'Technology Entity',
         icon: '💻',
-        action: 'prefill_tech_startup',
+        action: 'prefill_tech_entity',
         prefilledData: {
-          entityType: 'Corporation',
-          state: 'DE',
+          entityType: 'registered_entity',
           industry: 'Technology'
         }
       });
     }
 
-    // Restaurant quick action
+    // Service-based entity
     actions.push({
-      id: 'restaurant',
-      label: 'Restaurant',
-      icon: '🍕',
-      action: 'prefill_restaurant',
+      id: 'service_entity',
+      label: 'Service Business',
+      icon: '🏢',
+      action: 'prefill_service_entity',
       prefilledData: {
-        entityType: 'LLC',
-        industry: 'Food & Beverage',
-        needsHealthPermit: true
+        entityType: 'registered_entity',
+        industry: 'Professional Services'
       }
     });
 
     return actions;
+  }
+  
+  /**
+   * Get condition string for entity-specific display logic
+   * Task Templates define what conditions to use
+   */
+  private getEntityCondition(conditionType: string): string {
+    // TODO: Get condition from Task Template metadata
+    // return this.taskContext?.metadata?.displayConditions?.[conditionType] || 'true';
+    
+    switch (conditionType) {
+      case 'compliance_required':
+        return 'entityType !== "individual_entity"';
+      default:
+        return 'true';
+    }
   }
 
   /**

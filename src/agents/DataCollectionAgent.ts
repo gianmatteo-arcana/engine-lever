@@ -45,16 +45,17 @@ export class DataCollectionAgent extends BaseAgent {
   }
   
   /**
-   * Specialized method for business discovery
+   * Specialized method for entity discovery
+   * Task Templates define which specific sources to search
    */
   async discoverBusiness(email: string, taskContext: any): Promise<BaseAgentResponse> {
     const request: BaseAgentRequest = {
       taskContext,
-      operation: 'business_discovery',
+      operation: 'entity_discovery',
       parameters: { 
         email,
         searchStrategy: 'comprehensive',
-        sources: ['ca_sos', 'federal_ein', 'business_registries']
+        sources: taskContext.templateData?.dataSources || ['public_records', 'registries']
       },
       urgency: 'high'
     };
@@ -100,70 +101,7 @@ export class DataCollectionAgent extends BaseAgent {
   }
 }
 
-// Example usage demonstration
-export async function demonstrateDataCollectionAgent(): Promise<void> {
-  console.log('🚀 Demonstrating Data Collection Agent with Template Inheritance');
-  
-  const agent = new DataCollectionAgent('business_123', 'user_456');
-  
-  // Display agent capabilities
-  const capabilities = agent.getCapabilities();
-  console.log('Agent Capabilities:', capabilities);
-  
-  // Validate configuration
-  const validation = agent.validateConfiguration();
-  console.log('Configuration Validation:', validation);
-  
-  if (!validation.isValid) {
-    console.error('Agent configuration invalid:', validation.errors);
-    return;
-  }
-  
-  // Mock task context
-  const mockTaskContext = {
-    taskId: 'task_demo_001',
-    userId: 'user_123',
-    businessId: 'biz_456',
-    history: [],
-    currentState: {
-      progress: 25,
-      data: {
-        email: 'contact@techcorp.com'
-      }
-    }
-  };
-  
-  try {
-    // Example 1: Business discovery from email
-    console.log('\\n📧 Discovering business from email...');
-    const discoveryResult = await agent.discoverBusiness(
-      'contact@techcorp.com',
-      mockTaskContext
-    );
-    
-    console.log('Discovery Result:', {
-      status: discoveryResult.status,
-      confidence: discoveryResult.confidence,
-      operation: discoveryResult.contextUpdate.operation
-    });
-    
-    // Example 2: Create progressive disclosure form
-    console.log('\\n📝 Creating progressive disclosure form...');
-    const formResult = await agent.createProgressiveDisclosureForm(
-      mockTaskContext,
-      ['businessName', 'entityType', 'formationState']
-    );
-    
-    console.log('Form Creation Result:', {
-      status: formResult.status,
-      hasUIRequests: formResult.uiRequests && formResult.uiRequests.length > 0,
-      confidence: formResult.confidence
-    });
-    
-  } catch (error) {
-    console.error('Error in demonstration:', error instanceof Error ? error.message : String(error));
-  }
-}
+// Demonstration code removed - demos should be in separate test files
 
 // Export for testing
 export { DataCollectionAgent as default };
