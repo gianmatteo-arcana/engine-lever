@@ -1,5 +1,27 @@
 # SmallBizAlly Backend - Claude Code Workflow Guide
 
+## 🚨🚨🚨 ABSOLUTE REQUIREMENT: PRE-COMMIT HOOKS ARE SACRED 🚨🚨🚨
+
+### **NEVER, UNDER ANY CIRCUMSTANCES:**
+- ❌ **NEVER use `--no-verify` flag**
+- ❌ **NEVER bypass pre-commit hooks**
+- ❌ **NEVER use `git commit --no-verify`**
+- ❌ **NEVER skip tests to commit**
+
+### **ALWAYS, WITHOUT EXCEPTION:**
+- ✅ **FIX ALL TEST FAILURES before committing**
+- ✅ **FIX ALL LINTING ERRORS before committing**
+- ✅ **FIX ALL TYPE ERRORS before committing**
+- ✅ **ENSURE BUILD SUCCEEDS before committing**
+
+### **IF TESTS FAIL:**
+1. **STOP** - Do not proceed with commit
+2. **FIX** - Debug and resolve the failing test
+3. **VERIFY** - Run tests again until 100% pass
+4. **COMMIT** - Only after all checks pass
+
+**VIOLATION OF THIS RULE = IMMEDIATE REJECTION**
+
 ## 🛑 STOP! MANDATORY FIRST STEPS
 
 ### **BEFORE ANY WORK, YOU MUST:**
