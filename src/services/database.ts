@@ -292,6 +292,7 @@ export class DatabaseService {
     this.userClients.clear();
   }
 
+
   // Helper method to convert TaskPriority enum to string
   private convertPriority(priority: TaskPriority): 'critical' | 'high' | 'medium' | 'low' {
     switch (priority) {
