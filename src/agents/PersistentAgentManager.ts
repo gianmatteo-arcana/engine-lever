@@ -6,9 +6,9 @@ import { OrchestratorAgent } from './OrchestratorAgent';
 import { LegalComplianceAgent } from './legal-compliance';
 import { DataCollectionAgent } from './data-collection';
 import { PaymentAgent } from './payment';
-import { AgencyInteractionAgent } from './agency-interaction';
-import { MonitoringAgent } from './monitoring';
-import { CommunicationAgent } from './communication';
+import { AgencyInteractionAgent } from './AgencyInteractionAgent';
+import { MonitoringAgent } from './MonitoringAgent';
+import { CommunicationAgent } from './CommunicationAgent';
 import { DatabaseService, TaskRecord } from '../services/database';
 
 export interface CreateTaskOptions {
@@ -61,23 +61,29 @@ export class PersistentAgentManager extends EventEmitter {
       this.agents.set(AgentRole.LEGAL_COMPLIANCE, new LegalComplianceAgent());
       this.agents.set(AgentRole.DATA_COLLECTION, new DataCollectionAgent());
       this.agents.set(AgentRole.PAYMENT, new PaymentAgent());
-      this.agents.set(AgentRole.AGENCY_INTERACTION, new AgencyInteractionAgent());
-      this.agents.set(AgentRole.MONITORING, new MonitoringAgent());
-      this.agents.set(AgentRole.COMMUNICATION, new CommunicationAgent());
+      // Note: These new agents require businessId - using default for now
+      // TODO: Refactor PersistentAgentManager to work with consolidated BaseAgent pattern
+      this.agents.set(AgentRole.AGENCY_INTERACTION, new AgencyInteractionAgent('default_business', 'default_user') as any);
+      this.agents.set(AgentRole.MONITORING, new MonitoringAgent('default_business', 'default_user') as any);
+      this.agents.set(AgentRole.COMMUNICATION, new CommunicationAgent('default_business', 'default_user') as any);
 
-      // Set up inter-agent communication
-      this.agents.forEach(agent => {
-        agent.on('sendMessage', async (message: AgentMessage) => {
-          await this.routeMessage(message);
-        });
+      // Set up inter-agent communication for EventEmitter-based agents only
+      this.agents.forEach((agent, _role) => {
+        // Only set up event listeners for agents that support EventEmitter
+        // The new consolidated BaseAgent agents don't use EventEmitter
+        if (typeof (agent as any).on === 'function') {
+          agent.on('sendMessage', async (message: AgentMessage) => {
+            await this.routeMessage(message);
+          });
 
-        agent.on('taskCompleted', async (result: any) => {
-          await this.handleTaskCompleted(result);
-        });
+          agent.on('taskCompleted', async (result: any) => {
+            await this.handleTaskCompleted(result);
+          });
 
-        agent.on('agentError', async (error: any) => {
-          await this.handleAgentError(error);
-        });
+          agent.on('agentError', async (error: any) => {
+            await this.handleAgentError(error);
+          });
+        }
       });
 
       // Start message processing loop
@@ -112,8 +118,15 @@ export class PersistentAgentManager extends EventEmitter {
         return;
       }
 
-      // Process message
-      await targetAgent.processMessage(message);
+      // Process message if agent supports it
+      if (typeof (targetAgent as any).processMessage === 'function') {
+        await targetAgent.processMessage(message);
+      } else {
+        logger.warn('Agent does not support processMessage', {
+          role: message.to,
+          agentType: targetAgent.constructor.name
+        });
+      }
 
       // Mark message as processed - this method doesn't exist in new API
       // We'll need to implement this or track differently
@@ -184,7 +197,7 @@ export class PersistentAgentManager extends EventEmitter {
 
     // Notify monitoring agent
     const monitoringAgent = this.agents.get(AgentRole.MONITORING);
-    if (monitoringAgent) {
+    if (monitoringAgent && typeof (monitoringAgent as any).processMessage === 'function') {
       const errorMessage: AgentMessage = {
         id: `error-${Date.now()}`,
         from: AgentRole.ORCHESTRATOR,
@@ -404,19 +417,37 @@ export class PersistentAgentManager extends EventEmitter {
       return { status: 'not_found' };
     }
 
+    // Check if agent has getStatus and getMetrics methods
+    const status = typeof (agent as any).getStatus === 'function' 
+      ? agent.getStatus() 
+      : 'active';
+    const metrics = typeof (agent as any).getMetrics === 'function'
+      ? agent.getMetrics()
+      : {};
+
     return {
       role,
-      status: agent.getStatus(),
-      metrics: agent.getMetrics()
+      status,
+      metrics
     };
   }
 
   public getAllAgentsStatus(): any[] {
-    return Array.from(this.agents.entries()).map(([role, agent]) => ({
-      role,
-      status: agent.getStatus(),
-      metrics: agent.getMetrics()
-    }));
+    return Array.from(this.agents.entries()).map(([role, agent]) => {
+      // Check if agent has getStatus and getMetrics methods
+      const status = typeof (agent as any).getStatus === 'function' 
+        ? agent.getStatus() 
+        : 'active';
+      const metrics = typeof (agent as any).getMetrics === 'function'
+        ? agent.getMetrics()
+        : {};
+        
+      return {
+        role,
+        status,
+        metrics
+      };
+    });
   }
 
   public isHealthy(): boolean {
@@ -431,7 +462,14 @@ export class PersistentAgentManager extends EventEmitter {
 
     return criticalAgents.every(role => {
       const agent = this.agents.get(role);
-      return agent && agent.getStatus() !== 'error';
+      if (!agent) return false;
+      
+      // Check if agent has getStatus method
+      const status = typeof (agent as any).getStatus === 'function' 
+        ? agent.getStatus() 
+        : 'active';
+      
+      return status !== 'error';
     });
   }
 
@@ -445,11 +483,15 @@ export class PersistentAgentManager extends EventEmitter {
     }
 
     // Shutdown all agents
-    const shutdownPromises = Array.from(this.agents.values()).map(agent =>
-      agent.shutdown().catch(error => {
-        logger.error('Error shutting down agent', error);
-      })
-    );
+    const shutdownPromises = Array.from(this.agents.values()).map(agent => {
+      // Only call shutdown if the agent has a shutdown method
+      if (typeof (agent as any).shutdown === 'function') {
+        return agent.shutdown().catch(error => {
+          logger.error('Error shutting down agent', error);
+        });
+      }
+      return Promise.resolve();
+    });
 
     await Promise.all(shutdownPromises);
 

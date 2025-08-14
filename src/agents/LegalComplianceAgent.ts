@@ -318,16 +318,19 @@ export class LegalComplianceAgent extends BaseAgent {
     // This is a fallback implementation
     
     switch (filingType) {
-      case 'soi':
+      case 'soi': {
         const soiRequiredTypes = ['Corporation', 'LLC', 'Limited Partnership'];
         return entity.jurisdiction === 'CA' && soiRequiredTypes.includes(entity.entityType);
+      }
       
-      case 'franchise_tax':
+      case 'franchise_tax': {
         return entity.jurisdiction === 'CA' && ['Corporation', 'LLC'].includes(entity.entityType);
+      }
       
-      default:
+      default: {
         // Conservative approach: assume filing is required unless proven otherwise
         return true;
+      }
     }
   }
 
@@ -338,21 +341,24 @@ export class LegalComplianceAgent extends BaseAgent {
     const dueDate = new Date(formationDate);
     
     switch (filingType) {
-      case 'soi':
+      case 'soi': {
         if (entity.entityType === 'Corporation' || entity.entityType === 'LLC') {
           // Initial due 90 days after formation, then biennial
           dueDate.setDate(dueDate.getDate() + 90);
         }
         break;
+      }
       
-      case 'franchise_tax':
+      case 'franchise_tax': {
         // Franchise tax due on 15th day of 4th month after year end
         const nextYear = new Date(formationDate.getFullYear() + 1, 3, 15); // April 15
         return nextYear;
+      }
       
-      default:
+      default: {
         // Default: assume 90 days for new filings
         dueDate.setDate(dueDate.getDate() + 90);
+      }
     }
     
     return dueDate;
@@ -387,7 +393,7 @@ export class LegalComplianceAgent extends BaseAgent {
 
   private getRequiredDocuments(entity: any, filingType: string): string[] {
     switch (filingType) {
-      case 'soi':
+      case 'soi': {
         const docs = ['Business entity information', 'Current business address'];
         if (entity.entityType === 'Corporation') {
           docs.push('Officer and director information', 'Stock information');
@@ -395,10 +401,13 @@ export class LegalComplianceAgent extends BaseAgent {
           docs.push('Member and manager information');
         }
         return docs;
-      case 'franchise_tax':
+      }
+      case 'franchise_tax': {
         return ['Financial statements', 'Tax calculation worksheets'];
-      default:
+      }
+      default: {
         return ['Business entity information'];
+      }
     }
   }
 
