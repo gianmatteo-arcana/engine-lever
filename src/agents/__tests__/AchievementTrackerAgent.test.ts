@@ -5,17 +5,17 @@
  * MANDATORY: No mock data - tests real celebration logic
  */
 
-import { AchievementTracker } from '../AchievementTracker';
+import { AchievementTrackerAgent } from '../AchievementTrackerAgent';
 import { TaskContext, AgentRequest } from '../../types/engine-types';
 
 describe('AchievementTracker', () => {
-  let agent: AchievementTracker;
+  let agent: AchievementTrackerAgent;
   let mockContext: TaskContext;
   const testBusinessId = 'test_business_123';
   const testUserId = 'test_user_456';
 
   beforeEach(() => {
-    agent = new AchievementTracker(testBusinessId, testUserId);
+    agent = new AchievementTrackerAgent(testBusinessId, testUserId);
     
     mockContext = {
       contextId: 'test_context_celebration',
@@ -717,12 +717,12 @@ describe('AchievementTracker', () => {
  * Performance Tests
  */
 describe('AchievementTracker Performance', () => {
-  let agent: AchievementTracker;
+  let agent: AchievementTrackerAgent;
   const testBusinessId = 'test_business_perf';
   const testUserId = 'test_user_perf';
 
   beforeEach(() => {
-    agent = new AchievementTracker(testBusinessId, testUserId);
+    agent = new AchievementTrackerAgent(testBusinessId, testUserId);
   });
 
   test('should complete celebration within time limits', async () => {

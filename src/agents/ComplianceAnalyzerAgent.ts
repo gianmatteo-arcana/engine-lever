@@ -64,7 +64,7 @@ interface RiskAssessment {
 /**
  * Compliance Analyzer - Determines regulatory requirements
  */
-export class ComplianceAnalyzer extends BaseAgent {
+export class ComplianceAnalyzerAgent extends BaseAgent {
   constructor(businessId: string, userId?: string) {
     super('entity_compliance_agent.yaml', businessId, userId);
   }

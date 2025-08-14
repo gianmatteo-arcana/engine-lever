@@ -6,7 +6,7 @@
  * Uses test database and mock external APIs only
  */
 
-import { ComplianceAnalyzer } from '../ComplianceAnalyzer';
+import { ComplianceAnalyzerAgent } from '../ComplianceAnalyzerAgent';
 import { TaskContext, AgentRequest } from '../../types/engine-types';
 import { DatabaseService } from '../../services/database';
 
@@ -20,11 +20,11 @@ jest.mock('../../services/database', () => ({
 }));
 
 describe('ComplianceAnalyzer', () => {
-  let agent: ComplianceAnalyzer;
+  let agent: ComplianceAnalyzerAgent;
   let mockContext: TaskContext;
 
   beforeEach(() => {
-    agent = new ComplianceAnalyzer('test_business_compliance', 'test_user_compliance');
+    agent = new ComplianceAnalyzerAgent('test_business_compliance', 'test_user_compliance');
     
     mockContext = {
       contextId: 'test_context_789',
@@ -623,10 +623,10 @@ describe('ComplianceAnalyzer', () => {
  * Performance Tests
  */
 describe('ComplianceAnalyzer Performance', () => {
-  let agent: ComplianceAnalyzer;
+  let agent: ComplianceAnalyzerAgent;
 
   beforeEach(() => {
-    agent = new ComplianceAnalyzer('test_business_compliance', 'test_user_compliance');
+    agent = new ComplianceAnalyzerAgent('test_business_compliance', 'test_user_compliance');
   });
 
   test('should complete analysis within time limits', async () => {

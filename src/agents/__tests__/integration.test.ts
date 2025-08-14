@@ -4,11 +4,11 @@
  * Tests the interaction between multiple agents in realistic workflows
  */
 
-import { BusinessDiscovery } from '../BusinessDiscovery';
-import { ProfileCollector } from '../ProfileCollector';
-import { ComplianceAnalyzer } from '../ComplianceAnalyzer';
-import { AchievementTracker } from '../AchievementTracker';
-import { FormOptimizer } from '../FormOptimizer';
+import { BusinessDiscoveryAgent } from '../BusinessDiscoveryAgent';
+import { ProfileCollectorAgent } from '../ProfileCollectorAgent';
+import { ComplianceAnalyzerAgent } from '../ComplianceAnalyzerAgent';
+import { AchievementTrackerAgent } from '../AchievementTrackerAgent';
+import { FormOptimizerAgent } from '../FormOptimizerAgent';
 import { DatabaseService } from '../../services/database';
 import { StateComputer } from '../../services/state-computer';
 import { UIStrategyEngine } from '../../services/ui-strategy-engine';
@@ -26,11 +26,11 @@ jest.mock('../../services/llm-provider', () => ({
 }));
 
 describe('Agent Integration Tests', () => {
-  let businessDiscovery: BusinessDiscovery;
-  let profileCollector: ProfileCollector;
-  let complianceAnalyzer: ComplianceAnalyzer;
-  let achievementTracker: AchievementTracker;
-  let uxOptimizer: FormOptimizer;
+  let businessDiscovery: BusinessDiscoveryAgent;
+  let profileCollector: ProfileCollectorAgent;
+  let complianceAnalyzer: ComplianceAnalyzerAgent;
+  let achievementTracker: AchievementTrackerAgent;
+  let uxOptimizer: FormOptimizerAgent;
   let mockDbService: any;
 
   beforeEach(() => {
@@ -38,11 +38,11 @@ describe('Agent Integration Tests', () => {
     const testBusinessId = 'test_business_integration';
     const testUserId = 'test_user_integration';
     
-    businessDiscovery = new BusinessDiscovery(testBusinessId, testUserId);
-    profileCollector = new ProfileCollector(testBusinessId, testUserId);
-    complianceAnalyzer = new ComplianceAnalyzer(testBusinessId, testUserId);
-    achievementTracker = new AchievementTracker(testBusinessId, testUserId);
-    uxOptimizer = new FormOptimizer(testBusinessId, testUserId);
+    businessDiscovery = new BusinessDiscoveryAgent(testBusinessId, testUserId);
+    profileCollector = new ProfileCollectorAgent(testBusinessId, testUserId);
+    complianceAnalyzer = new ComplianceAnalyzerAgent(testBusinessId, testUserId);
+    achievementTracker = new AchievementTrackerAgent(testBusinessId, testUserId);
+    uxOptimizer = new FormOptimizerAgent(testBusinessId, testUserId);
 
     // Setup mock database with proper client mock
     const mockUserClient = {
@@ -684,7 +684,7 @@ describe('Agent Integration Tests', () => {
 
     it('should handle timeout scenarios between agents', async () => {
       // Simulate slow agent response
-      const slowAgent = new BusinessDiscovery('test_business_integration', 'test_user_integration');
+      const slowAgent = new BusinessDiscoveryAgent('test_business_integration', 'test_user_integration');
       const originalProcess = slowAgent.processRequest;
       
       slowAgent.processRequest = jest.fn().mockImplementation(async (request, context) => {

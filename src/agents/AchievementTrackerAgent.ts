@@ -62,7 +62,7 @@ interface MotivationalContext {
 /**
  * Achievement Tracker - Creates delightful moments of accomplishment
  */
-export class AchievementTracker extends BaseAgent {
+export class AchievementTrackerAgent extends BaseAgent {
   constructor(businessId: string, userId?: string) {
     super('celebration_agent.yaml', businessId, userId);
   }

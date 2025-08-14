@@ -6,17 +6,17 @@
  * Uses test database and mock external APIs only
  */
 
-import { BusinessDiscovery } from '../BusinessDiscovery';
+import { BusinessDiscoveryAgent } from '../BusinessDiscoveryAgent';
 import { TaskContext, AgentRequest } from '../../types/engine-types';
 
 describe('BusinessDiscovery', () => {
-  let agent: BusinessDiscovery;
+  let agent: BusinessDiscoveryAgent;
   let mockContext: TaskContext;
   const testBusinessId = 'test_business_123';
   const testUserId = 'test_user_456';
 
   beforeEach(() => {
-    agent = new BusinessDiscovery(testBusinessId, testUserId);
+    agent = new BusinessDiscoveryAgent(testBusinessId, testUserId);
     
     mockContext = {
       contextId: 'test_context_123',
@@ -374,12 +374,12 @@ describe('BusinessDiscovery', () => {
  * These tests use live data and real API connections
  */
 describe('BusinessDiscovery Integration Tests', () => {
-  let agent: BusinessDiscovery;
+  let agent: BusinessDiscoveryAgent;
   const testBusinessId = 'test_business_ca_sos';
   const testUserId = 'test_user_ca_sos';
 
   beforeEach(() => {
-    agent = new BusinessDiscovery(testBusinessId, testUserId);
+    agent = new BusinessDiscoveryAgent(testBusinessId, testUserId);
   });
 
   // NOTE: These would connect to real state APIs in production
@@ -398,12 +398,12 @@ describe('BusinessDiscovery Integration Tests', () => {
  * Performance Tests
  */
 describe('BusinessDiscovery Performance', () => {
-  let agent: BusinessDiscovery;
+  let agent: BusinessDiscoveryAgent;
   const testBusinessId = 'test_business_perf';
   const testUserId = 'test_user_perf';
 
   beforeEach(() => {
-    agent = new BusinessDiscovery(testBusinessId, testUserId);
+    agent = new BusinessDiscoveryAgent(testBusinessId, testUserId);
   });
 
   test('should complete search within time limits', async () => {

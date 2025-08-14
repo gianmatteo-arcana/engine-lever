@@ -82,7 +82,7 @@ interface OptimizationMetrics {
 /**
  * Form Optimizer - Optimizes user experience through intelligent form design
  */
-export class FormOptimizer extends BaseAgent {
+export class FormOptimizerAgent extends BaseAgent {
   constructor(businessId: string, userId?: string) {
     super('ux_optimization_agent.yaml', businessId, userId);
   }

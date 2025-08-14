@@ -45,7 +45,7 @@ interface SearchClues {
 /**
  * Business Discovery - Finds business information in public records
  */
-export class BusinessDiscovery extends BaseAgent {
+export class BusinessDiscoveryAgent extends BaseAgent {
   constructor(businessId: string, userId?: string) {
     super('business_discovery_agent.yaml', businessId, userId);
   }
