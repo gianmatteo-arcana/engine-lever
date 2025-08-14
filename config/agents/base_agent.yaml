@@ -73,8 +73,22 @@ agent_template:
       3. Increment sequence_number correctly
       4. Timestamp with ISO format
       5. Identify yourself as actor
+      
+      # TODO: Add clear instructions for storing partial results in TaskContext
+      # TODO: Define data persistence patterns for different operation types
+      
+      How to store results:
+      - Store intermediate results in contextUpdate.data
+      - Use operation field to categorize the action type
+      - Include confidence scoring for all decisions
+      - Preserve data provenance with reasoning
+      - Store only essential data, avoid duplication
     
-    example_entry: |
+    # UNIVERSAL CONTEXT ENTRY CONTRACT
+    # This schema MUST be used consistently across ALL agents
+    # TODO: Elevate this schema to system-wide type definition (Issue #TBD)
+    # TODO: Ensure BaseAgent implementation enforces this exact schema
+    universal_context_entry_schema: |
       {
         "entryId": "entry_<timestamp>_<random>",
         "sequenceNumber": <previous + 1>,
@@ -94,6 +108,9 @@ agent_template:
           "requestId": "<request_id>"
         }
       }
+      
+    # THIS IS THE CONTRACT! - All agents MUST use this exact format
+    # Backend and frontend layers MUST understand this schema
 
   # Standard error handling all agents must implement
   error_handling:
@@ -131,6 +148,8 @@ agent_template:
       }
 
   # Universal tool interaction patterns
+  # TODO: Implement toolchain discovery and management system (Issue #TBD)
+  # TODO: Define universal tool schema validation framework
   tool_patterns:
     discovery: |
       Before using any tool:
@@ -138,6 +157,9 @@ agent_template:
       2. Verify you have required parameters
       3. Confirm tool authorization if needed
       4. Have fallback ready if tool fails
+      
+      # TODO: Add specific instructions for toolchain interaction
+      # The agent needs universal way to discover available tools
     
     invocation: |
       When calling a tool:
@@ -184,6 +206,10 @@ agent_template:
     
     with_user:
       principle: "Progressive disclosure - batch and minimize"
+      
+      # TODO: Provide comprehensive UIRequest creation guide (Issue #TBD)
+      # TODO: Define all available UI template types and their schemas
+      # TODO: Add validation for UIRequest semanticData structure
       ui_request_format: |
         {
           "templateType": "<UI_component_type>",
@@ -198,6 +224,16 @@ agent_template:
             "related_requests": []
           }
         }
+      
+      ui_creation_guidelines: |
+        When creating UIRequests:
+        1. ALWAYS batch related requests together
+        2. Provide intelligent defaults from TaskContext
+        3. Include clear help text for complex fields
+        4. Use progressive disclosure - ask minimal questions
+        5. Validate semanticData matches templateType requirements
+        
+        # TODO: Add prescriptive instructions for each UI template type
 
   # Monitoring and observability
   observability:
@@ -261,6 +297,8 @@ agent_template:
       - User corrections → Update assumptions
 
   # Universal response schema with confidence scoring
+  # TODO: Ensure BaseAgent implementation strictly enforces this schema (Issue #TBD)
+  # TODO: Create TypeScript type definitions from this schema
   base_response_schema:
     type: "object"
     required: ["status", "contextUpdate", "confidence"]
@@ -272,6 +310,7 @@ agent_template:
       contextUpdate:
         type: "object"
         required: ["operation", "data", "reasoning", "confidence"]
+        description: "MUST follow universal_context_entry_schema contract"
         properties:
           operation:
             type: "string"
@@ -304,6 +343,18 @@ agent_template:
       uiRequests:
         type: "array"
         description: "Any user input requirements (batched for efficiency)"
+        
+  # System-wide contract enforcement
+  schema_enforcement:
+    note: |
+      The universal_context_entry_schema above is THE CONTRACT for all TaskContext entries.
+      This schema MUST be:
+      1. Implemented in BaseAgent class as TypeScript type
+      2. Validated on every contextUpdate
+      3. Understood by frontend and backend layers
+      4. Used consistently across ALL agent implementations
+      
+      # TODO: Create comprehensive schema validation system
 
 # Examples of structured interactions for few-shot learning
 examples:
@@ -384,46 +435,25 @@ examples:
       confidence: 1.0
       fallback_strategy: "Request user to provide valid EIN or state registration number"
 
-# Tool selection criteria and decision trees
-tool_selection:
-  decision_tree:
-    data_collection:
-      primary_tools: ["ca_sos_api", "federal_ein_lookup"]
-      selection_criteria: |
-        IF entity_type == "California entity" THEN use ca_sos_api
-        ELSE IF have_ein THEN use federal_ein_lookup  
-        ELSE request_user_input
-      
-      fallback_chain:
-        - "Try automated public records search"
-        - "Attempt fuzzy name matching"
-        - "Request direct user input with smart defaults"
-      
-      confidence_thresholds:
-        high_confidence: 0.9  # Proceed automatically
-        medium_confidence: 0.7  # Proceed with user confirmation
-        low_confidence: 0.5  # Request additional validation
+# Universal tool selection framework
+# TODO: Move specific tool examples to individual agent configurations
+# TODO: Create universal tool selection algorithm
+tool_selection_framework:
+  universal_patterns:
+    selection_criteria_template: |
+      IF <condition> THEN use <primary_tool>
+      ELSE IF <fallback_condition> THEN use <fallback_tool>
+      ELSE <default_action>
     
-    payment_processing:
-      primary_tools: ["stripe_api", "bank_verification"]
-      selection_criteria: |
-        IF amount > 1000 THEN require bank_verification
-        ELSE IF payment_method == "ach" THEN use bank_verification
-        ELSE use stripe_api
-      
-      fallback_chain:
-        - "Retry with exponential backoff (transient errors)"
-        - "Switch to alternative payment method"
-        - "Request manual payment authorization"
+    fallback_chain_template:
+      - "Try primary automated approach"
+      - "Attempt alternative methods" 
+      - "Request manual intervention or user input"
     
-    compliance_research:
-      primary_tools: ["legal_database", "regulation_api"]
-      selection_criteria: |
-        IF jurisdiction == "california" THEN use ca_specific_tools
-        ELSE IF federal_requirement THEN use federal_apis
-        ELSE use general_legal_database
+    confidence_thresholds:
+      high_confidence: 0.9  # Proceed automatically
+      medium_confidence: 0.7  # Proceed with confirmation
+      low_confidence: 0.5   # Request additional validation
       
-      fallback_chain:
-        - "Search broader legal databases"
-        - "Consult multiple jurisdiction sources"
-        - "Flag for human expert review"
+  # NOTE: Specific tool selections defined in individual agent configurations
+  # This framework provides the universal pattern all agents should follow
