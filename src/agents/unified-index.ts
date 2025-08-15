@@ -4,6 +4,7 @@
  */
 
 import { BaseAgent } from './base/UnifiedBaseAgent';
+import { AgentTaskContext as TaskContext } from '../types/unified-agent-types';
 import { DataEnrichmentAgent } from './DataEnrichmentAgent';
 import { BackendOrchestratorAgent } from './BackendOrchestratorAgent';
 import { TaskManagementAgent } from './TaskManagementAgent';
@@ -87,7 +88,11 @@ class AgentRegistry {
               super(configPath);
             }
             
-            protected async executeTaskLogic() {
+            protected async executeTaskLogic(
+              _taskId: string,
+              _context: TaskContext,
+              _parameters: Record<string, unknown>
+            ): Promise<TaskContext> {
               throw new Error(`${agentType} requires custom implementation`);
             }
           })();

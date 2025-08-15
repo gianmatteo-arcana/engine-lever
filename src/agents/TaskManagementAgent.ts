@@ -225,7 +225,7 @@ export class TaskManagementAgent extends BaseAgent {
     }
 
     // Verify task ownership
-    await this.verifyTaskOwnership(targetTaskId, context.userId);
+    await this.verifyTaskOwnership(targetTaskId, context.userId || '');
 
     const { data: updatedTask, error } = await supabase
       .from('tasks')
@@ -285,7 +285,7 @@ export class TaskManagementAgent extends BaseAgent {
     }
 
     // Verify task ownership
-    await this.verifyTaskOwnership(targetTaskId, context.userId);
+    await this.verifyTaskOwnership(targetTaskId, context.userId || '');
 
     // Delete associated task contexts first
     await supabase
@@ -476,7 +476,7 @@ export class TaskManagementAgent extends BaseAgent {
     }
 
     // Verify task ownership
-    await this.verifyTaskOwnership(targetTaskId, context.userId);
+    await this.verifyTaskOwnership(targetTaskId, context.userId || '');
 
     // Serialize context data
     const serializedData = JSON.stringify(contextData);
@@ -539,7 +539,7 @@ export class TaskManagementAgent extends BaseAgent {
     const targetTaskId = parameters.targetTaskId as string || taskId;
     
     // Verify task ownership
-    await this.verifyTaskOwnership(targetTaskId, context.userId);
+    await this.verifyTaskOwnership(targetTaskId, context.userId || '');
 
     const { data: savedContext, error } = await supabase
       .from('task_contexts')
@@ -597,7 +597,7 @@ export class TaskManagementAgent extends BaseAgent {
     }
 
     // Verify task ownership
-    await this.verifyTaskOwnership(targetTaskId, context.userId);
+    await this.verifyTaskOwnership(targetTaskId, context.userId || '');
 
     const updateData: any = {
       status: newStatus,
@@ -688,7 +688,7 @@ export class TaskManagementAgent extends BaseAgent {
       taskParams: params
     });
 
-    const createdTask = result.agentContexts[this.agentId]?.state?.createdTask;
+    const createdTask = result.agentContexts![this.agentId]?.state?.createdTask;
     if (!createdTask) {
       throw new Error('Task creation failed - no task returned');
     }
@@ -712,7 +712,7 @@ export class TaskManagementAgent extends BaseAgent {
         targetTaskId: taskId
       });
 
-      return result.agentContexts[this.agentId]?.state?.retrievedTask || null;
+      return result.agentContexts![this.agentId]?.state?.retrievedTask || null;
     } catch (error) {
       return null;
     }
@@ -733,8 +733,8 @@ export class TaskManagementAgent extends BaseAgent {
       options
     });
 
-    const taskList = result.agentContexts[this.agentId]?.state?.taskList || [];
-    const taskCount = result.agentContexts[this.agentId]?.state?.taskCount || 0;
+    const taskList = result.agentContexts![this.agentId]?.state?.taskList || [];
+    const taskCount = result.agentContexts![this.agentId]?.state?.taskCount || 0;
 
     return { tasks: taskList, count: taskCount };
   }

@@ -6,6 +6,13 @@
 
 import { TaskContext as EngineTaskContext } from './engine-types';
 
+// Add missing properties from engine types
+interface ExtendedEngineTaskContext extends EngineTaskContext {
+  updatedAt?: string;
+  version?: number;
+  isComplete?: boolean;
+}
+
 /**
  * Agent-specific context stored in TaskContext metadata
  */
@@ -36,7 +43,7 @@ export interface UIRequest {
  * Extended TaskContext for agent operations
  * Wraps the engine TaskContext with agent-specific extensions
  */
-export interface AgentTaskContext extends EngineTaskContext {
+export interface AgentTaskContext extends ExtendedEngineTaskContext {
   // Agent-specific fields stored in metadata
   agentContexts?: Record<string, AgentContext>;
   activeUIRequests?: Record<string, UIRequest>;
@@ -129,7 +136,7 @@ export function toEngineTaskContext(agentContext: AgentTaskContext): EngineTaskC
 export type { TaskContext } from './engine-types';
 
 // Re-export engine types for backward compatibility
-export { EngineTaskContext } from './engine-types';
+export type { TaskContext as EngineTaskContext } from './engine-types';
 
 // Helper function to ensure required context fields
 export function ensureAgentContext(context: AgentTaskContext): Required<AgentTaskContext> {
@@ -202,10 +209,22 @@ export function createMinimalContext(overrides: Partial<AgentTaskContext> = {}):
     history: overrides.history || [],
     templateSnapshot: overrides.templateSnapshot || {
       id: '',
-      name: '',
       version: '',
-      steps: []
-    },
+      metadata: {
+        name: '',
+        description: '',
+        category: ''
+      },
+      goals: {
+        primary: [],
+        secondary: []
+      },
+      phases: [],
+      monitoring: {
+        checkpoints: [],
+        successCriteria: []
+      }
+    } as any,
     metadata: overrides.metadata || {}
   };
 }

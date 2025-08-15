@@ -487,13 +487,26 @@ export class DataEnrichmentAgent extends BaseAgent {
     };
 
     // Add UI request to context
-    context.activeUIRequests[this.agentId] = uiRequest;
+    if (!context.activeUIRequests) {
+      context.activeUIRequests = {};
+    }
+    context.activeUIRequests[this.agentId] = {
+      id: uiRequest.requestId,
+      agentId: this.agentId,
+      requestType: 'confirmation',
+      semanticData: uiRequest,
+      status: 'pending',
+      timestamp: uiRequest.timestamp
+    };
+    
+    if (!context.pendingInputRequests) {
+      context.pendingInputRequests = [];
+    }
     context.pendingInputRequests.push({
       id: uiRequest.requestId,
-      requestingAgent: this.agentId,
-      priority: 'required',
-      promptType: 'text',
-      prompt: {
+      agentId: this.agentId,
+      requestType: 'text',
+      semanticData: {
         title: 'Confirm Your Business Information',
         description: 'We found some information about your business. Please confirm or correct it.',
         fieldName: 'businessName',
@@ -503,14 +516,16 @@ export class DataEnrichmentAgent extends BaseAgent {
           maxLength: 200
         },
         defaultValue: domainAnalysis?.suggestedBusinessName || '',
-        helpText: 'Enter the exact legal name of your business'
+        helpText: 'Enter the exact legal name of your business',
+        context: {
+          phase: 'identity_confirmation',
+          reason: 'Confirm discovered business information',
+          impact: 'blocking'
+        },
+        targetPath: 'sharedContext.business.name'
       },
-      context: {
-        phase: 'identity_confirmation',
-        reason: 'Confirm discovered business information',
-        impact: 'blocking'
-      },
-      targetPath: 'sharedContext.business.name'
+      status: 'pending',
+      timestamp: uiRequest.timestamp
     });
 
     logger.info('DataEnrichmentAgent: UI confirmation request generated', {

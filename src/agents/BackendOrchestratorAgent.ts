@@ -4,25 +4,25 @@
  */
 
 import { BaseAgent } from './base/UnifiedBaseAgent';
-import { AgentTaskContext as TaskContext, ensureAgentContext } from '../types/unified-agent-types';
+import { AgentTaskContext as TaskContext, ensureAgentContext, createMinimalContext } from '../types/unified-agent-types';
 import { logger } from '../utils/logger';
 
 // Enhanced interfaces for A2A protocol
-interface TaskCreationRequest {
+export interface TaskCreationRequest {
   templateId: string;
   initialData: Record<string, unknown>;
   userToken?: string;
   priority?: 'critical' | 'high' | 'normal' | 'low';
 }
 
-interface TaskCreationResult {
+export interface TaskCreationResult {
   taskId: string;
   contextId: string;
   status: 'created' | 'failed';
   message?: string;
 }
 
-interface UIResponseSubmission {
+export interface UIResponseSubmission {
   contextId: string;
   requestId: string;
   response: Record<string, unknown>;
@@ -30,7 +30,7 @@ interface UIResponseSubmission {
   timestamp?: string;
 }
 
-interface BackendTaskContext {
+export interface BackendTaskContext {
   contextId: string;
   taskId: string;
   status: string;
