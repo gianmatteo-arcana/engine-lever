@@ -18,14 +18,13 @@
  * - BaseOrchestrator: Core message handling
  */
 
-import { BaseAgent } from './base';
-import { AgentRole } from './base/types';
+// OrchestratorAgent is a special case - doesn't extend BaseAgent
+// It's the master coordinator that manages all other agents
 import { LLMProvider } from '../services/llm-provider-interface';
 import { ConfigurationManager } from '../services/configuration-manager';
 import { DatabaseService } from '../services/database';
 import { StateComputer } from '../services/state-computer';
 import { logger } from '../utils/logger';
-import { ExtendedAgentCapabilities } from '../types/compatibility-layer';
 import {
   TaskContext,
   TaskTemplate,
@@ -73,8 +72,11 @@ interface AgentCapability {
 /**
  * Universal OrchestratorAgent
  * The conductor of the SmallBizAlly symphony
+ * 
+ * NOTE: OrchestratorAgent is a special case - does NOT extend BaseAgent
+ * It's the master coordinator that manages all DefaultAgent instances
  */
-export class OrchestratorAgent extends BaseAgent {
+export class OrchestratorAgent {
   private static instance: OrchestratorAgent;
   
   private config: OrchestratorConfig;
@@ -89,27 +91,6 @@ export class OrchestratorAgent extends BaseAgent {
   private pendingUIRequests: Map<string, UIRequest[]>;
   
   private constructor() {
-    super(
-      {
-        role: 'orchestrator' as AgentRole,
-        name: 'Universal Task Orchestrator',
-        description: 'Orchestrates all task execution through universal patterns',
-        expertise: ['task planning', 'agent coordination', 'progressive disclosure'],
-        responsibilities: ['plan execution', 'agent delegation', 'user interaction minimization'],
-        limitations: ['requires agent availability', 'depends on LLM for planning']
-      },
-      {
-        canInitiateTasks: true,
-        canDelegateTasks: true,
-        requiredTools: [],
-        maxConcurrentTasks: 10,
-        supportedMessageTypes: ['task_request', 'status_update', 'coordination'],
-        canPlan: true,
-        canDelegate: true,
-        canLearn: true
-      } as ExtendedAgentCapabilities
-    );
-    
     this.config = this.loadConfig();
     this.llmProvider = new LLMProvider();
     this.configManager = new ConfigurationManager();

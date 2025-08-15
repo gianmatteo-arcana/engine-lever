@@ -14,6 +14,22 @@ agent:
     
     Key outputs: notifications, approval requests, status updates, support responses.
     
+  # A2A Protocol Configuration (ADDED FOR ISSUE #51)
+  a2a:
+    protocolVersion: "1.0.0"
+    communicationMode: "async"
+    messageFormats:
+      - "json"
+    routing:
+      canReceiveFrom:
+        - "*"  # Can receive updates from any agent
+      canSendTo:
+        - "orchestrator_agent"  # Reports back to orchestrator
+    messageHandling:
+      bufferSize: 100
+      timeoutMs: 15000
+      retryEnabled: true
+    
   agent_card:
     skills:
       - "Customer communication and notification management"

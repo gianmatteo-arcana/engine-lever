@@ -11,13 +11,12 @@
 
 import { logger } from '../utils/logger';
 import { AgentRole, AgentMessage, TaskContext, TaskPriority, convertPriority } from './base/types';
-import { BaseAgent } from './base/BaseAgent';
 import { OrchestratorAgent } from './OrchestratorAgent';
-import { TaskManagementAgent } from './TaskManagementAgent';
+// TaskManagementAgent removed - not one of the 8 core agents
 import { DatabaseService } from '../services/database';
 
 class AgentManagerClass {
-  private agents: Map<AgentRole, BaseAgent> = new Map();
+  private agents: Map<AgentRole, any> = new Map();
   private messageQueue: AgentMessage[] = [];
   private isInitialized = false;
 
@@ -32,8 +31,6 @@ class AgentManagerClass {
     try {
       // Initialize agents using dynamic registry
       // Registry automatically discovers YAML files - no hardcoding
-      const defaultBusinessId = 'default_business';
-      const defaultUserId = 'default_user';
       
       // OrchestratorAgent is a special case with its own class
       this.agents.set(AgentRole.ORCHESTRATOR, OrchestratorAgent.getInstance());
@@ -87,7 +84,7 @@ class AgentManagerClass {
     setImmediate(() => {
       // Check if agent has processMessage method
       if (typeof (targetAgent as any).processMessage === 'function') {
-        targetAgent.processMessage(message).catch(error => {
+        targetAgent.processMessage(message).catch((error: any) => {
           logger.error('Error processing message', {
             message,
             error
@@ -315,7 +312,7 @@ class AgentManagerClass {
     const shutdownPromises = Array.from(this.agents.values()).map(agent => {
       // Only call shutdown if the agent has a shutdown method
       if (typeof (agent as any).shutdown === 'function') {
-        return agent.shutdown().catch(error => {
+        return agent.shutdown().catch((error: any) => {
           logger.error('Error shutting down agent', error);
         });
       }
@@ -327,7 +324,6 @@ class AgentManagerClass {
     this.agents.clear();
     this.messageQueue = [];
     this.isInitialized = false;
-    this.removeAllListeners();
 
     logger.info('Agent Manager stopped');
   }
@@ -351,5 +347,5 @@ export * from './base/types';
  */
 export { BaseAgent } from './base/BaseAgent';
 export { OrchestratorAgent } from './OrchestratorAgent';
-export { TaskManagementAgent } from './TaskManagementAgent';
+// TaskManagementAgent removed - not one of the 8 core agents
 

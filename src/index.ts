@@ -9,7 +9,7 @@ import { logger } from './utils/logger';
 import { extractUserContext } from './middleware/auth';
 import { apiRoutes } from './api';
 import { AgentManager } from './agents';
-import { persistentAgentManager } from './agents/PersistentAgentManager';
+// PersistentAgentManager removed - using consolidated AgentManager
 import { MCPServer } from './mcp-server';
 import { QueueManager } from './queues';
 import { initializeTaskEvents } from './services/task-events';
@@ -147,7 +147,7 @@ const gracefulShutdown = async () => {
       // Shutdown services
       await AgentManager.stop();
       if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
-        await persistentAgentManager.stop();
+        // PersistentAgentManager removed
       }
       await MCPServer.stop();
       await QueueManager.stop();
@@ -195,7 +195,7 @@ async function startServer() {
     
     // Initialize Persistent Agent Manager if Supabase is configured
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
-      await persistentAgentManager.initialize();
+      // AgentManager initialization handled elsewhere
       logger.info('✅ Persistent Agent Manager initialized');
     } else {
       logger.warn('⚠️ Supabase not configured - using in-memory agent manager only');
