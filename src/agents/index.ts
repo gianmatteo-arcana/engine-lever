@@ -1,14 +1,20 @@
+/**
+ * Simplified Agent Registry - 8 Agents from 8 YAML Configurations
+ * 
+ * Following the principle: "YAML defines WHAT agents do, BaseAgent implements HOW"
+ * 
+ * Only 3 actual classes needed:
+ * 1. BaseAgent - Standard agent behavior (used by most agents)
+ * 2. OrchestratorAgent - Special orchestration logic
+ * 3. TaskManagementAgent - Direct database access
+ */
+
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
 import { AgentRole, AgentMessage, TaskContext, TaskPriority, convertPriority } from './base/types';
-import { BaseAgent } from './base';
+import { BaseAgent } from './base/BaseAgent';
 import { OrchestratorAgent } from './OrchestratorAgent';
-import { LegalComplianceAgent } from './legal-compliance';
-import { DataCollectionAgent } from './data-collection';
-import { PaymentAgent } from './payment';
-import { AgencyInteractionAgent } from './AgencyInteractionAgent';
-import { MonitoringAgent } from './MonitoringAgent';
-import { CommunicationAgent } from './CommunicationAgent';
+import { TaskManagementAgent } from './TaskManagementAgent';
 import { DatabaseService } from '../services/database';
 
 class AgentManagerClass extends EventEmitter {
@@ -25,16 +31,22 @@ class AgentManagerClass extends EventEmitter {
     logger.info('Initializing Agent Manager');
 
     try {
-      // Initialize all agents
+      // Initialize agents using simplified architecture
+      // Most agents are now BaseAgent instances configured by YAML
+      const defaultBusinessId = 'default_business';
+      const defaultUserId = 'default_user';
+      
+      // OrchestratorAgent is a special case with its own class
       this.agents.set(AgentRole.ORCHESTRATOR, OrchestratorAgent.getInstance());
-      this.agents.set(AgentRole.LEGAL_COMPLIANCE, new LegalComplianceAgent());
-      this.agents.set(AgentRole.DATA_COLLECTION, new DataCollectionAgent());
-      this.agents.set(AgentRole.PAYMENT, new PaymentAgent());
-      // Note: These new agents require businessId - using default for now
-      // TODO: Refactor AgentManager to work with consolidated BaseAgent pattern
-      this.agents.set(AgentRole.AGENCY_INTERACTION, new AgencyInteractionAgent('default_business', 'default_user') as any);
-      this.agents.set(AgentRole.MONITORING, new MonitoringAgent('default_business', 'default_user') as any);
-      this.agents.set(AgentRole.COMMUNICATION, new CommunicationAgent('default_business', 'default_user') as any);
+      
+      // Other agents are BaseAgent instances with YAML configuration
+      // Using the simplified registry to create them
+      this.agents.set(AgentRole.LEGAL_COMPLIANCE, simplifiedAgentRegistry.createAgent('backend-api', defaultBusinessId, defaultUserId));
+      this.agents.set(AgentRole.DATA_COLLECTION, simplifiedAgentRegistry.createAgent('data-enrichment', defaultBusinessId, defaultUserId));
+      this.agents.set(AgentRole.PAYMENT, simplifiedAgentRegistry.createAgent('backend-api', defaultBusinessId, defaultUserId));
+      this.agents.set(AgentRole.AGENCY_INTERACTION, simplifiedAgentRegistry.createAgent('backend-api', defaultBusinessId, defaultUserId));
+      this.agents.set(AgentRole.MONITORING, simplifiedAgentRegistry.createAgent('events', defaultBusinessId, defaultUserId));
+      this.agents.set(AgentRole.COMMUNICATION, simplifiedAgentRegistry.createAgent('events', defaultBusinessId, defaultUserId));
 
       // Set up inter-agent communication for EventEmitter-based agents only
       this.agents.forEach((agent, _role) => {
@@ -334,3 +346,148 @@ export const AgentManager = new AgentManagerClass();
 
 // Export types
 export * from './base/types';
+
+/**
+ * =============================================================================
+ * NEW SIMPLIFIED AGENT ARCHITECTURE
+ * =============================================================================
+ * 8 Agents from 8 YAML configurations, not 15 separate classes
+ */
+
+/**
+ * Agent types matching our 8 YAML configuration files
+ */
+export type YamlAgentType = 
+  | 'backend-api'
+  | 'backend-orchestrator'
+  | 'data-enrichment'
+  | 'events'
+  | 'profile-builder'
+  | 'task-management'
+  | 'task-orchestrator'
+  | 'task-replay';
+
+/**
+ * Agent configuration mapping
+ */
+const AGENT_CONFIGS: Record<YamlAgentType, string> = {
+  'backend-api': 'backend-api-agent.yaml',
+  'backend-orchestrator': 'backend-orchestrator-agent.yaml',
+  'data-enrichment': 'data-enrichment-agent.yaml',
+  'events': 'events-agent.yaml',
+  'profile-builder': 'profile-builder-agent.yaml',
+  'task-management': 'task-management-agent.yaml',
+  'task-orchestrator': 'task-orchestrator-agent.yaml',
+  'task-replay': 'task-replay-agent.yaml'
+};
+
+/**
+ * Simplified Agent Registry
+ * Creates agents from YAML configurations
+ */
+export class SimplifiedAgentRegistry {
+  private static instance: SimplifiedAgentRegistry;
+  private agents = new Map<string, BaseAgent>();
+
+  private constructor() {}
+
+  static getInstance(): SimplifiedAgentRegistry {
+    if (!SimplifiedAgentRegistry.instance) {
+      SimplifiedAgentRegistry.instance = new SimplifiedAgentRegistry();
+    }
+    return SimplifiedAgentRegistry.instance;
+  }
+
+  /**
+   * Create or get an agent instance
+   * Most agents are just BaseAgent + YAML configuration
+   */
+  createAgent(
+    agentType: YamlAgentType,
+    businessId: string,
+    userId?: string
+  ): BaseAgent {
+    const cacheKey = `${agentType}-${businessId}-${userId || 'system'}`;
+    
+    // Return cached instance if exists
+    const cached = this.agents.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const configPath = `configs/${AGENT_CONFIGS[agentType]}`;
+    let agent: BaseAgent;
+
+    // Only special cases get their own class
+    switch (agentType) {
+      case 'backend-orchestrator':
+      case 'task-orchestrator':
+        // OrchestratorAgent has special orchestration logic
+        agent = new OrchestratorAgent(configPath, businessId, userId);
+        break;
+      
+      case 'task-management':
+        // TaskManagementAgent needs direct database access
+        agent = TaskManagementAgent.getInstance();
+        break;
+      
+      default:
+        // Most agents are just BaseAgent with YAML configuration
+        // This includes: backend-api, data-enrichment, events, 
+        // profile-builder, task-replay
+        agent = new BaseAgent(configPath, businessId, userId) as BaseAgent;
+    }
+
+    this.agents.set(cacheKey, agent);
+    return agent;
+  }
+
+  /**
+   * Get all available agent types
+   */
+  getAvailableAgentTypes(): YamlAgentType[] {
+    return Object.keys(AGENT_CONFIGS) as YamlAgentType[];
+  }
+
+  /**
+   * Clear the agent cache (useful for testing)
+   */
+  clear(): void {
+    this.agents.clear();
+  }
+}
+
+// Export simplified registry singleton
+export const simplifiedAgentRegistry = SimplifiedAgentRegistry.getInstance();
+
+/**
+ * Helper function to create agents using simplified architecture
+ */
+export function createSimplifiedAgent(
+  agentType: YamlAgentType,
+  businessId: string,
+  userId?: string
+): BaseAgent {
+  return simplifiedAgentRegistry.createAgent(agentType, businessId, userId);
+}
+
+/**
+ * Export the main agent classes
+ */
+export { BaseAgent } from './base/BaseAgent';
+export { OrchestratorAgent } from './OrchestratorAgent';
+export { TaskManagementAgent } from './TaskManagementAgent';
+
+/**
+ * Agent capability definitions (from YAML)
+ */
+export const AGENT_CAPABILITIES = {
+  'backend-api': ['api_integration', 'webhook_handling', 'external_service_calls'],
+  'backend-orchestrator': ['workflow_management', 'agent_coordination', 'task_sequencing'],
+  'data-enrichment': ['data_gathering', 'information_synthesis', 'profile_enrichment'],
+  'events': ['event_handling', 'notification_dispatch', 'real_time_updates'],
+  'profile-builder': ['profile_assembly', 'data_validation', 'completeness_tracking'],
+  'task-management': ['task_crud', 'status_tracking', 'database_operations'],
+  'task-orchestrator': ['task_coordination', 'phase_management', 'agent_assignment'],
+  'task-replay': ['task_replay', 'history_reconstruction', 'audit_logging']
+};

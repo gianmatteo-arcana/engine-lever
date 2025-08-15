@@ -86,7 +86,7 @@ import {
  * - Manages task context and state progression
  * - Provides standardized LLM interaction patterns
  */
-export abstract class BaseAgent {
+export class BaseAgent {
   protected baseTemplate: BaseAgentTemplate;
   protected specializedTemplate: SpecializedAgentConfig;
   protected llmProvider!: LLMProvider;
@@ -574,5 +574,28 @@ Remember: You are an autonomous agent following the universal principles while a
       errors,
       warnings
     };
+  }
+
+  /**
+   * Process a request - delegates to execute method
+   * This method exists for compatibility with existing agent interfaces
+   */
+  async processRequest(request: BaseAgentRequest): Promise<BaseAgentResponse> {
+    return this.execute(request);
+  }
+
+  /**
+   * Process a message (alternative interface for compatibility)
+   */
+  async processMessage(message: any): Promise<any> {
+    // Convert message format to BaseAgentRequest
+    const request: BaseAgentRequest = {
+      operation: message.type || 'process',
+      parameters: message.payload || {},
+      taskContext: message.context || this.taskContext,
+      llmModel: 'gpt-4'
+    };
+    
+    return this.execute(request);
   }
 }
