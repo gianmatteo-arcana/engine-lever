@@ -118,7 +118,7 @@ export class TaskManagementAgent extends BaseAgent {
       safeContext.agentContexts[this.agentId] = {
         ...safeContext.agentContexts[this.agentId],
         state: {
-          ...context.agentContexts[this.agentId]?.state,
+          ...context.agentContexts![this.agentId]?.state,
           error: error instanceof Error ? error.message : String(error),
           lastOperation: operation,
           failedAt: new Date().toISOString()
@@ -178,15 +178,15 @@ export class TaskManagementAgent extends BaseAgent {
     }
 
     // Update context with created task
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         createdTask,
         lastCreatedTaskId: createdTask.id
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'task_creation',
           data: {
@@ -243,15 +243,15 @@ export class TaskManagementAgent extends BaseAgent {
     }
 
     // Update context with updated task
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         updatedTask,
         lastUpdatedTaskId: updatedTask.id
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'task_update',
           data: {
@@ -305,15 +305,15 @@ export class TaskManagementAgent extends BaseAgent {
     }
 
     // Update context with deletion info
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         deletedTaskId: targetTaskId,
         deletedAt: new Date().toISOString()
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'task_deletion',
           data: { taskId: targetTaskId },
@@ -357,14 +357,14 @@ export class TaskManagementAgent extends BaseAgent {
     }
 
     // Update context with retrieved task
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         retrievedTask: task
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'task_retrieval',
           data: {
@@ -433,16 +433,16 @@ export class TaskManagementAgent extends BaseAgent {
     }
 
     // Update context with task list
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         taskList: tasks || [],
         taskCount: count || tasks?.length || 0,
         listingOptions: options
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'task_listing',
           data: {
@@ -501,16 +501,16 @@ export class TaskManagementAgent extends BaseAgent {
     }
 
     // Update agent context
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         savedContext,
         lastContextSave: new Date().toISOString(),
         contextSize: serializedData.length
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'context_saving',
           data: {
@@ -554,16 +554,16 @@ export class TaskManagementAgent extends BaseAgent {
     const loadedContext = savedContext?.context_data || {};
 
     // Update agent context
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         loadedContext,
         lastContextLoad: new Date().toISOString(),
         contextExists: !!savedContext
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'context_loading',
           data: {
@@ -622,10 +622,10 @@ export class TaskManagementAgent extends BaseAgent {
     }
 
     // Update context
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         statusUpdate: {
           taskId: targetTaskId,
           oldStatus: context.status,
@@ -634,7 +634,7 @@ export class TaskManagementAgent extends BaseAgent {
         }
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'status_update',
           data: {

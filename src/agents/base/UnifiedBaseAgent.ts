@@ -3,7 +3,7 @@
  * Part of the Three-Layer Protocol Architecture (A2A communication, Intelligence layer, MCP toolchain)
  */
 
-import { AgentTaskContext as TaskContext } from '../../types/unified-agent-types';
+import { AgentTaskContext as TaskContext, ensureAgentContext } from '../../types/unified-agent-types';
 import { ToolChain } from '../../toolchain/ToolChain';
 import { LegacyToolChain } from '../../toolchain/LegacyToolChain';
 import { MCPToolChain } from '../../toolchain/MCPToolChain';
@@ -315,19 +315,22 @@ export abstract class BaseAgent implements A2AServer {
    * Execute a task (main entry point for task execution)
    */
   async executeTask(taskId: string, context: TaskContext, parameters: Record<string, unknown>): Promise<TaskContext> {
+    // Ensure context has all required fields
+    const safeContext = ensureAgentContext(context);
+    
     try {
       // Track active task
-      this.activeTasks.set(taskId, context);
+      this.activeTasks.set(taskId, safeContext);
       
       logger.info('BaseAgent: Starting task execution', {
         agentId: this.agentId,
         taskId,
         parameters: Object.keys(parameters)
       });
-
+      
       // Initialize agent context if not exists
-      if (!context.agentContexts[this.agentId]) {
-        context.agentContexts[this.agentId] = {
+      if (!safeContext.agentContexts[this.agentId]) {
+        safeContext.agentContexts[this.agentId] = {
           state: {},
           requirements: [],
           findings: [],
@@ -336,7 +339,7 @@ export abstract class BaseAgent implements A2AServer {
       }
 
       // Execute the task logic (implemented by subclasses)
-      const result = await this.executeTaskLogic(taskId, context, parameters);
+      const result = await this.executeTaskLogic(taskId, safeContext, parameters);
       
       logger.info('BaseAgent: Task execution completed', {
         agentId: this.agentId,
@@ -352,16 +355,16 @@ export abstract class BaseAgent implements A2AServer {
       });
       
       // Update context with error
-      context.agentContexts[this.agentId] = {
-        ...context.agentContexts[this.agentId],
+      safeContext.agentContexts[this.agentId] = {
+        ...safeContext.agentContexts[this.agentId],
         state: {
-          ...context.agentContexts[this.agentId]?.state,
+          ...safeContext.agentContexts[this.agentId]?.state,
           error: error instanceof Error ? error.message : String(error),
           failedAt: new Date().toISOString()
         }
       };
       
-      return context;
+      return safeContext;
     } finally {
       // Remove from active tasks
       this.activeTasks.delete(taskId);
@@ -378,7 +381,8 @@ export abstract class BaseAgent implements A2AServer {
         return await this.handleTaskAssignment(message.payload);
       case 'status_request':
         // Handle status request
-        return await this.getStatus();
+        const status = await this.getStatus();
+        return status as unknown as Record<string, unknown>;
       case 'capability_request':
         // Handle capability request
         return { capabilities: await this.getCapabilities() };

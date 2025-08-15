@@ -4,7 +4,7 @@
  */
 
 import { BaseAgent } from './base/UnifiedBaseAgent';
-import { AgentTaskContext as TaskContext } from '../types/unified-agent-types';
+import { AgentTaskContext as TaskContext, ensureAgentContext } from '../types/unified-agent-types';
 import { logger } from '../utils/logger';
 
 // Enhanced interfaces for A2A protocol
@@ -65,15 +65,18 @@ export class DataEnrichmentAgent extends BaseAgent {
    * Helper method to set the last operation in the context
    */
   private setLastOperation(context: TaskContext, operation: string): void {
-    if (!context.agentContexts[this.agentId]) {
-      context.agentContexts[this.agentId] = {
+    if (!context.agentContexts) {
+      context.agentContexts = {};
+    }
+    if (!context.agentContexts![this.agentId]) {
+      context.agentContexts![this.agentId] = {
         state: {},
         requirements: [],
         findings: [],
         nextActions: []
       };
     }
-    context.agentContexts[this.agentId].state.lastOperation = operation;
+    context.agentContexts![this.agentId].state.lastOperation = operation;
   }
 
   protected async executeTaskLogic(
@@ -81,27 +84,29 @@ export class DataEnrichmentAgent extends BaseAgent {
     context: TaskContext, 
     parameters: Record<string, unknown>
   ): Promise<TaskContext> {
+    // Ensure context has all required fields
+    const safeContext = ensureAgentContext(context);
     const operation = parameters.operation as string;
     
     try {
       switch (operation) {
         case 'domainAnalysis':
-          this.setLastOperation(context, 'domainAnalysis');
-          return await this.performDomainAnalysis(taskId, context, parameters);
+          this.setLastOperation(safeContext, 'domainAnalysis');
+          return await this.performDomainAnalysis(taskId, safeContext, parameters);
         case 'publicRecordsSearch':
-          this.setLastOperation(context, 'publicRecordsSearch');
-          return await this.performPublicRecordsSearch(taskId, context, parameters);
+          this.setLastOperation(safeContext, 'publicRecordsSearch');
+          return await this.performPublicRecordsSearch(taskId, safeContext, parameters);
         case 'businessInference':
-          this.setLastOperation(context, 'businessInference');
-          return await this.performBusinessInference(taskId, context, parameters);
+          this.setLastOperation(safeContext, 'businessInference');
+          return await this.performBusinessInference(taskId, safeContext, parameters);
         case 'oauthProcessing':
-          this.setLastOperation(context, 'oauthProcessing');
-          return await this.processOAuthData(taskId, context, parameters);
+          this.setLastOperation(safeContext, 'oauthProcessing');
+          return await this.processOAuthData(taskId, safeContext, parameters);
         case 'fullEnrichment':
-          this.setLastOperation(context, 'fullEnrichment');
-          return await this.performFullEnrichment(taskId, context, parameters);
+          this.setLastOperation(safeContext, 'fullEnrichment');
+          return await this.performFullEnrichment(taskId, safeContext, parameters);
         default:
-          this.setLastOperation(context, operation);
+          this.setLastOperation(safeContext, operation);
           throw new Error(`Unknown operation: ${operation}`);
       }
     } catch (error) {
@@ -112,17 +117,17 @@ export class DataEnrichmentAgent extends BaseAgent {
       });
       
       // Update context with error information
-      context.agentContexts[this.agentId] = {
-        ...context.agentContexts[this.agentId],
+      safeContext.agentContexts[this.agentId] = {
+        ...safeContext.agentContexts[this.agentId],
         state: {
-          ...context.agentContexts[this.agentId]?.state,
+          ...safeContext.agentContexts[this.agentId]?.state,
           error: error instanceof Error ? error.message : String(error),
           lastOperation: operation,
           failedAt: new Date().toISOString()
         }
       };
       
-      return context;
+      return safeContext;
     }
   }
 
@@ -149,14 +154,14 @@ export class DataEnrichmentAgent extends BaseAgent {
     };
 
     // Update context with domain analysis results
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         domainAnalysis
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'domain_analysis',
           data: domainAnalysis,
@@ -201,14 +206,14 @@ export class DataEnrichmentAgent extends BaseAgent {
     };
 
     // Update context with public records results
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         publicRecordsResult
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'public_records_search',
           data: publicRecordsResult,
@@ -232,8 +237,8 @@ export class DataEnrichmentAgent extends BaseAgent {
     context: TaskContext,
     _parameters: Record<string, unknown>
   ): Promise<TaskContext> {
-    const domainAnalysis = context.agentContexts[this.agentId]?.state?.domainAnalysis;
-    const publicRecordsResult = context.agentContexts[this.agentId]?.state?.publicRecordsResult;
+    const domainAnalysis = context.agentContexts![this.agentId]?.state?.domainAnalysis;
+    const publicRecordsResult = context.agentContexts![this.agentId]?.state?.publicRecordsResult;
     
     const businessInference: BusinessInference = {
       businessType: this.inferBusinessType(domainAnalysis, publicRecordsResult),
@@ -244,14 +249,14 @@ export class DataEnrichmentAgent extends BaseAgent {
     };
 
     // Update context with business inference
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         businessInference
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'business_inference',
           data: businessInference,
@@ -301,14 +306,14 @@ export class DataEnrichmentAgent extends BaseAgent {
     }
 
     // Update context with OAuth processing results
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         enrichedUserData
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'oauth_processing',
           data: enrichedUserData,
@@ -340,7 +345,7 @@ export class DataEnrichmentAgent extends BaseAgent {
     }
 
     // 2. Perform domain analysis
-    const enrichedUserData = context.agentContexts[this.agentId]?.state?.enrichedUserData;
+    const enrichedUserData = context.agentContexts![this.agentId]?.state?.enrichedUserData;
     if (enrichedUserData?.userInfo.email) {
       context = await this.performDomainAnalysis(taskId, context, {
         email: enrichedUserData.userInfo.email
@@ -348,7 +353,7 @@ export class DataEnrichmentAgent extends BaseAgent {
     }
 
     // 3. Search public records if we have a business name
-    const domainAnalysis = context.agentContexts[this.agentId]?.state?.domainAnalysis;
+    const domainAnalysis = context.agentContexts![this.agentId]?.state?.domainAnalysis;
     if (domainAnalysis?.suggestedBusinessName) {
       context = await this.performPublicRecordsSearch(taskId, context, {
         businessName: domainAnalysis.suggestedBusinessName
@@ -359,7 +364,7 @@ export class DataEnrichmentAgent extends BaseAgent {
     context = await this.performBusinessInference(taskId, context, parameters);
 
     // 5. Generate UI augmentation request if needed
-    const businessInference = context.agentContexts[this.agentId]?.state?.businessInference;
+    const businessInference = context.agentContexts![this.agentId]?.state?.businessInference;
     if (businessInference && businessInference.confidence < 0.7) {
       context = await this.generateConfirmationUI(taskId, context);
     }
@@ -368,7 +373,7 @@ export class DataEnrichmentAgent extends BaseAgent {
       taskId,
       hasUserData: !!enrichedUserData,
       hasDomainAnalysis: !!domainAnalysis,
-      hasPublicRecords: !!context.agentContexts[this.agentId]?.state?.publicRecordsResult,
+      hasPublicRecords: !!context.agentContexts![this.agentId]?.state?.publicRecordsResult,
       hasBusinessInference: !!businessInference
     });
 
@@ -379,7 +384,7 @@ export class DataEnrichmentAgent extends BaseAgent {
     taskId: string,
     context: TaskContext
   ): Promise<TaskContext> {
-    const agentState = context.agentContexts[this.agentId]?.state;
+    const agentState = context.agentContexts![this.agentId]?.state;
     const businessInference = agentState?.businessInference;
     const domainAnalysis = agentState?.domainAnalysis;
 

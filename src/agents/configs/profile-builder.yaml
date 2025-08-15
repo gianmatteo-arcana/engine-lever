@@ -1,0 +1,413 @@
+# Profile Builder Agent Configuration
+# Updated for BaseAgent A2A Protocol Architecture
+# Version: 2.0.0
+
+# Agent Identity and Role
+name: "ProfileBuilderAgent"
+role: "profile_builder"
+version: "2.0.0"
+description: "Specialist for building and maintaining complete business profiles"
+
+# Agent Capabilities - WHAT it can do
+capabilities:
+  - "business_profile_creation"
+  - "data_collection_guidance"
+  - "profile_validation"
+  - "missing_data_identification"
+  - "profile_enrichment"
+  - "document_verification"
+
+# Tool Requirements - WHAT tools it needs
+toolRequirements:
+  - "business_enrichment"
+  - "web_search"
+  - "data_validation"
+  - "document_processing"
+  - "ca_sos_search"
+
+# A2A Protocol Configuration
+a2a:
+  protocolVersion: "1.0.0"
+  communicationMode: "async"
+  messageFormats:
+    - "json"
+    - "yaml"
+  
+  # Inter-agent communication settings
+  routing:
+    canReceiveFrom:
+      - "TaskOrchestrator"
+      - "GeneralAssistantAgent"
+      - "ComplianceAdvisorAgent"
+      - "DataValidationAgent"
+    canSendTo:
+      - "TaskOrchestrator"
+      - "UIGeneratorAgent"
+      - "ComplianceAdvisorAgent"
+      - "DataEnrichmentAgent"
+  
+  # Message handling
+  messageHandling:
+    bufferSize: 75
+    timeoutMs: 25000
+    retryEnabled: true
+
+# Task Execution Configuration
+execution:
+  maxConcurrentTasks: 4
+  timeoutMs: 90000
+  
+  retryStrategy:
+    maxRetries: 3
+    backoffMs: 2000
+    exponentialBackoff: true
+  
+  # Performance settings
+  performance:
+    cachingEnabled: true
+    cacheExpiryMs: 900000  # 15 minutes
+    batchProcessing: true
+    maxBatchSize: 3
+
+# Context and State Management
+context:
+  persistence: true
+  shareLevel: "task"  # private | task | global
+  
+  # What context keys this agent manages
+  contextKeys:
+    - "businessProfile"
+    - "profileCompleteness"
+    - "validationResults"
+    - "missingFields"
+    - "enrichmentData"
+  
+  # Context transformation rules
+  transformations:
+    - input: "userInput.businessName"
+      output: "businessProfile.legalName"
+      validation: "required|string|min:2|max:200"
+    
+    - input: "userInput.entityType"
+      output: "businessProfile.entityType"
+      validation: "required|enum:LLC,Corporation,Partnership,SoleProprietorship"
+    
+    - input: "userInput.ein"
+      output: "businessProfile.taxIdentifiers.ein"
+      validation: "optional|pattern:^\\d{2}-\\d{7}$"
+
+# UI Augmentation Settings
+ui:
+  enableAugmentation: true
+  
+  augmentationTypes:
+    - "profile_forms"
+    - "progress_indicators"
+    - "validation_feedback"
+    - "completion_suggestions"
+    - "document_upload"
+  
+  progressReporting: true
+  
+  # UI generation rules
+  formGeneration:
+    businessProfileForm:
+      title: "Complete Your Business Profile"
+      description: "Provide your business information for compliance tracking"
+      
+      sections:
+        - title: "Basic Information"
+          fields:
+            - field: "legalName"
+              label: "Legal Business Name"
+              type: "text"
+              required: true
+              validation: "required|string|min:2|max:200"
+              help: "The exact legal name as registered with the state"
+            
+            - field: "entityType"
+              label: "Business Entity Type"
+              type: "select"
+              required: true
+              options:
+                - value: "LLC"
+                  label: "Limited Liability Company (LLC)"
+                - value: "Corporation"
+                  label: "Corporation (Inc.)"
+                - value: "Partnership"
+                  label: "Partnership"
+                - value: "SoleProprietorship"
+                  label: "Sole Proprietorship"
+              help: "Your business legal structure"
+            
+            - field: "formationState"
+              label: "State of Formation"
+              type: "select"
+              required: true
+              help: "Where your business was legally formed"
+        
+        - title: "Tax Information"
+          fields:
+            - field: "ein"
+              label: "Employer Identification Number (EIN)"
+              type: "text"
+              required: false
+              pattern: "^\\d{2}-\\d{7}$"
+              placeholder: "XX-XXXXXXX"
+              help: "Your federal tax ID number"
+            
+            - field: "stateTaxId"
+              label: "State Tax ID"
+              type: "text"
+              required: false
+              help: "State-specific tax identification number"
+        
+        - title: "Contact Information"
+          fields:
+            - field: "businessAddress"
+              label: "Business Address"
+              type: "address"
+              required: true
+              help: "Primary business location"
+            
+            - field: "businessPhone"
+              label: "Business Phone"
+              type: "tel"
+              required: false
+              help: "Main business contact number"
+            
+            - field: "businessEmail"
+              label: "Business Email"
+              type: "email"
+              required: false
+              help: "Primary business email address"
+      
+      quickActions:
+        - id: "validate_profile"
+          label: "Validate information"
+          action: "validate_business_profile"
+          icon: "check-circle"
+        
+        - id: "enrich_data"
+          label: "Find missing information"
+          action: "enrich_business_data"
+          icon: "search"
+        
+        - id: "upload_documents"
+          label: "Upload formation documents"
+          action: "upload_business_documents"
+          icon: "upload"
+
+# Workflow and Task Definitions
+workflows:
+  profileCreation:
+    description: "Guide user through complete business profile creation"
+    
+    steps:
+      - name: "analyze_existing_data"
+        action: "assess_current_profile"
+        required: true
+        
+      - name: "identify_missing_fields"
+        action: "determine_required_information"
+        
+      - name: "enrich_from_sources"
+        action: "gather_public_information"
+        
+      - name: "collect_user_input"
+        action: "request_missing_data"
+        
+      - name: "validate_completeness"
+        action: "verify_profile_completeness"
+    
+    outputs:
+      - "businessProfile.completenessScore"
+      - "businessProfile.validationStatus"
+      - "businessProfile.missingFields"
+
+  dataValidation:
+    description: "Validate business profile data for accuracy and completeness"
+    
+    steps:
+      - name: "format_validation"
+        action: "check_data_formats"
+        
+      - name: "business_verification"
+        action: "verify_against_public_records"
+        
+      - name: "consistency_check"
+        action: "validate_data_consistency"
+        
+      - name: "completeness_assessment"
+        action: "calculate_profile_score"
+    
+    outputs:
+      - "validationResults.formatCheck"
+      - "validationResults.businessVerification"
+      - "validationResults.consistencyScore"
+
+# Agent Prompt Templates (Legacy Compatibility)
+prompts:
+  main:
+    version: "2.0"
+    template: |
+      You are a business profile specialist helping users complete their business information.
+      
+      User Query: {{message}}
+      
+      Current Profile Status:
+      {{json collected_fields}}
+      
+      Profile Completeness: {{completeness_percentage}}%
+      
+      Be helpful and encouraging. Focus on:
+      1. What information is still needed to complete the profile
+      2. Why each piece of information is important for compliance
+      3. How to find required documents or information
+      4. Common issues and how to resolve them
+      
+      Keep responses concise and actionable. Celebrate progress made.
+    
+  data_requirements:
+    version: "2.0"
+    template: |
+      Determine missing business profile fields based on entity type and state.
+      
+      Business Type: {{entity_type}}
+      Formation State: {{state}}
+      Operating States: {{operating_states}}
+      
+      Already Collected:
+      {{collected_fields}}
+      
+      Return JSON array of required fields with:
+      - field_name: Technical field name
+      - display_name: User-friendly label
+      - field_type: Input type (text, select, date, etc.)
+      - required: Boolean indicating if required
+      - priority: high/medium/low
+      - help_text: Explanation of why this field is needed
+      - validation_rules: Format requirements
+      - data_sources: Where user can find this information
+    
+  validation:
+    version: "2.0"
+    template: |
+      Validate business profile data for accuracy and compliance.
+      
+      Profile Data: {{form_data}}
+      Entity Type: {{entity_type}}
+      State: {{state}}
+      
+      Perform comprehensive validation:
+      1. Format validation (EIN: XX-XXXXXXX, phone numbers, etc.)
+      2. Address completeness and format
+      3. Business name compliance (reserved words, etc.)
+      4. Entity type consistency with other data
+      5. Cross-field validation (dates, addresses)
+      
+      Return detailed validation results with:
+      - field_name: Which field was validated
+      - status: valid/invalid/warning
+      - message: User-friendly explanation
+      - suggestion: How to fix if invalid
+      - confidence: How certain we are (0-1)
+
+  enrichment_suggestions:
+    version: "2.0"
+    template: |
+      Suggest ways to complete missing business profile information.
+      
+      Current Profile: {{current_profile}}
+      Missing Fields: {{missing_fields}}
+      Business Context: {{business_context}}
+      
+      For each missing field, provide:
+      1. Where the user can find this information
+      2. Alternative ways to obtain it
+      3. Whether it can be inferred from other data
+      4. If it's available in public records
+      5. Order of priority for collection
+      
+      Be specific and actionable in suggestions.
+
+# Error Handling and Monitoring
+errorHandling:
+  logLevel: "info"
+  
+  criticalErrors:
+    - "profile_data_corruption"
+    - "validation_service_failure"
+    - "enrichment_api_unavailable"
+  
+  retryableErrors:
+    - "network_timeout"
+    - "rate_limit_exceeded"
+    - "temporary_service_unavailable"
+  
+  fallbackActions:
+    - error: "business_enrichment_failed"
+      fallback: "use_manual_collection"
+    
+    - error: "validation_service_down"
+      fallback: "use_basic_validation"
+
+# Monitoring and Analytics
+monitoring:
+  enabled: true
+  
+  metrics:
+    - "profile_completion_rate"
+    - "data_accuracy_score"
+    - "enrichment_success_rate"
+    - "user_satisfaction"
+  
+  alerts:
+    - condition: "completion_rate < 0.7"
+      action: "review_form_design"
+      severity: "medium"
+    
+    - condition: "accuracy_score < 0.85"
+      action: "improve_validation"
+      severity: "high"
+
+# Integration Settings
+integrations:
+  # Business data sources
+  businessEnrichmentAPI:
+    enabled: true
+    rateLimit: 100  # per hour
+    timeout: 8000
+    
+  # Secretary of State APIs
+  sosAPIs:
+    enabled: true
+    rateLimit: 60   # per hour per state
+    timeout: 10000
+  
+  # Address validation
+  addressValidation:
+    enabled: true
+    rateLimit: 200  # per hour
+    timeout: 5000
+  
+  # Document processing
+  documentOCR:
+    enabled: true
+    rateLimit: 50   # per hour
+    timeout: 15000
+
+# Development and Testing
+development:
+  debugMode: false
+  verboseLogging: false
+  
+  testData:
+    sampleBusinessName: "Acme Business Solutions LLC"
+    sampleEntityType: "LLC"
+    sampleState: "CA"
+    sampleEIN: "12-3456789"
+  
+  mockServices:
+    enabled: false
+    responseDelay: 2000

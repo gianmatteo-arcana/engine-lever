@@ -1,0 +1,364 @@
+# Compliance Advisor Agent Configuration
+# Updated for BaseAgent A2A Protocol Architecture
+# Version: 2.0.0
+
+# Agent Identity and Role
+name: "ComplianceAdvisorAgent"
+role: "compliance_advisor"
+version: "2.0.0"
+description: "Compliance guidance and requirement tracking specialist for small businesses"
+
+# Agent Capabilities - WHAT it can do
+capabilities:
+  - "compliance_requirements_analysis"
+  - "deadline_tracking"
+  - "penalty_assessment"
+  - "regulatory_guidance"
+  - "industry_specific_compliance"
+  - "multi_state_requirements"
+
+# Tool Requirements - WHAT tools it needs
+toolRequirements:
+  - "web_search"
+  - "business_enrichment"
+  - "data_validation"
+  - "document_processing"
+
+# A2A Protocol Configuration
+a2a:
+  protocolVersion: "1.0.0"
+  communicationMode: "async"
+  messageFormats:
+    - "json"
+    - "yaml"
+  
+  # Inter-agent communication settings
+  routing:
+    canReceiveFrom:
+      - "TaskOrchestrator"
+      - "SOISpecialistAgent"
+      - "ProfileBuilderAgent"
+      - "DataValidationAgent"
+    canSendTo:
+      - "TaskOrchestrator"
+      - "UIGeneratorAgent"
+      - "NotificationAgent"
+      - "DeadlineTrackerAgent"
+  
+  # Message handling
+  messageHandling:
+    bufferSize: 100
+    timeoutMs: 20000
+    retryEnabled: true
+
+# Task Execution Configuration
+execution:
+  maxConcurrentTasks: 3
+  timeoutMs: 60000
+  
+  retryStrategy:
+    maxRetries: 3
+    backoffMs: 1500
+    exponentialBackoff: true
+  
+  # Performance settings
+  performance:
+    cachingEnabled: true
+    cacheExpiryMs: 1800000  # 30 minutes
+    batchProcessing: true
+    maxBatchSize: 5
+
+# Context and State Management
+context:
+  persistence: true
+  shareLevel: "task"  # private | task | global
+  
+  # What context keys this agent manages
+  contextKeys:
+    - "complianceRequirements"
+    - "deadlines"
+    - "penaltyAssessments"
+    - "regulatoryUpdates"
+  
+  # Context transformation rules
+  transformations:
+    - input: "businessInfo.entityType"
+      output: "complianceRequirements.baseRequirements"
+      validation: "required|string"
+    
+    - input: "businessInfo.state"
+      output: "complianceRequirements.jurisdiction"
+      validation: "required|string|min:2|max:2"
+    
+    - input: "businessInfo.industry"
+      output: "complianceRequirements.industrySpecific"
+      validation: "optional|string"
+
+# UI Augmentation Settings
+ui:
+  enableAugmentation: true
+  
+  augmentationTypes:
+    - "compliance_dashboard"
+    - "deadline_alerts"
+    - "penalty_warnings"
+    - "requirement_checklists"
+    - "regulatory_updates"
+  
+  progressReporting: true
+  
+  # UI generation rules
+  formGeneration:
+    complianceAssessment:
+      title: "Compliance Requirements Assessment"
+      description: "Review your business compliance obligations"
+      
+      fields:
+        - field: "entityType"
+          label: "Business Entity Type"
+          type: "select"
+          required: true
+          options:
+            - value: "LLC"
+              label: "Limited Liability Company"
+            - value: "Corporation"
+              label: "Corporation"
+            - value: "Partnership"
+              label: "Partnership"
+            - value: "SoleProprietorship"
+              label: "Sole Proprietorship"
+          help: "Your business structure affects compliance requirements"
+        
+        - field: "operatingStates"
+          label: "States Where You Operate"
+          type: "multi-select"
+          required: true
+          help: "Select all states where your business operates"
+        
+        - field: "industry"
+          label: "Primary Industry"
+          type: "text"
+          required: true
+          help: "Your industry may have specific compliance requirements"
+        
+        - field: "employeeCount"
+          label: "Number of Employees"
+          type: "select"
+          required: true
+          options:
+            - value: "0"
+              label: "Just me (0 employees)"
+            - value: "1-9"
+              label: "1-9 employees"
+            - value: "10-49"
+              label: "10-49 employees"
+            - value: "50+"
+              label: "50 or more employees"
+          help: "Employee count affects labor law compliance"
+      
+      quickActions:
+        - id: "assess_requirements"
+          label: "Assess my requirements"
+          action: "analyze_compliance_requirements"
+          icon: "assessment"
+        
+        - id: "view_deadlines"
+          label: "Show upcoming deadlines"
+          action: "display_deadline_calendar"
+          icon: "calendar"
+
+# Workflow and Task Definitions
+workflows:
+  complianceAssessment:
+    description: "Analyze business compliance requirements"
+    
+    steps:
+      - name: "gather_business_info"
+        action: "collect_business_details"
+        required: true
+        
+      - name: "analyze_entity_requirements"
+        action: "determine_entity_compliance"
+        
+      - name: "assess_industry_requirements"
+        action: "identify_industry_regulations"
+        
+      - name: "check_multi_state_obligations"
+        action: "analyze_multi_state_compliance"
+        
+      - name: "generate_compliance_plan"
+        action: "create_compliance_roadmap"
+    
+    outputs:
+      - "complianceRequirements.entitySpecific"
+      - "complianceRequirements.industrySpecific"
+      - "complianceRequirements.stateSpecific"
+      - "complianceRequirements.deadlineCalendar"
+
+  deadlineTracking:
+    description: "Monitor compliance deadlines and send alerts"
+    
+    steps:
+      - name: "identify_deadlines"
+        action: "extract_compliance_deadlines"
+        
+      - name: "prioritize_by_urgency"
+        action: "rank_deadlines_by_impact"
+        
+      - name: "setup_notifications"
+        action: "configure_deadline_alerts"
+        
+      - name: "track_completion"
+        action: "monitor_compliance_status"
+    
+    outputs:
+      - "deadlines.upcoming"
+      - "deadlines.critical"
+      - "deadlines.notificationSchedule"
+
+# Agent Prompt Templates (Legacy Compatibility)
+prompts:
+  main:
+    version: "2.0"
+    template: |
+      You are a compliance advisor for small businesses.
+      
+      Business Type: {{entity_type}}
+      State: {{state}}
+      Industry: {{industry}}
+      Employee Count: {{employee_count}}
+      User Query: {{message}}
+      
+      Provide compliance guidance focusing on:
+      1. Current requirements and obligations
+      2. Upcoming deadlines with specific dates
+      3. Potential penalties and consequences
+      4. Best practices and recommendations
+      
+      Be clear about what is legally required vs recommended.
+      Prioritize by urgency and potential impact.
+    
+  requirements_check:
+    version: "2.0"
+    template: |
+      Analyze compliance requirements for this business:
+      
+      Entity Type: {{entity_type}}
+      Operating States: {{states}}
+      Industry: {{industry}}
+      Employee Count: {{employee_count}}
+      Annual Revenue: {{revenue}}
+      
+      Provide comprehensive analysis including:
+      1. Federal requirements (tax, employment, etc.)
+      2. State-specific obligations for each operating state
+      3. Industry-specific regulations
+      4. Local licensing and permit requirements
+      
+      List all applicable requirements with:
+      - Requirement name and description
+      - Filing frequency and deadlines
+      - Penalty for non-compliance
+      - Priority level (critical/important/recommended)
+      
+      Format as structured JSON for processing.
+
+  deadline_analysis:
+    version: "2.0"
+    template: |
+      Create a deadline calendar for this business:
+      
+      Current Date: {{current_date}}
+      Business Setup: {{business_info}}
+      Known Deadlines: {{existing_deadlines}}
+      
+      Generate a 12-month compliance calendar including:
+      1. Tax filing deadlines (federal and state)
+      2. Employment law deadlines (quarterly reports, etc.)
+      3. Business registration renewals
+      4. Industry-specific compliance dates
+      5. Estimated quarterly obligations
+      
+      For each deadline, provide:
+      - Due date
+      - Description of requirement
+      - Estimated time to complete
+      - Penalty for missing deadline
+      - Recommended completion date (buffer time)
+      
+      Prioritize by impact and urgency.
+
+# Error Handling and Monitoring
+errorHandling:
+  logLevel: "info"
+  
+  criticalErrors:
+    - "compliance_data_unavailable"
+    - "deadline_calculation_error"
+    - "regulatory_api_failure"
+  
+  retryableErrors:
+    - "network_timeout"
+    - "rate_limit_exceeded"
+    - "temporary_service_unavailable"
+  
+  fallbackActions:
+    - error: "regulatory_api_failed"
+      fallback: "use_cached_requirements"
+    
+    - error: "deadline_service_down"
+      fallback: "use_standard_deadlines"
+
+# Monitoring and Analytics
+monitoring:
+  enabled: true
+  
+  metrics:
+    - "compliance_assessment_accuracy"
+    - "deadline_tracking_success"
+    - "user_compliance_improvement"
+    - "penalty_prevention_rate"
+  
+  alerts:
+    - condition: "missed_deadline_rate > 0.05"
+      action: "notify_admin"
+      severity: "high"
+    
+    - condition: "assessment_accuracy < 0.9"
+      action: "review_algorithms"
+      severity: "medium"
+
+# Integration Settings
+integrations:
+  # Government APIs
+  irsAPI:
+    enabled: true
+    rateLimit: 100  # per hour
+    timeout: 10000
+    
+  # State regulatory databases
+  stateAPIs:
+    enabled: true
+    rateLimit: 50   # per hour per state
+    timeout: 8000
+  
+  # Industry compliance databases
+  industryCompliance:
+    enabled: true
+    rateLimit: 200  # per hour
+    timeout: 5000
+
+# Development and Testing
+development:
+  debugMode: false
+  verboseLogging: false
+  
+  testData:
+    sampleEntityType: "LLC"
+    sampleState: "CA"
+    sampleIndustry: "Technology"
+    sampleEmployeeCount: "1-9"
+  
+  mockServices:
+    enabled: false
+    responseDelay: 1500

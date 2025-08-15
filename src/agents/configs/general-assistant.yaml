@@ -1,0 +1,285 @@
+# General Assistant Agent Configuration
+# Updated for BaseAgent A2A Protocol Architecture
+# Version: 2.0.0
+
+# Agent Identity and Role
+name: "GeneralAssistantAgent"
+role: "general_assistant"
+version: "2.0.0"
+description: "General purpose assistant for various business queries and guidance"
+
+# Agent Capabilities - WHAT it can do
+capabilities:
+  - "general_business_guidance"
+  - "user_onboarding"
+  - "query_routing"
+  - "basic_compliance_info"
+  - "feature_explanation"
+  - "problem_solving"
+
+# Tool Requirements - WHAT tools it needs
+toolRequirements:
+  - "web_search"
+  - "business_enrichment"
+
+# A2A Protocol Configuration
+a2a:
+  protocolVersion: "1.0.0"
+  communicationMode: "async"
+  messageFormats:
+    - "json"
+    - "yaml"
+  
+  # Inter-agent communication settings
+  routing:
+    canReceiveFrom:
+      - "TaskOrchestrator"
+      - "UserInterfaceAgent"
+    canSendTo:
+      - "TaskOrchestrator"
+      - "UIGeneratorAgent"
+      - "SOISpecialistAgent"
+      - "ComplianceAdvisorAgent"
+      - "ProfileBuilderAgent"
+  
+  # Message handling
+  messageHandling:
+    bufferSize: 50
+    timeoutMs: 10000
+    retryEnabled: true
+
+# Task Execution Configuration
+execution:
+  maxConcurrentTasks: 5
+  timeoutMs: 30000
+  
+  retryStrategy:
+    maxRetries: 2
+    backoffMs: 500
+    exponentialBackoff: false
+  
+  # Performance settings
+  performance:
+    cachingEnabled: true
+    cacheExpiryMs: 300000  # 5 minutes
+    batchProcessing: false
+
+# Context and State Management
+context:
+  persistence: false  # General assistant doesn't need persistence
+  shareLevel: "task"  # private | task | global
+  
+  # What context keys this agent manages
+  contextKeys:
+    - "userQuery"
+    - "conversationHistory"
+    - "routingDecisions"
+    - "helpTopics"
+  
+  # Context transformation rules
+  transformations:
+    - input: "userInput.message"
+      output: "userQuery.processedMessage"
+      validation: "required|string|min:1"
+    
+    - input: "userInput.taskType"
+      output: "userQuery.intendedTask"
+      validation: "optional|string"
+
+# UI Augmentation Settings
+ui:
+  enableAugmentation: true
+  
+  augmentationTypes:
+    - "welcome_messages"
+    - "help_suggestions"
+    - "quick_actions"
+    - "feature_tours"
+    - "routing_suggestions"
+  
+  progressReporting: false
+  
+  # UI generation rules
+  formGeneration:
+    welcomeScreen:
+      title: "Welcome to BizBuddy!"
+      description: "I'm Ally, your AI compliance assistant"
+      
+      quickActions:
+        - id: "start_onboarding"
+          label: "Set up my business profile"
+          action: "initiate_onboarding"
+          icon: "user-plus"
+        
+        - id: "compliance_check"
+          label: "Check my compliance status"
+          action: "assess_compliance"
+          icon: "shield-check"
+        
+        - id: "file_soi"
+          label: "File Statement of Information"
+          action: "start_soi_filing"
+          icon: "file-text"
+        
+        - id: "ask_question"
+          label: "Ask a question"
+          action: "open_chat"
+          icon: "message-circle"
+
+# Workflow and Task Definitions
+workflows:
+  userAssistance:
+    description: "Provide general assistance and route complex queries"
+    
+    steps:
+      - name: "understand_query"
+        action: "analyze_user_intent"
+        required: true
+        
+      - name: "provide_basic_help"
+        action: "offer_immediate_assistance"
+        
+      - name: "route_if_needed"
+        action: "escalate_to_specialist"
+        condition: "complex_query_detected"
+    
+    outputs:
+      - "userQuery.intent"
+      - "userQuery.complexity"
+      - "routingDecisions.recommendedAgent"
+
+  welcomeFlow:
+    description: "Welcome new users and guide initial setup"
+    
+    steps:
+      - name: "greet_user"
+        action: "provide_personalized_welcome"
+        
+      - name: "explain_features"
+        action: "highlight_key_capabilities"
+        
+      - name: "suggest_next_steps"
+        action: "recommend_initial_actions"
+    
+    outputs:
+      - "welcomeFlow.completed"
+      - "welcomeFlow.userPreferences"
+
+# Agent Prompt Templates (Legacy Compatibility)
+prompts:
+  main:
+    version: "2.0"
+    template: |
+      You are Ally, an AI compliance assistant helping with business requirements.
+      
+      User Message: {{message}}
+      Task Type: {{task_type}}
+      Current Status: {{current_phase}}
+      User Name: {{user_name}}
+      
+      Guidelines:
+      - Be helpful, encouraging, and professional
+      - Provide actionable next steps
+      - Be concise but thorough
+      - If the query is complex or specialized, suggest connecting with a specialist
+      - Always prioritize user success and compliance
+      
+      Provide helpful guidance while maintaining a friendly, supportive tone.
+    
+  welcome:
+    version: "2.0"
+    template: |
+      Welcome the user warmly to BizBuddy.
+      
+      User Name: {{user_name}}
+      First Visit: {{is_first_visit}}
+      Business Type: {{business_type}}
+      
+      Create a personalized welcome message that:
+      1. Introduces yourself as Ally, their AI compliance assistant
+      2. Briefly explains how BizBuddy helps keep businesses compliant
+      3. Suggests 2-3 immediate next steps based on their profile
+      4. Maintains a friendly, professional, and encouraging tone
+      
+      Keep the message concise but warm.
+
+  query_routing:
+    version: "2.0"
+    template: |
+      Analyze this user query and determine the best way to help:
+      
+      Query: {{user_message}}
+      User Context: {{user_context}}
+      
+      Determine:
+      1. Can I answer this directly as a general assistant?
+      2. Should this be routed to a specialist agent?
+      3. What immediate help can I provide?
+      
+      Available specialists:
+      - SOI Specialist: California Statement of Information filing
+      - Compliance Advisor: General compliance requirements
+      - Profile Builder: Business profile setup
+      
+      If routing is needed, explain why and what the specialist will help with.
+      If not routing, provide helpful guidance directly.
+
+# Error Handling and Monitoring
+errorHandling:
+  logLevel: "info"
+  
+  criticalErrors:
+    - "user_context_lost"
+    - "routing_failure"
+  
+  retryableErrors:
+    - "network_timeout"
+    - "temporary_service_unavailable"
+  
+  fallbackActions:
+    - error: "specialist_unavailable"
+      fallback: "provide_general_guidance"
+    
+    - error: "routing_failed"
+      fallback: "escalate_to_human"
+
+# Monitoring and Analytics
+monitoring:
+  enabled: true
+  
+  metrics:
+    - "user_satisfaction_score"
+    - "query_resolution_rate"
+    - "routing_accuracy"
+    - "response_time"
+  
+  alerts:
+    - condition: "satisfaction_score < 4.0"
+      action: "review_responses"
+      severity: "medium"
+
+# Integration Settings
+integrations:
+  # Knowledge base
+  knowledgeBase:
+    enabled: true
+    timeout: 3000
+    
+  # User analytics
+  userAnalytics:
+    enabled: true
+    trackInteractions: true
+
+# Development and Testing
+development:
+  debugMode: false
+  verboseLogging: false
+  
+  testData:
+    sampleUserName: "John Doe"
+    sampleBusinessType: "LLC"
+    sampleQuery: "How do I file my taxes?"
+  
+  mockServices:
+    enabled: false
+    responseDelay: 500

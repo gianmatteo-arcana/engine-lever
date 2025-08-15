@@ -1,0 +1,380 @@
+# Task Orchestrator Agent Configuration
+# Updated for BaseAgent A2A Protocol Architecture
+# Version: 2.0.0
+
+# Agent Identity and Role
+name: "TaskOrchestratorAgent"
+role: "orchestrator"
+version: "2.0.0"
+description: "Main orchestrator agent that coordinates sub-agents and manages task workflows"
+
+# Agent Capabilities - WHAT it can do
+capabilities:
+  - "task_coordination"
+  - "agent_routing"
+  - "intent_analysis"
+  - "context_management"
+  - "workflow_orchestration"
+  - "error_recovery"
+
+# Tool Requirements - WHAT tools it needs
+toolRequirements:
+  - "web_search"
+  - "data_validation"
+
+# A2A Protocol Configuration
+a2a:
+  protocolVersion: "1.0.0"
+  communicationMode: "async"
+  messageFormats:
+    - "json"
+    - "yaml"
+  
+  # Inter-agent communication settings
+  routing:
+    canReceiveFrom:
+      - "UserInterfaceAgent"
+      - "SOISpecialistAgent"
+      - "ComplianceAdvisorAgent"
+      - "ProfileBuilderAgent"
+      - "GeneralAssistantAgent"
+    canSendTo:
+      - "SOISpecialistAgent"
+      - "ComplianceAdvisorAgent" 
+      - "ProfileBuilderAgent"
+      - "GeneralAssistantAgent"
+      - "DataValidationAgent"
+      - "UIGeneratorAgent"
+  
+  # Message handling
+  messageHandling:
+    bufferSize: 200
+    timeoutMs: 30000
+    retryEnabled: true
+
+# Task Execution Configuration
+execution:
+  maxConcurrentTasks: 10
+  timeoutMs: 120000
+  
+  retryStrategy:
+    maxRetries: 3
+    backoffMs: 2000
+    exponentialBackoff: true
+  
+  # Performance settings
+  performance:
+    cachingEnabled: true
+    cacheExpiryMs: 1800000  # 30 minutes
+    batchProcessing: true
+    maxBatchSize: 5
+
+# Context and State Management
+context:
+  persistence: true
+  shareLevel: "global"  # Orchestrator manages global context
+  
+  # What context keys this agent manages
+  contextKeys:
+    - "taskState"
+    - "agentAssignments"
+    - "workflowProgress"
+    - "routingDecisions"
+    - "globalContext"
+  
+  # Context transformation rules
+  transformations:
+    - input: "userInput.message"
+      output: "taskState.userIntent"
+      validation: "required|string|min:1"
+    
+    - input: "agentResponse.findings"
+      output: "globalContext.enrichedData"
+      validation: "optional|object"
+
+# UI Augmentation Settings
+ui:
+  enableAugmentation: true
+  
+  augmentationTypes:
+    - "workflow_progress"
+    - "agent_status_display"
+    - "routing_explanations"
+    - "task_summaries"
+    - "error_notifications"
+  
+  progressReporting: true
+  
+  # UI generation rules
+  formGeneration:
+    workflowStatus:
+      title: "Task Progress"
+      description: "Your request is being processed"
+      
+      progressIndicators:
+        - stage: "analyzing"
+          label: "Understanding your request"
+          icon: "brain"
+        
+        - stage: "routing"
+          label: "Connecting with specialist"
+          icon: "route"
+        
+        - stage: "processing"
+          label: "Working on your task"
+          icon: "cog"
+        
+        - stage: "completing"
+          label: "Finalizing results"
+          icon: "check"
+
+# Workflow and Task Definitions
+workflows:
+  taskOrchestration:
+    description: "Main workflow for coordinating tasks across agents"
+    
+    steps:
+      - name: "analyze_intent"
+        action: "determine_user_intent"
+        required: true
+        
+      - name: "route_to_agent"
+        action: "select_appropriate_agent"
+        
+      - name: "coordinate_execution"
+        action: "manage_agent_execution"
+        
+      - name: "aggregate_results"
+        action: "compile_agent_responses"
+        
+      - name: "provide_response"
+        action: "deliver_final_result"
+    
+    outputs:
+      - "taskState.completionStatus"
+      - "taskState.finalResponse"
+      - "agentAssignments.performance"
+
+  errorRecovery:
+    description: "Handle errors and recover gracefully"
+    
+    steps:
+      - name: "detect_error"
+        action: "identify_error_type"
+        
+      - name: "assess_impact"
+        action: "determine_recovery_strategy"
+        
+      - name: "attempt_recovery"
+        action: "execute_fallback_plan"
+        
+      - name: "notify_user"
+        action: "provide_error_explanation"
+    
+    outputs:
+      - "errorRecovery.strategy"
+      - "errorRecovery.userNotification"
+
+# Agent Routing Configuration
+agentRouting:
+  # Define which agents handle which types of requests
+  routingRules:
+    soi_filing:
+      primaryAgent: "SOISpecialistAgent"
+      fallbackAgent: "GeneralAssistantAgent"
+      requiredCapabilities: ["soi_filing_assistance"]
+    
+    compliance_check:
+      primaryAgent: "ComplianceAdvisorAgent"
+      fallbackAgent: "GeneralAssistantAgent"
+      requiredCapabilities: ["compliance_requirements_analysis"]
+    
+    profile_setup:
+      primaryAgent: "ProfileBuilderAgent"
+      fallbackAgent: "GeneralAssistantAgent"
+      requiredCapabilities: ["business_profile_creation"]
+    
+    general_query:
+      primaryAgent: "GeneralAssistantAgent"
+      fallbackAgent: null
+      requiredCapabilities: ["general_business_guidance"]
+  
+  # Agent selection criteria
+  selectionCriteria:
+    - availability: "agent_not_overloaded"
+    - capability: "has_required_skills"
+    - performance: "good_success_rate"
+    - specialization: "best_match_for_query"
+
+# Agent Prompt Templates (Legacy Compatibility)
+prompts:
+  intent_analysis:
+    version: "2.0"
+    template: |
+      Analyze the user's message and determine their intent and urgency.
+      
+      User Message: {{message}}
+      Current Task: {{task_type}}
+      Task Phase: {{current_phase}}
+      User Context: {{user_context}}
+      
+      Classify the intent as one of:
+      - soi_filing: User wants to file Statement of Information
+      - compliance_check: User wants to check compliance requirements
+      - profile_setup: User wants to complete business profile
+      - deadline_inquiry: User asking about deadlines
+      - general_question: General business or compliance question
+      - status_check: User wants to know progress
+      - error_report: User encountered an issue
+      
+      Also determine:
+      - Priority: urgent/high/normal/low
+      - Complexity: simple/moderate/complex
+      - Required specialist: which agent should handle this
+      
+      Return structured analysis with reasoning.
+    
+  routing_decision:
+    version: "2.0"
+    template: |
+      Route this request to the most appropriate agent.
+      
+      Intent: {{intent}}
+      Priority: {{priority}}
+      Complexity: {{complexity}}
+      User Message: {{message}}
+      Available Agents: {{available_agents}}
+      
+      Available Agents and their specialties:
+      - SOISpecialistAgent: California Statement of Information filing expert
+      - ProfileBuilderAgent: Business profile creation specialist
+      - ComplianceAdvisorAgent: General compliance guidance expert
+      - GeneralAssistantAgent: General-purpose helpful assistant
+      
+      Consider:
+      1. Agent specialization match
+      2. Current agent workload
+      3. User's expertise level
+      4. Task complexity
+      
+      Select the most appropriate agent and explain why.
+      Format: AGENT:agent_name|REASON:explanation|BACKUP:fallback_agent
+    
+  context_enrichment:
+    version: "2.0"
+    template: |
+      Enrich the task context with new information from agents.
+      
+      Current Context: {{task_context}}
+      New Agent Findings: {{agent_findings}}
+      Agent Name: {{agent_name}}
+      
+      Tasks:
+      1. Merge new data appropriately without losing existing information
+      2. Identify any conflicts or inconsistencies
+      3. Update task progress and completeness
+      4. Determine if additional agents are needed
+      5. Calculate overall confidence score
+      
+      Return updated context with clear tracking of:
+      - What was added
+      - What was modified
+      - Data sources and confidence
+      - Next recommended actions
+
+  error_recovery:
+    version: "2.0"
+    template: |
+      Handle this error gracefully and suggest recovery actions.
+      
+      Error: {{error_message}}
+      Error Type: {{error_type}}
+      Failed Agent: {{failed_agent}}
+      Task State: {{task_state}}
+      User Context: {{user_context}}
+      
+      Analyze:
+      1. Severity of the error (critical/moderate/minor)
+      2. Impact on user's task
+      3. Available recovery options
+      4. Whether to retry, fallback, or escalate
+      
+      Provide:
+      1. User-friendly error explanation
+      2. Specific recovery action to take
+      3. Alternative approach if available
+      4. Timeline for resolution
+      
+      Keep response helpful and reassuring.
+
+# Error Handling and Monitoring
+errorHandling:
+  logLevel: "info"
+  
+  criticalErrors:
+    - "agent_orchestration_failure"
+    - "context_corruption"
+    - "routing_system_down"
+  
+  retryableErrors:
+    - "agent_timeout"
+    - "network_timeout"
+    - "temporary_agent_unavailable"
+  
+  fallbackActions:
+    - error: "specialist_agent_unavailable"
+      fallback: "route_to_general_assistant"
+    
+    - error: "context_sync_failed"
+      fallback: "rebuild_context_from_logs"
+
+# Monitoring and Analytics
+monitoring:
+  enabled: true
+  
+  metrics:
+    - "task_completion_rate"
+    - "routing_accuracy"
+    - "agent_utilization"
+    - "user_satisfaction"
+    - "error_recovery_success"
+  
+  alerts:
+    - condition: "completion_rate < 0.85"
+      action: "review_orchestration_logic"
+      severity: "high"
+    
+    - condition: "routing_accuracy < 0.9"
+      action: "improve_intent_analysis"
+      severity: "medium"
+
+# Integration Settings
+integrations:
+  # Agent management
+  agentRegistry:
+    enabled: true
+    healthCheckInterval: 30000
+    
+  # Task tracking
+  taskDatabase:
+    enabled: true
+    persistTasks: true
+    
+  # Performance monitoring
+  performanceTracker:
+    enabled: true
+    trackAgentMetrics: true
+
+# Development and Testing
+development:
+  debugMode: false
+  verboseLogging: true  # Orchestrator needs detailed logging
+  
+  testData:
+    sampleIntent: "soi_filing"
+    sampleMessage: "I need to file my Statement of Information"
+    sampleAgents: ["SOISpecialistAgent", "GeneralAssistantAgent"]
+  
+  mockServices:
+    enabled: false
+    responseDelay: 1000

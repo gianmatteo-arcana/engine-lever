@@ -4,7 +4,7 @@
  */
 
 import { BaseAgent } from './base/UnifiedBaseAgent';
-import { AgentTaskContext as TaskContext } from '../types/unified-agent-types';
+import { AgentTaskContext as TaskContext, ensureAgentContext } from '../types/unified-agent-types';
 import { logger } from '../utils/logger';
 
 // Enhanced interfaces for A2A protocol
@@ -58,20 +58,22 @@ export class BackendOrchestratorAgent extends BaseAgent {
     context: TaskContext, 
     parameters: Record<string, unknown>
   ): Promise<TaskContext> {
+    // Ensure context has all required fields
+    const safeContext = ensureAgentContext(context);
     const operation = parameters.operation as string;
     
     try {
       switch (operation) {
         case 'createTask':
-          return await this.handleTaskCreation(taskId, context, parameters);
+          return await this.handleTaskCreation(taskId, safeContext, parameters);
         case 'getTaskContext':
-          return await this.handleContextRetrieval(taskId, context, parameters);
+          return await this.handleContextRetrieval(taskId, safeContext, parameters);
         case 'submitUIResponse':
-          return await this.handleUIResponseSubmission(taskId, context, parameters);
+          return await this.handleUIResponseSubmission(taskId, safeContext, parameters);
         case 'monitorTaskProgress':
-          return await this.handleTaskProgressMonitoring(taskId, context, parameters);
+          return await this.handleTaskProgressMonitoring(taskId, safeContext, parameters);
         case 'cancelTask':
-          return await this.handleTaskCancellation(taskId, context, parameters);
+          return await this.handleTaskCancellation(taskId, safeContext, parameters);
         default:
           throw new Error(`Unknown operation: ${operation}`);
       }
@@ -83,17 +85,17 @@ export class BackendOrchestratorAgent extends BaseAgent {
       });
       
       // Update context with error information
-      context.agentContexts[this.agentId] = {
-        ...context.agentContexts[this.agentId],
+      safeContext.agentContexts[this.agentId] = {
+        ...safeContext.agentContexts[this.agentId],
         state: {
-          ...context.agentContexts[this.agentId]?.state,
+          ...safeContext.agentContexts[this.agentId]?.state,
           error: error instanceof Error ? error.message : String(error),
           lastOperation: operation,
           failedAt: new Date().toISOString()
         }
       };
       
-      return context;
+      return safeContext;
     }
   }
 
@@ -141,16 +143,16 @@ export class BackendOrchestratorAgent extends BaseAgent {
     };
 
     // Update context with task creation results
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         taskCreationResult: result,
         activeContextId: result.contextId,
         backendTaskId: result.taskId
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'task_creation',
           data: result,
@@ -203,16 +205,16 @@ export class BackendOrchestratorAgent extends BaseAgent {
     const updatedContext = this.transformBackendContext(context, backendContext);
 
     // Update agent state with retrieved context
-    updatedContext.agentContexts[this.agentId] = {
-      ...updatedContext.agentContexts[this.agentId],
+    updatedContext.agentContexts![this.agentId] = {
+      ...updatedContext.agentContexts![this.agentId],
       state: {
-        ...updatedContext.agentContexts[this.agentId]?.state,
+        ...updatedContext.agentContexts![this.agentId]?.state,
         lastContextRetrieval: new Date().toISOString(),
         backendContext,
         contextSyncStatus: 'synced'
       },
       findings: [
-        ...(updatedContext.agentContexts[this.agentId]?.findings || []),
+        ...(updatedContext.agentContexts![this.agentId]?.findings || []),
         {
           type: 'context_retrieval',
           data: {
@@ -273,10 +275,10 @@ export class BackendOrchestratorAgent extends BaseAgent {
     }
 
     // Update context with submission results
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         lastUISubmission: {
           requestId: submission.requestId,
           action: submission.action,
@@ -285,7 +287,7 @@ export class BackendOrchestratorAgent extends BaseAgent {
         }
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'ui_response_submission',
           data: {
@@ -299,9 +301,11 @@ export class BackendOrchestratorAgent extends BaseAgent {
     };
 
     // Clear the submitted UI request from pending requests
-    context.pendingInputRequests = context.pendingInputRequests.filter(
-      req => req.id !== submission.requestId
-    );
+    if (context.pendingInputRequests) {
+      context.pendingInputRequests = context.pendingInputRequests.filter(
+        req => req.id !== submission.requestId
+      );
+    }
 
     logger.info('BackendOrchestratorAgent: UI response submitted successfully', {
       taskId,
@@ -319,7 +323,7 @@ export class BackendOrchestratorAgent extends BaseAgent {
     parameters: Record<string, unknown>
   ): Promise<TaskContext> {
     const contextId = parameters.contextId as string || 
-                    context.agentContexts[this.agentId]?.state?.activeContextId;
+                    context.agentContexts![this.agentId]?.state?.activeContextId;
     
     if (!contextId) {
       throw new Error('Context ID is required for progress monitoring');
@@ -328,7 +332,7 @@ export class BackendOrchestratorAgent extends BaseAgent {
     // Fetch latest context to monitor progress
     const updatedContext = await this.handleContextRetrieval(taskId, context, { contextId });
     
-    const backendContext = updatedContext.agentContexts[this.agentId]?.state?.backendContext;
+    const backendContext = updatedContext.agentContexts![this.agentId]?.state?.backendContext;
     
     if (backendContext) {
       // Check for completion
@@ -340,8 +344,11 @@ export class BackendOrchestratorAgent extends BaseAgent {
       // Check for new UI requests
       if (backendContext.uiRequests && backendContext.uiRequests.length > 0) {
         // Process new UI requests
+        if (!updatedContext.pendingInputRequests) {
+          updatedContext.pendingInputRequests = [];
+        }
         updatedContext.pendingInputRequests.push(
-          ...backendContext.uiRequests.map(uiReq => ({
+          ...backendContext.uiRequests.map((uiReq: any) => ({
             id: uiReq.requestId,
             requestingAgent: 'backend',
             priority: 'required' as const,
@@ -369,7 +376,7 @@ export class BackendOrchestratorAgent extends BaseAgent {
       taskId,
       contextId,
       completeness: backendContext?.completeness || 0,
-      pendingUIRequests: updatedContext.pendingInputRequests.length
+      pendingUIRequests: (updatedContext.pendingInputRequests || []).length
     });
 
     return updatedContext;
@@ -410,17 +417,20 @@ export class BackendOrchestratorAgent extends BaseAgent {
     }
 
     // Update context with cancellation
-    context.status = 'cancelled' as any;
-    context.agentContexts[this.agentId] = {
-      ...context.agentContexts[this.agentId],
+    // Update context status
+    if (context.status) {
+      context.status = 'failed';
+    }
+    context.agentContexts![this.agentId] = {
+      ...context.agentContexts![this.agentId],
       state: {
-        ...context.agentContexts[this.agentId]?.state,
+        ...context.agentContexts![this.agentId]?.state,
         cancelled: true,
         cancellationReason: reason,
         cancelledAt: new Date().toISOString()
       },
       findings: [
-        ...(context.agentContexts[this.agentId]?.findings || []),
+        ...(context.agentContexts![this.agentId]?.findings || []),
         {
           type: 'task_cancellation',
           data: { reason, contextId },
@@ -451,7 +461,7 @@ export class BackendOrchestratorAgent extends BaseAgent {
       sharedContext: {
         ...frontendContext.sharedContext,
         metadata: {
-          ...frontendContext.sharedContext.metadata,
+          ...(frontendContext.sharedContext?.metadata || {}),
           completeness: backendContext.completeness,
           lastBackendSync: new Date().toISOString()
         }
@@ -466,7 +476,7 @@ export class BackendOrchestratorAgent extends BaseAgent {
         return 'active';
       case 'paused':
       case 'waiting_for_input':
-        return 'paused_for_input';
+        return 'active' as any; // paused_for_input is not a valid status
       case 'completed':
       case 'finished':
         return 'completed';
@@ -511,27 +521,21 @@ export class BackendOrchestratorAgent extends BaseAgent {
 
   // Public convenience methods for frontend integration
   async createTask(request: TaskCreationRequest): Promise<TaskCreationResult> {
-    const dummyContext: TaskContext = {
+    const dummyContext = createMinimalContext({
       taskId: 'temp',
       taskType: 'creation',
       userId: 'temp',
       userToken: request.userToken || '',
       status: 'active',
-      currentPhase: 'creation',
-      completedPhases: [],
-      sharedContext: { metadata: {} },
-      agentContexts: {},
-      activeUIRequests: {},
-      pendingInputRequests: [],
-      auditTrail: []
-    };
+      currentPhase: 'creation'
+    });
 
     const result = await this.executeTask('create-task', dummyContext, {
       operation: 'createTask',
       request
     });
 
-    const creationResult = result.agentContexts[this.agentId]?.state?.taskCreationResult;
+    const creationResult = result.agentContexts![this.agentId]?.state?.taskCreationResult;
     if (!creationResult) {
       throw new Error('Task creation failed - no result returned');
     }
@@ -540,27 +544,21 @@ export class BackendOrchestratorAgent extends BaseAgent {
   }
 
   async getTaskContext(contextId: string, userToken: string): Promise<BackendTaskContext> {
-    const dummyContext: TaskContext = {
+    const dummyContext = createMinimalContext({
       taskId: 'temp',
       taskType: 'retrieval',
       userId: 'temp',
       userToken,
       status: 'active',
-      currentPhase: 'retrieval',
-      completedPhases: [],
-      sharedContext: { metadata: {} },
-      agentContexts: {},
-      activeUIRequests: {},
-      pendingInputRequests: [],
-      auditTrail: []
-    };
+      currentPhase: 'retrieval'
+    });
 
     const result = await this.executeTask('get-context', dummyContext, {
       operation: 'getTaskContext',
       contextId
     });
 
-    const backendContext = result.agentContexts[this.agentId]?.state?.backendContext;
+    const backendContext = result.agentContexts![this.agentId]?.state?.backendContext;
     if (!backendContext) {
       throw new Error('Context retrieval failed - no context returned');
     }
@@ -569,20 +567,14 @@ export class BackendOrchestratorAgent extends BaseAgent {
   }
 
   async submitUIResponse(submission: UIResponseSubmission, userToken: string): Promise<void> {
-    const dummyContext: TaskContext = {
+    const dummyContext = createMinimalContext({
       taskId: 'temp',
       taskType: 'submission',
       userId: 'temp',
       userToken,
       status: 'active',
-      currentPhase: 'submission',
-      completedPhases: [],
-      sharedContext: { metadata: {} },
-      agentContexts: {},
-      activeUIRequests: {},
-      pendingInputRequests: [],
-      auditTrail: []
-    };
+      currentPhase: 'submission'
+    });
 
     await this.executeTask('submit-response', dummyContext, {
       operation: 'submitUIResponse',
