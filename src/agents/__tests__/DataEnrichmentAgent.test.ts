@@ -53,10 +53,22 @@ describe('DataEnrichmentAgent', () => {
       history: [],
       templateSnapshot: {
         id: 'template-123',
-        name: 'Onboarding',
         version: '1.0.0',
-        steps: []
-      },
+        metadata: {
+          name: 'Onboarding',
+          description: 'Onboarding template',
+          category: 'onboarding'
+        },
+        goals: {
+          primary: [],
+          secondary: []
+        },
+        phases: [],
+        monitoring: {
+          checkpoints: [],
+          successCriteria: []
+        }
+      } as any,
       
       // Agent-specific fields
       taskId: 'test-task-123',
@@ -88,7 +100,7 @@ describe('DataEnrichmentAgent', () => {
         email: 'john@acmecorp.com'
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       expect(agentState).toBeDefined();
       expect(agentState.state.domainAnalysis).toBeDefined();
       expect(agentState.state.domainAnalysis.domain).toBe('acmecorp.com');
@@ -104,7 +116,7 @@ describe('DataEnrichmentAgent', () => {
         email: 'john@gmail.com'
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       expect(agentState.state.domainAnalysis.domain).toBe('gmail.com');
       expect(agentState.state.domainAnalysis.isPersonalEmail).toBe(true);
       expect(agentState.state.domainAnalysis.suggestedBusinessName).toBeNull();
@@ -116,7 +128,7 @@ describe('DataEnrichmentAgent', () => {
         operation: 'domainAnalysis'
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       expect(agentState).toBeDefined();
       expect(agentState.state.error).toBe('Email is required for domain analysis');
       expect(agentState.state.lastOperation).toBe('domainAnalysis');
@@ -148,7 +160,7 @@ describe('DataEnrichmentAgent', () => {
         businessName: 'Acme Corporation'
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       expect(agentState.state.publicRecordsResult).toBeDefined();
       expect(agentState.state.publicRecordsResult.found).toBe(true);
       expect(agentState.state.publicRecordsResult.business?.name).toBe('Acme Corporation');
@@ -168,7 +180,7 @@ describe('DataEnrichmentAgent', () => {
         businessName: 'Nonexistent Corp'
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       expect(agentState.state.publicRecordsResult.found).toBe(false);
       expect(agentState.state.publicRecordsResult.confidence).toBe(0.8);
     });
@@ -178,7 +190,7 @@ describe('DataEnrichmentAgent', () => {
         operation: 'publicRecordsSearch'
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       expect(agentState).toBeDefined();
       expect(agentState.state.error).toBe('Business name is required for public records search');
       expect(agentState.state.lastOperation).toBe('publicRecordsSearch');
@@ -189,7 +201,7 @@ describe('DataEnrichmentAgent', () => {
   describe('Business Inference', () => {
     beforeEach(() => {
       // Set up context with domain analysis and public records
-      mockContext.agentContexts[agent['agentId']] = {
+      mockContext.agentContexts![agent['agentId']] = {
         state: {
           domainAnalysis: {
             domain: 'techstartup.io',
@@ -214,7 +226,7 @@ describe('DataEnrichmentAgent', () => {
         operation: 'businessInference'
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       expect(agentState.state.businessInference).toBeDefined();
       expect(agentState.state.businessInference.businessType).toBe('tech_startup');
       expect(agentState.state.businessInference.probableStructure).toBe('C-Corporation');
@@ -228,7 +240,7 @@ describe('DataEnrichmentAgent', () => {
         operation: 'businessInference'
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       expect(agentState.state.businessInference.confidence).toBeGreaterThan(0.5);
       expect(agentState.state.businessInference.confidence).toBeLessThan(1.0);
     });
@@ -248,7 +260,7 @@ describe('DataEnrichmentAgent', () => {
         oauthData
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       expect(agentState.state.enrichedUserData).toBeDefined();
       expect(agentState.state.enrichedUserData.userInfo.firstName).toBe('John');
       expect(agentState.state.enrichedUserData.userInfo.lastName).toBe('Smith');
@@ -270,7 +282,7 @@ describe('DataEnrichmentAgent', () => {
         oauthData
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       expect(agentState.state.enrichedUserData.confidence).toBe(0.6);
     });
 
@@ -279,7 +291,7 @@ describe('DataEnrichmentAgent', () => {
         operation: 'oauthProcessing'
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       expect(agentState).toBeDefined();
       expect(agentState.state.error).toBe('OAuth data is required for processing');
       expect(agentState.state.lastOperation).toBe('oauthProcessing');
@@ -308,7 +320,7 @@ describe('DataEnrichmentAgent', () => {
         oauthData
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       
       // Should have all enrichment data
       expect(agentState.state.enrichedUserData).toBeDefined();
@@ -333,8 +345,8 @@ describe('DataEnrichmentAgent', () => {
       });
 
       // Should generate UI request for confirmation
-      expect(Object.keys(result.activeUIRequests)).toContain(agent['agentId']);
-      expect(result.pendingInputRequests.length).toBeGreaterThan(0);
+      expect(Object.keys(result.activeUIRequests || {})).toContain(agent['agentId']);
+      expect((result.pendingInputRequests || []).length).toBeGreaterThan(0);
     });
   });
 
@@ -344,7 +356,7 @@ describe('DataEnrichmentAgent', () => {
         operation: 'unknownOperation'
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       expect(agentState.state.error).toContain('Unknown operation: unknownOperation');
       expect(agentState.state.lastOperation).toBe('unknownOperation');
       expect(agentState.state.failedAt).toBeDefined();
@@ -358,7 +370,7 @@ describe('DataEnrichmentAgent', () => {
         businessName: 'Test Corp'
       });
 
-      const agentState = result.agentContexts[agent['agentId']];
+      const agentState = result.agentContexts![agent['agentId']];
       expect(agentState.state.error).toBeDefined();
     });
   });

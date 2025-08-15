@@ -1,29 +1,28 @@
 # Profile Builder Agent Configuration
-# Updated for BaseAgent A2A Protocol Architecture
-# Version: 2.0.0
+# Generic profile assembly and validation specialist
+# Version: 3.0.0
 
 # Agent Identity and Role
 name: "ProfileBuilderAgent"
 role: "profile_builder"
-version: "2.0.0"
-description: "Specialist for building and maintaining complete business profiles"
+version: "3.0.0"
+description: "Generic profile assembly, validation, and completeness tracking specialist"
 
-# Agent Capabilities - WHAT it can do
+# Agent Capabilities - WHAT it can do (generic capabilities only)
 capabilities:
-  - "business_profile_creation"
-  - "data_collection_guidance"
-  - "profile_validation"
-  - "missing_data_identification"
-  - "profile_enrichment"
-  - "document_verification"
+  - "profile_assembly"          # Combine data from multiple sources
+  - "data_validation"           # Validate data format and consistency
+  - "completeness_tracking"     # Track which fields are complete
+  - "missing_field_detection"   # Identify missing required fields
+  - "data_transformation"       # Transform data between formats
+  - "profile_merging"          # Merge profiles from different sources
 
-# Tool Requirements - WHAT tools it needs
+# Tool Requirements - WHAT tools it needs (generic tools only)
 toolRequirements:
-  - "business_enrichment"
-  - "web_search"
-  - "data_validation"
-  - "document_processing"
-  - "ca_sos_search"
+  - "data_validation"      # Validate data formats
+  - "data_transformation"  # Transform between formats
+  - "document_processing"  # Process uploaded documents
+  - "data_enrichment"      # Enrich profiles with additional data
 
 # A2A Protocol Configuration
 a2a:
