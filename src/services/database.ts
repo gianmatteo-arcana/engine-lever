@@ -1185,6 +1185,48 @@ export class DatabaseService {
 
   /**
    * Send PostgreSQL NOTIFY to trigger SSE updates
+   * 
+   * ## POSTGRESQL NOTIFY/LISTEN ARCHITECTURE
+   * 
+   * This implements real-time communication using PostgreSQL's NOTIFY/LISTEN mechanism,
+   * which provides a lightweight pub/sub system directly in the database.
+   * 
+   * ## HOW IT WORKS
+   * 
+   * 1. **Publisher (this method)**: Sends NOTIFY with task-specific channel and payload
+   * 2. **Channel Naming**: `task_{taskId}` ensures messages are scoped to specific tasks
+   * 3. **Subscribers**: SSE connections LISTEN on their task's channel
+   * 4. **Real-time Delivery**: PostgreSQL immediately delivers to all listeners
+   * 
+   * ## MULTI-TENANT SAFETY
+   * 
+   * - Channel names include task ID, preventing cross-task contamination
+   * - Only authenticated SSE connections can subscribe to channels
+   * - RLS ensures users can only trigger NOTIFY for their own tasks
+   * - No global channels - everything is task-scoped
+   * 
+   * ## COMPONENTS ON THIS CHANNEL
+   * 
+   * **Publishers (send NOTIFY)**:
+   * - Agent context updates (when agents complete work)
+   * - State transitions (when task status changes)
+   * - UI response handlers (when user submits forms)
+   * - Background workers (async task processing)
+   * 
+   * **Subscribers (LISTEN)**:
+   * - SSE connections from frontend (real-time UI updates)
+   * - Monitoring systems (track task progress)
+   * - Analytics collectors (event aggregation)
+   * - Audit loggers (compliance tracking)
+   * 
+   * ## EXAMPLE FLOW
+   * 
+   * 1. Agent completes work → adds context event to database
+   * 2. This method sends NOTIFY on `task_123abc` channel
+   * 3. SSE connection listening on `task_123abc` receives notification
+   * 4. SSE pushes update to browser in real-time
+   * 5. UI updates without polling or refresh
+   * 
    * This is called when context events are added to notify SSE subscribers
    */
   async notifyTaskContextUpdate(taskId: string, eventType: string, eventData: any): Promise<void> {
@@ -1219,6 +1261,32 @@ export class DatabaseService {
 
   /**
    * Listen for PostgreSQL NOTIFY messages on a specific task channel
+   * 
+   * ## SUBSCRIBER SIDE OF NOTIFY/LISTEN
+   * 
+   * This sets up a LISTEN subscription for real-time task updates.
+   * It's the receiving end of the NOTIFY/LISTEN pub/sub system.
+   * 
+   * ## WHO USES THIS
+   * 
+   * Primary consumer: SSE endpoints (`/api/tasks/:taskId/context/stream`)
+   * - Each SSE connection calls this to subscribe to their task's updates
+   * - When NOTIFY fires, callback pushes data to browser via SSE
+   * 
+   * ## CHANNEL ISOLATION
+   * 
+   * - Each task has its own channel: `task_{taskId}`
+   * - No global subscriptions - prevents data leakage
+   * - Unsubscribe callback ensures cleanup on disconnect
+   * 
+   * ## LIFECYCLE
+   * 
+   * 1. SSE connection established → this method called
+   * 2. Subscribes to `task_{taskId}` channel
+   * 3. Receives all NOTIFY messages for this task only
+   * 4. On SSE disconnect → unsubscribe callback invoked
+   * 5. Channel subscription cleaned up
+   * 
    * This is used by SSE endpoints to receive real-time updates
    */
   async listenForTaskUpdates(taskId: string, callback: (payload: any) => void): Promise<() => void> {

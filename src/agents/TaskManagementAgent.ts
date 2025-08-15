@@ -6,7 +6,7 @@
 import { BaseAgent } from './base/UnifiedBaseAgent';
 import { AgentTaskContext as TaskContext, ensureAgentContext, createMinimalContext } from '../types/unified-agent-types';
 import { logger } from '../utils/logger';
-import { supabase } from '../services/supabase';
+import { DatabaseService } from '../services/database';
 
 // Enhanced interfaces for A2A protocol
 interface Task {

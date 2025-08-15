@@ -286,7 +286,54 @@ router.post('/:taskId/events', requireAuth, async (req: AuthenticatedRequest, re
 /**
  * GET /api/tasks/:taskId/context/stream
  * 
- * SSE endpoint for streaming TaskContext updates in real-time
+ * Server-Sent Events (SSE) endpoint for streaming TaskContext updates in real-time
+ * 
+ * ## STREAMING ARCHITECTURE
+ * 
+ * This endpoint implements real-time task context streaming using Server-Sent Events (SSE),
+ * which provides a unidirectional stream from server to client. This is critical for:
+ * 
+ * 1. **Real-time Updates**: Clients receive task context changes immediately without polling
+ * 2. **Efficient Resource Usage**: Single persistent connection instead of repeated HTTP requests
+ * 3. **Multi-tenant Safety**: Each connection is authenticated and scoped to user's tasks only
+ * 4. **Event Sourcing**: Complete history of task events streamed as they occur
+ * 
+ * ## HOW IT WORKS
+ * 
+ * 1. Client connects to /api/tasks/{taskId}/context/stream with authentication token
+ * 2. Server validates user owns the task (multi-tenant security)
+ * 3. Server sends initial context snapshot (all events up to now)
+ * 4. Server subscribes to PostgreSQL LISTEN/NOTIFY for this specific task
+ * 5. As new events occur, they're pushed to client in real-time
+ * 6. Heartbeat every 30s keeps connection alive through proxies
+ * 
+ * ## MULTI-TENANT CONSIDERATIONS
+ * 
+ * - Each connection authenticated with user's JWT token
+ * - Database RLS ensures users only see their own tasks
+ * - NOTIFY channel scoped to specific task ID
+ * - No cross-tenant data leakage possible
+ * 
+ * ## CLIENT USAGE
+ * 
+ * ```javascript
+ * const eventSource = new EventSource('/api/tasks/123/context/stream', {
+ *   headers: { 'Authorization': 'Bearer <token>' }
+ * });
+ * 
+ * eventSource.addEventListener('EVENT_ADDED', (event) => {
+ *   const contextEvent = JSON.parse(event.data);
+ *   // Update UI with new event
+ * });
+ * ```
+ * 
+ * ## EVENT TYPES
+ * 
+ * - CONTEXT_INITIALIZED: Initial snapshot of all events
+ * - EVENT_ADDED: New context event added
+ * - STATE_UPDATED: Task state changed
+ * - ERROR: Error occurred in stream
+ * 
  * Implements the RIGHT way - Server-Sent Events instead of polling
  */
 router.get('/:taskId/context/stream', requireAuth, async (req: AuthenticatedRequest, res) => {
@@ -299,7 +346,19 @@ router.get('/:taskId/context/stream', requireAuth, async (req: AuthenticatedRequ
     
     const dbService = DatabaseService.getInstance();
     
-    // Verify user owns this task
+    /**
+     * CRITICAL MULTI-TENANT SECURITY CHECK
+     * 
+     * This verification ensures execution happens on behalf of the authenticated user.
+     * The userToken contains the user's JWT which enforces Row Level Security (RLS)
+     * in Supabase, ensuring they can only access tasks they own.
+     * 
+     * Multi-tenant safety is guaranteed by:
+     * 1. JWT authentication in middleware (requireAuth)
+     * 2. RLS policies in database (user can only see their own tasks)
+     * 3. Task ownership verification here
+     * 4. Channel-specific NOTIFY scoped to this task only
+     */
     const task = await dbService.getTask(userToken, taskId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });

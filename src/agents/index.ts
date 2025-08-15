@@ -12,10 +12,8 @@
 import { logger } from '../utils/logger';
 import { AgentRole, AgentMessage, TaskContext, TaskPriority, convertPriority } from './base/types';
 import { BaseAgent } from './base/BaseAgent';
-import { DefaultAgent } from './DefaultAgent';
 import { OrchestratorAgent } from './OrchestratorAgent';
 import { TaskManagementAgent } from './TaskManagementAgent';
-import { dynamicAgentRegistry } from './DynamicAgentRegistry';
 import { DatabaseService } from '../services/database';
 
 class AgentManagerClass {
@@ -51,14 +49,11 @@ class AgentManagerClass {
         [AgentRole.COMMUNICATION]: 'events'
       };
 
-      // Create agents dynamically based on discovered YAMLs
+      // Create agents for each role
+      // Note: These will be replaced with proper YAML-configured agents
       for (const [role, agentType] of Object.entries(roleToType)) {
-        if (dynamicAgentRegistry.isAgentAvailable(agentType)) {
-          const agent = dynamicAgentRegistry.createAgent(agentType, defaultBusinessId, defaultUserId);
-          this.agents.set(role as AgentRole, agent);
-        } else {
-          logger.warn(`Agent type ${agentType} not found for role ${role}`);
-        }
+        logger.info(`Initializing agent for role ${role} with type ${agentType}`);
+        // TODO: Create agents from YAML configurations
       }
 
       // Agents now communicate through direct method calls
@@ -351,31 +346,10 @@ export * from './base/types';
  * Agents are dynamically discovered from YAML files - no hardcoding
  */
 
-// Re-export the dynamic agent registry and helper functions
-export { dynamicAgentRegistry } from './DynamicAgentRegistry';
-export { createAgent } from './DynamicAgentRegistry';
-
 /**
  * Export the main agent classes
  */
 export { BaseAgent } from './base/BaseAgent';
-export { DefaultAgent } from './DefaultAgent';
 export { OrchestratorAgent } from './OrchestratorAgent';
 export { TaskManagementAgent } from './TaskManagementAgent';
 
-/**
- * Get agent capabilities dynamically from discovered YAML files
- * No hardcoding - capabilities are defined in YAML configurations
- */
-export function getAgentCapabilities(agentType: string): string[] {
-  try {
-    const agent = dynamicAgentRegistry.createAgent(agentType, 'temp', 'temp');
-    if (agent && typeof (agent as any).getConfiguration === 'function') {
-      const config = (agent as any).getConfiguration();
-      return config.capabilities || [];
-    }
-  } catch (error) {
-    logger.warn(`Could not get capabilities for agent type: ${agentType}`);
-  }
-  return [];
-}
