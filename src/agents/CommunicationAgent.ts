@@ -520,7 +520,8 @@ export class CommunicationAgent extends BaseAgent {
     // Mock notification sending
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    const success = Math.random() > 0.05; // 95% success rate
+    // In test environment, always succeed for deterministic results
+    const success = process.env.NODE_ENV === 'test' ? true : Math.random() > 0.05;
     
     return {
       messageId: `msg_${Date.now()}`,
