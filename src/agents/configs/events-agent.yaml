@@ -1,0 +1,360 @@
+# Events Agent Configuration
+# Migrated from TaskOrchestrationEventsService to BaseAgent A2A Protocol
+# Version: 1.0.0
+
+# Agent Identity and Role
+name: "EventsAgent"
+role: "events_management"
+version: "1.0.0"
+description: "Event handling, monitoring, and metrics specialist for task orchestration"
+
+# Agent Capabilities - WHAT it can do
+capabilities:
+  - "event_emission"
+  - "event_subscription"
+  - "real_time_monitoring"
+  - "metrics_collection"
+  - "performance_tracking"
+  - "alert_management"
+
+# Tool Requirements - WHAT tools it needs
+toolRequirements:
+  - "event_emitter"
+  - "metrics_collector"
+  - "data_validation"
+
+# A2A Protocol Configuration
+a2a:
+  protocolVersion: "1.0.0"
+  communicationMode: "async"
+  messageFormats:
+    - "json"
+    - "yaml"
+  
+  # Inter-agent communication settings
+  routing:
+    canReceiveFrom:
+      - "TaskOrchestratorAgent"
+      - "TaskManagementAgent"
+      - "DataEnrichmentAgent"
+      - "ProfileBuilderAgent"
+      - "ComplianceAdvisorAgent"
+      - "BackendOrchestratorAgent"
+    canSendTo:
+      - "TaskOrchestratorAgent"
+      - "NotificationAgent"
+      - "UIGeneratorAgent"
+  
+  # Message handling
+  messageHandling:
+    bufferSize: 500  # High volume of events
+    timeoutMs: 5000  # Events should be fast
+    retryEnabled: true
+
+# Task Execution Configuration
+execution:
+  maxConcurrentTasks: 50  # Can handle many events simultaneously
+  timeoutMs: 15000
+  
+  retryStrategy:
+    maxRetries: 3
+    backoffMs: 100  # Quick retries for events
+    exponentialBackoff: false
+  
+  # Performance settings
+  performance:
+    cachingEnabled: true
+    cacheExpiryMs: 60000  # 1 minute for event data
+    batchProcessing: true
+    maxBatchSize: 20
+
+# Context and State Management
+context:
+  persistence: true
+  shareLevel: "global"  # Events are system-wide
+  
+  # What context keys this agent manages
+  contextKeys:
+    - "activeSubscriptions"
+    - "eventMetrics"
+    - "performanceData"
+    - "alertState"
+  
+  # Context transformation rules
+  transformations:
+    - input: "eventData.type"
+      output: "eventMetrics.eventType"
+      validation: "required|string"
+    
+    - input: "eventData.timestamp"
+      output: "eventMetrics.timestamp"
+      validation: "required|iso8601"
+    
+    - input: "performanceData.duration"
+      output: "performanceData.processingTime"
+      validation: "required|number|min:0"
+
+# UI Augmentation Settings
+ui:
+  enableAugmentation: true
+  
+  augmentationTypes:
+    - "real_time_updates"
+    - "performance_dashboards"
+    - "event_logs"
+    - "alert_notifications"
+  
+  progressReporting: true
+  
+  # UI generation rules
+  formGeneration:
+    eventDashboard:
+      title: "System Events & Performance"
+      description: "Real-time monitoring of task orchestration"
+      
+      sections:
+        - title: "Active Events"
+          fields:
+            - field: "eventCount"
+              label: "Events This Hour"
+              type: "number"
+              help: "Total events processed in the last hour"
+            
+            - field: "avgProcessingTime"
+              label: "Average Processing Time"
+              type: "duration"
+              help: "Average time to process events"
+            
+            - field: "errorRate"
+              label: "Error Rate"
+              type: "percentage"
+              help: "Percentage of events that failed"
+      
+      quickActions:
+        - id: "view_event_log"
+          label: "View Event Log"
+          action: "display_event_history"
+          icon: "list"
+        
+        - id: "export_metrics"
+          label: "Export Metrics"
+          action: "export_performance_data"
+          icon: "download"
+
+# Workflow and Task Definitions
+workflows:
+  eventEmission:
+    description: "Emit events to subscribers with proper routing"
+    
+    steps:
+      - name: "validate_event_data"
+        action: "validate_event_structure"
+        required: true
+        
+      - name: "identify_subscribers"
+        action: "find_event_subscribers"
+        
+      - name: "emit_to_subscribers"
+        action: "broadcast_event"
+        
+      - name: "track_emission_metrics"
+        action: "record_event_metrics"
+    
+    outputs:
+      - "eventMetrics.emissionCount"
+      - "eventMetrics.subscriberReach"
+      - "eventMetrics.emissionLatency"
+
+  eventSubscription:
+    description: "Manage event subscriptions and routing"
+    
+    steps:
+      - name: "validate_subscription"
+        action: "validate_subscription_request"
+        
+      - name: "register_subscriber"
+        action: "add_to_subscription_list"
+        
+      - name: "setup_routing"
+        action: "configure_event_routing"
+        
+      - name: "confirm_subscription"
+        action: "send_subscription_confirmation"
+    
+    outputs:
+      - "activeSubscriptions.subscriberId"
+      - "activeSubscriptions.eventTypes"
+      - "activeSubscriptions.routingConfig"
+
+  metricsCollection:
+    description: "Collect and aggregate performance metrics"
+    
+    steps:
+      - name: "gather_event_data"
+        action: "collect_event_metrics"
+        
+      - name: "calculate_aggregates"
+        action: "compute_performance_stats"
+        
+      - name: "identify_trends"
+        action: "analyze_performance_trends"
+        
+      - name: "generate_reports"
+        action: "create_metrics_reports"
+    
+    outputs:
+      - "performanceData.eventCounts"
+      - "performanceData.latencyStats"
+      - "performanceData.errorAnalysis"
+
+  alertManagement:
+    description: "Monitor conditions and manage alerts"
+    
+    steps:
+      - name: "evaluate_conditions"
+        action: "check_alert_conditions"
+        
+      - name: "trigger_alerts"
+        action: "send_alert_notifications"
+        
+      - name: "track_alert_state"
+        action: "update_alert_status"
+        
+      - name: "escalate_if_needed"
+        action: "handle_alert_escalation"
+    
+    outputs:
+      - "alertState.activeAlerts"
+      - "alertState.alertHistory"
+      - "alertState.escalationLevel"
+
+# Agent Prompt Templates (Legacy Compatibility)
+prompts:
+  main:
+    version: "1.0"
+    template: |
+      You are an events management specialist handling real-time monitoring and metrics.
+      
+      Event Type: {{event_type}}
+      Current Load: {{current_load}}
+      
+      Your responsibilities:
+      1. Emit events to appropriate subscribers
+      2. Collect and analyze performance metrics
+      3. Monitor system health and trigger alerts
+      4. Provide real-time updates to UI components
+      
+      Ensure low latency and high reliability for all event operations.
+  
+  event_processing:
+    version: "1.0"
+    template: |
+      Process and route this event:
+      
+      Event Data: {{event_data}}
+      Event Type: {{event_type}}
+      Source Agent: {{source_agent}}
+      
+      Processing steps:
+      1. Validate event structure and required fields
+      2. Identify all subscribers for this event type
+      3. Apply any event transformations needed
+      4. Emit to subscribers with proper error handling
+      5. Record metrics and performance data
+      
+      Return emission results and any errors encountered.
+  
+  metrics_analysis:
+    version: "1.0"
+    template: |
+      Analyze performance metrics and identify issues:
+      
+      Time Period: {{time_period}}
+      Metrics Data: {{metrics_data}}
+      
+      Analysis areas:
+      1. Event throughput and latency trends
+      2. Error rates and failure patterns
+      3. Agent performance comparisons
+      4. Resource utilization patterns
+      5. Anomaly detection and alerts
+      
+      Provide actionable insights and recommendations.
+
+# Error Handling and Monitoring
+errorHandling:
+  logLevel: "warn"  # Events generate high volume
+  
+  criticalErrors:
+    - "event_emission_failure"
+    - "subscription_system_down"
+    - "metrics_collection_failed"
+  
+  retryableErrors:
+    - "subscriber_timeout"
+    - "network_congestion"
+    - "temporary_overload"
+  
+  fallbackActions:
+    - error: "subscriber_unreachable"
+      fallback: "queue_for_retry"
+    
+    - error: "metrics_storage_full"
+      fallback: "archive_old_metrics"
+
+# Monitoring and Analytics
+monitoring:
+  enabled: true
+  
+  metrics:
+    - "event_emission_rate"
+    - "subscription_health"
+    - "metrics_collection_accuracy"
+    - "alert_response_time"
+  
+  alerts:
+    - condition: "event_emission_rate > 1000_per_minute"
+      action: "scale_event_processing"
+      severity: "medium"
+    
+    - condition: "subscription_health < 0.95"
+      action: "investigate_subscriber_issues"
+      severity: "high"
+
+# Integration Settings
+integrations:
+  # Event system
+  eventEmitter:
+    enabled: true
+    maxListeners: 1000
+    bufferSize: 10000
+    
+  # Metrics storage
+  metricsDatabase:
+    enabled: true
+    retentionPeriod: "30d"
+    aggregationInterval: "1m"
+    
+  # Real-time channels
+  realTimeChannels:
+    enabled: true
+    channels: ["task_updates", "agent_coordination", "ui_updates"]
+    
+  # Alert systems
+  alerting:
+    enabled: true
+    channels: ["email", "slack", "webhook"]
+
+# Development and Testing
+development:
+  debugMode: false
+  verboseLogging: false  # Events generate too much noise
+  
+  testData:
+    sampleEventType: "task.status.changed"
+    sampleSubscriberId: "sub-123"
+    sampleMetrics: { "count": 100, "avgLatency": 50 }
+  
+  mockServices:
+    enabled: false
+    eventDelay: 10

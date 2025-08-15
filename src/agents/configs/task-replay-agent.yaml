@@ -1,0 +1,359 @@
+# Task Replay Agent Configuration
+# Migrated from TaskReplayService to BaseAgent A2A Protocol
+# Version: 1.0.0
+
+# Agent Identity and Role
+name: "TaskReplayAgent"
+role: "task_replay"
+version: "1.0.0"
+description: "Testing and debugging utility agent for task replay and analysis"
+
+# Agent Capabilities - WHAT it can do
+capabilities:
+  - "task_replay"
+  - "debug_analysis"
+  - "test_data_generation"
+  - "scenario_simulation"
+  - "performance_benchmarking"
+  - "regression_testing"
+
+# Tool Requirements - WHAT tools it needs
+toolRequirements:
+  - "data_validation"
+  - "test_framework"
+  - "performance_profiler"
+
+# A2A Protocol Configuration
+a2a:
+  protocolVersion: "1.0.0"
+  communicationMode: "async"
+  messageFormats:
+    - "json"
+    - "yaml"
+  
+  # Inter-agent communication settings
+  routing:
+    canReceiveFrom:
+      - "TaskOrchestratorAgent"
+      - "EventsAgent"
+    canSendTo:
+      - "TaskOrchestratorAgent"
+      - "EventsAgent"
+      - "UIGeneratorAgent"
+  
+  # Message handling
+  messageHandling:
+    bufferSize: 50
+    timeoutMs: 60000  # Replay operations can be slow
+    retryEnabled: true
+
+# Task Execution Configuration
+execution:
+  maxConcurrentTasks: 3  # Replay is resource intensive
+  timeoutMs: 300000  # 5 minutes for complex replays
+  
+  retryStrategy:
+    maxRetries: 2
+    backoffMs: 5000
+    exponentialBackoff: true
+  
+  # Performance settings
+  performance:
+    cachingEnabled: true
+    cacheExpiryMs: 3600000  # 1 hour for test data
+    batchProcessing: false  # Each replay is independent
+    maxBatchSize: 1
+
+# Context and State Management
+context:
+  persistence: true
+  shareLevel: "private"  # Test data should be isolated
+  
+  # What context keys this agent manages
+  contextKeys:
+    - "replayScenarios"
+    - "testResults"
+    - "performanceMetrics"
+    - "debugInformation"
+  
+  # Context transformation rules
+  transformations:
+    - input: "userInput.taskId"
+      output: "replayScenarios.originalTaskId"
+      validation: "required|string|uuid"
+    
+    - input: "userInput.replayConfig"
+      output: "replayScenarios.configuration"
+      validation: "required|object"
+    
+    - input: "testResults.status"
+      output: "debugInformation.executionStatus"
+      validation: "required|enum:passed,failed,timeout,error"
+
+# UI Augmentation Settings
+ui:
+  enableAugmentation: true
+  
+  augmentationTypes:
+    - "replay_controls"
+    - "debug_dashboard"
+    - "performance_charts"
+    - "test_results_display"
+  
+  progressReporting: true
+  
+  # UI generation rules
+  formGeneration:
+    replayControls:
+      title: "Task Replay & Testing"
+      description: "Debug and analyze task execution patterns"
+      
+      sections:
+        - title: "Replay Configuration"
+          fields:
+            - field: "originalTaskId"
+              label: "Original Task ID"
+              type: "text"
+              required: true
+              help: "ID of the task to replay"
+            
+            - field: "replaySpeed"
+              label: "Replay Speed"
+              type: "select"
+              options:
+                - value: "0.5"
+                  label: "Half Speed (0.5x)"
+                - value: "1.0"
+                  label: "Normal Speed (1.0x)"
+                - value: "2.0"
+                  label: "Double Speed (2.0x)"
+                - value: "10.0"
+                  label: "Fast Forward (10.0x)"
+              help: "Speed multiplier for replay execution"
+            
+            - field: "includeUIEvents"
+              label: "Include UI Events"
+              type: "boolean"
+              defaultValue: true
+              help: "Replay user interface interactions"
+        
+        - title: "Test Scenarios"
+          fields:
+            - field: "errorInjection"
+              label: "Inject Errors"
+              type: "boolean"
+              help: "Simulate errors during replay"
+            
+            - field: "performanceTesting"
+              label: "Performance Testing"
+              type: "boolean"
+              help: "Measure performance during replay"
+      
+      quickActions:
+        - id: "start_replay"
+          label: "Start Replay"
+          action: "begin_task_replay"
+          icon: "play"
+        
+        - id: "export_results"
+          label: "Export Results"
+          action: "export_replay_results"
+          icon: "download"
+
+# Workflow and Task Definitions
+workflows:
+  taskReplay:
+    description: "Replay a previously executed task for debugging"
+    
+    steps:
+      - name: "load_task_history"
+        action: "fetch_original_task_data"
+        required: true
+        
+      - name: "setup_replay_environment"
+        action: "initialize_replay_context"
+        
+      - name: "execute_replay"
+        action: "run_task_replay_sequence"
+        
+      - name: "collect_results"
+        action: "gather_replay_metrics"
+    
+    outputs:
+      - "testResults.replayStatus"
+      - "testResults.executionTime"
+      - "testResults.differences"
+
+  scenarioSimulation:
+    description: "Simulate task execution under different conditions"
+    
+    steps:
+      - name: "define_scenario"
+        action: "create_simulation_scenario"
+        
+      - name: "setup_conditions"
+        action: "configure_simulation_environment"
+        
+      - name: "execute_simulation"
+        action: "run_scenario_simulation"
+        
+      - name: "analyze_results"
+        action: "compare_simulation_outcomes"
+    
+    outputs:
+      - "replayScenarios.scenarioResults"
+      - "replayScenarios.performanceMetrics"
+      - "replayScenarios.recommendations"
+
+  performanceBenchmarking:
+    description: "Benchmark task performance under various conditions"
+    
+    steps:
+      - name: "setup_benchmarks"
+        action: "configure_performance_tests"
+        
+      - name: "run_baseline"
+        action: "execute_baseline_benchmark"
+        
+      - name: "run_variations"
+        action: "execute_benchmark_variations"
+        
+      - name: "analyze_performance"
+        action: "compute_performance_analysis"
+    
+    outputs:
+      - "performanceMetrics.baselineResults"
+      - "performanceMetrics.variationResults"
+      - "performanceMetrics.performanceAnalysis"
+
+# Agent Prompt Templates (Legacy Compatibility)
+prompts:
+  main:
+    version: "1.0"
+    template: |
+      You are a task replay and testing specialist for debugging and analysis.
+      
+      Operation: {{operation_type}}
+      Task ID: {{task_id}}
+      
+      Your capabilities include:
+      1. Replaying tasks to debug execution issues
+      2. Simulating scenarios under different conditions
+      3. Performance benchmarking and analysis
+      4. Generating test data and regression tests
+      
+      Focus on providing actionable insights for debugging and optimization.
+  
+  replay_execution:
+    version: "1.0"
+    template: |
+      Execute task replay with specified configuration:
+      
+      Original Task: {{original_task}}
+      Replay Config: {{replay_config}}
+      
+      Replay process:
+      1. Load original task execution history
+      2. Set up replay environment with same initial conditions
+      3. Execute task steps according to replay speed settings
+      4. Monitor differences from original execution
+      5. Collect performance and debugging metrics
+      
+      Document any deviations or issues encountered.
+  
+  performance_analysis:
+    version: "1.0"
+    template: |
+      Analyze performance data from task execution:
+      
+      Performance Data: {{performance_data}}
+      Baseline Metrics: {{baseline_metrics}}
+      
+      Analysis areas:
+      1. Execution time comparisons
+      2. Resource utilization patterns
+      3. Agent coordination efficiency
+      4. UI response times
+      5. Error rates and recovery times
+      
+      Provide optimization recommendations based on findings.
+
+# Error Handling and Monitoring
+errorHandling:
+  logLevel: "debug"  # Testing needs detailed logging
+  
+  criticalErrors:
+    - "replay_data_corruption"
+    - "simulation_environment_failure"
+    - "benchmark_framework_error"
+  
+  retryableErrors:
+    - "replay_timeout"
+    - "performance_measurement_failed"
+    - "temporary_resource_unavailable"
+  
+  fallbackActions:
+    - error: "replay_data_missing"
+      fallback: "use_synthetic_test_data"
+    
+    - error: "performance_tools_unavailable"
+      fallback: "use_basic_timing_measurements"
+
+# Monitoring and Analytics
+monitoring:
+  enabled: true
+  
+  metrics:
+    - "replay_success_rate"
+    - "simulation_accuracy"
+    - "benchmark_consistency"
+    - "debugging_effectiveness"
+  
+  alerts:
+    - condition: "replay_success_rate < 0.8"
+      action: "review_replay_framework"
+      severity: "medium"
+    
+    - condition: "benchmark_consistency < 0.9"
+      action: "investigate_environment_stability"
+      severity: "high"
+
+# Integration Settings
+integrations:
+  # Test framework
+  testFramework:
+    enabled: true
+    framework: "jest"
+    timeout: 300000
+    
+  # Performance profiling
+  performanceProfiler:
+    enabled: true
+    samplingRate: 100
+    memoryTracking: true
+    
+  # Data storage
+  testDataStorage:
+    enabled: true
+    retentionPeriod: "30d"
+    compressionEnabled: true
+    
+  # Reporting
+  reportGeneration:
+    enabled: true
+    formats: ["json", "html", "csv"]
+
+# Development and Testing
+development:
+  debugMode: true  # This is a debug tool itself
+  verboseLogging: true
+  
+  testData:
+    sampleTaskId: "task-replay-test-123"
+    sampleReplayConfig: { "speed": 1.0, "includeUI": true }
+    sampleScenario: "error_injection_test"
+  
+  mockServices:
+    enabled: true
+    responseDelay: 100
+    errorRate: 0.1

@@ -1182,4 +1182,74 @@ export class DatabaseService {
       subscription.unsubscribe();
     };
   }
+
+  /**
+   * Send PostgreSQL NOTIFY to trigger SSE updates
+   * This is called when context events are added to notify SSE subscribers
+   */
+  async notifyTaskContextUpdate(taskId: string, eventType: string, eventData: any): Promise<void> {
+    try {
+      const serviceClient = this.getServiceClient();
+      
+      // Use PostgreSQL NOTIFY to send real-time updates
+      // The channel name is task-specific to avoid cross-contamination
+      const channelName = `task_${taskId.replace(/-/g, '_')}`;
+      const payload = {
+        type: eventType,
+        taskId,
+        data: eventData,
+        timestamp: new Date().toISOString()
+      };
+
+      // Execute NOTIFY command via RPC function
+      const { error } = await serviceClient.rpc('notify_task_update', {
+        channel_name: channelName,
+        payload: JSON.stringify(payload)
+      });
+
+      if (error) {
+        logger.error('Failed to send NOTIFY', { taskId, channelName, error });
+      } else {
+        logger.debug('Sent PostgreSQL NOTIFY', { taskId, channelName, eventType });
+      }
+    } catch (error) {
+      logger.error('Error sending task context notification', { taskId, eventType, error });
+    }
+  }
+
+  /**
+   * Listen for PostgreSQL NOTIFY messages on a specific task channel
+   * This is used by SSE endpoints to receive real-time updates
+   */
+  async listenForTaskUpdates(taskId: string, callback: (payload: any) => void): Promise<() => void> {
+    try {
+      const serviceClient = this.getServiceClient();
+      const channelName = `task_${taskId.replace(/-/g, '_')}`;
+
+      // Subscribe to the task-specific channel
+      const subscription = serviceClient
+        .channel(channelName)
+        .on('broadcast', { event: 'task_update' }, (payload) => {
+          try {
+            const parsedPayload = typeof payload.payload === 'string' 
+              ? JSON.parse(payload.payload) 
+              : payload.payload;
+            callback(parsedPayload);
+          } catch (error) {
+            logger.error('Failed to parse NOTIFY payload', { channelName, error });
+          }
+        })
+        .subscribe();
+
+      logger.debug('Listening for task updates', { taskId, channelName });
+
+      return () => {
+        subscription.unsubscribe();
+        logger.debug('Stopped listening for task updates', { taskId, channelName });
+      };
+    } catch (error) {
+      logger.error('Error setting up task update listener', { taskId, error });
+      return () => {}; // Return empty cleanup function
+    }
+  }
 }

@@ -1,0 +1,326 @@
+# Task Management Agent Configuration
+# Migrated from TaskService to BaseAgent A2A Protocol
+# Version: 1.0.0
+
+# Agent Identity and Role
+name: "TaskManagementAgent"
+role: "task_management"
+version: "1.0.0"
+description: "Direct database access specialist for core task functionality and persistence"
+
+# Agent Capabilities - WHAT it can do
+capabilities:
+  - "task_crud_operations"
+  - "database_direct_access"
+  - "task_state_management"
+  - "task_context_persistence"
+  - "user_task_isolation"
+  - "task_lifecycle_management"
+
+# Tool Requirements - WHAT tools it needs
+toolRequirements:
+  - "database_access"
+  - "data_validation"
+  - "user_authentication"
+
+# A2A Protocol Configuration
+a2a:
+  protocolVersion: "1.0.0"
+  communicationMode: "sync"  # Database operations need synchronous responses
+  messageFormats:
+    - "json"
+  
+  # Inter-agent communication settings
+  routing:
+    canReceiveFrom:
+      - "TaskOrchestratorAgent"
+      - "BackendOrchestratorAgent"
+      - "EventsAgent"
+    canSendTo:
+      - "TaskOrchestratorAgent"
+      - "EventsAgent"
+      - "NotificationAgent"
+  
+  # Message handling
+  messageHandling:
+    bufferSize: 200
+    timeoutMs: 10000  # Database operations should be fast
+    retryEnabled: true
+
+# Task Execution Configuration
+execution:
+  maxConcurrentTasks: 20  # Can handle many DB operations
+  timeoutMs: 30000
+  
+  retryStrategy:
+    maxRetries: 3
+    backoffMs: 500
+    exponentialBackoff: true
+  
+  # Performance settings
+  performance:
+    cachingEnabled: true
+    cacheExpiryMs: 60000  # 1 minute for frequently accessed tasks
+    batchProcessing: true
+    maxBatchSize: 10
+
+# Context and State Management
+context:
+  persistence: true  # This agent IS the persistence layer
+  shareLevel: "global"  # Can access all tasks (with user isolation)
+  
+  # What context keys this agent manages
+  contextKeys:
+    - "taskDatabase"
+    - "userTaskIsolation"
+    - "taskLifecycleState"
+    - "contextPersistence"
+  
+  # Context transformation rules
+  transformations:
+    - input: "userInput.taskData"
+      output: "taskDatabase.newTask"
+      validation: "required|object"
+    
+    - input: "userInput.userId"
+      output: "userTaskIsolation.currentUser"
+      validation: "required|string|uuid"
+    
+    - input: "taskUpdate.status"
+      output: "taskLifecycleState.status"
+      validation: "required|enum:pending,active,paused,completed,failed,cancelled"
+
+# UI Augmentation Settings
+ui:
+  enableAugmentation: false  # Database layer doesn't generate UI
+  progressReporting: true
+  
+  # Database operation status reporting
+  operationStatus:
+    showProgress: true
+    trackingTypes:
+      - "task_creation"
+      - "task_updates"
+      - "context_saves"
+      - "task_deletion"
+
+# Workflow and Task Definitions
+workflows:
+  taskCreation:
+    description: "Create new task with proper user isolation"
+    
+    steps:
+      - name: "validate_user_access"
+        action: "verify_user_permissions"
+        required: true
+        
+      - name: "validate_task_data"
+        action: "validate_task_structure"
+        
+      - name: "create_task_record"
+        action: "insert_task_into_database"
+        
+      - name: "initialize_context"
+        action: "create_initial_task_context"
+    
+    outputs:
+      - "taskDatabase.taskId"
+      - "taskDatabase.createdAt"
+      - "contextPersistence.contextId"
+
+  taskRetrieval:
+    description: "Fetch tasks with user isolation and filtering"
+    
+    steps:
+      - name: "authenticate_user"
+        action: "verify_user_identity"
+        
+      - name: "apply_user_filter"
+        action: "filter_tasks_by_user"
+        
+      - name: "fetch_task_data"
+        action: "retrieve_from_database"
+        
+      - name: "load_task_context"
+        action: "fetch_associated_context"
+    
+    outputs:
+      - "taskDatabase.userTasks"
+      - "taskDatabase.taskCount"
+      - "contextPersistence.loadedContexts"
+
+  taskUpdate:
+    description: "Update task state and context with validation"
+    
+    steps:
+      - name: "validate_ownership"
+        action: "verify_task_belongs_to_user"
+        
+      - name: "validate_update_data"
+        action: "validate_update_structure"
+        
+      - name: "update_task_record"
+        action: "persist_task_changes"
+        
+      - name: "update_context"
+        action: "persist_context_changes"
+    
+    outputs:
+      - "taskDatabase.updatedTask"
+      - "contextPersistence.updatedContext"
+      - "taskLifecycleState.newStatus"
+
+  contextManagement:
+    description: "Manage task context persistence and retrieval"
+    
+    steps:
+      - name: "validate_context_data"
+        action: "validate_context_structure"
+        
+      - name: "serialize_context"
+        action: "prepare_context_for_storage"
+        
+      - name: "persist_context"
+        action: "save_context_to_database"
+        
+      - name: "update_context_metadata"
+        action: "update_context_tracking"
+    
+    outputs:
+      - "contextPersistence.contextVersion"
+      - "contextPersistence.lastSaved"
+      - "contextPersistence.contextSize"
+
+# Agent Prompt Templates (Legacy Compatibility)
+prompts:
+  main:
+    version: "1.0"
+    template: |
+      You are a task management specialist with direct database access.
+      
+      User ID: {{user_id}}
+      Operation: {{operation_type}}
+      
+      Your responsibilities:
+      1. Ensure all database operations respect user isolation
+      2. Validate data integrity before persistence
+      3. Manage task lifecycle states properly
+      4. Handle context serialization and deserialization
+      
+      Always verify user permissions before any operation.
+      Maintain ACID compliance for all database transactions.
+  
+  task_validation:
+    version: "1.0"
+    template: |
+      Validate task data before database operation:
+      
+      Task Data: {{task_data}}
+      Operation: {{operation}}
+      User ID: {{user_id}}
+      
+      Validation checks:
+      1. Required fields are present and valid
+      2. Data types match schema requirements
+      3. User has permission for this operation
+      4. Task status transitions are valid
+      5. Context data is properly formatted
+      
+      Return validation results with specific error messages.
+  
+  context_serialization:
+    version: "1.0"
+    template: |
+      Handle context persistence for task:
+      
+      Task ID: {{task_id}}
+      Context Data: {{context_data}}
+      Operation: {{operation}}
+      
+      Process:
+      1. Validate context structure and size limits
+      2. Serialize complex objects properly
+      3. Maintain context version history
+      4. Update context metadata
+      5. Ensure atomic save operation
+      
+      Return persistence status and metadata.
+
+# Error Handling and Monitoring
+errorHandling:
+  logLevel: "info"
+  
+  criticalErrors:
+    - "database_connection_lost"
+    - "data_corruption_detected"
+    - "user_isolation_breach"
+    - "context_serialization_failed"
+  
+  retryableErrors:
+    - "database_timeout"
+    - "connection_pool_exhausted"
+    - "lock_acquisition_timeout"
+  
+  fallbackActions:
+    - error: "database_unavailable"
+      fallback: "queue_operation_for_retry"
+    
+    - error: "context_too_large"
+      fallback: "compress_context_data"
+
+# Monitoring and Analytics
+monitoring:
+  enabled: true
+  
+  metrics:
+    - "database_operation_latency"
+    - "task_creation_rate"
+    - "context_persistence_success_rate"
+    - "user_isolation_compliance"
+  
+  alerts:
+    - condition: "operation_latency > 1000"
+      action: "investigate_database_performance"
+      severity: "medium"
+    
+    - condition: "isolation_compliance < 1.0"
+      action: "immediate_security_review"
+      severity: "critical"
+
+# Integration Settings
+integrations:
+  # Database
+  supabase:
+    enabled: true
+    connectionPool: 10
+    timeout: 10000
+    retryAttempts: 3
+    
+  # User authentication
+  userAuth:
+    enabled: true
+    validateTokens: true
+    
+  # Data validation
+  dataValidator:
+    enabled: true
+    strictMode: true
+    
+  # Performance monitoring
+  performanceTracker:
+    enabled: true
+    trackQueryPerformance: true
+
+# Development and Testing
+development:
+  debugMode: false
+  verboseLogging: false  # Database operations can be noisy
+  
+  testData:
+    sampleTaskId: "task-123-456"
+    sampleUserId: "user-789-012"
+    sampleTaskType: "onboarding"
+  
+  mockServices:
+    enabled: false
+    # Database mocking handled by test framework

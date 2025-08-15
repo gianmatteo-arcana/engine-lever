@@ -1,0 +1,338 @@
+# Data Enrichment Agent Configuration
+# Migrated from IntelligentDataEnrichmentService to BaseAgent A2A Protocol
+# Version: 1.0.0
+
+# Agent Identity and Role
+name: "DataEnrichmentAgent"
+role: "data_enrichment"
+version: "1.0.0"
+description: "Intelligent data enrichment specialist for business discovery and information gathering"
+
+# Agent Capabilities - WHAT it can do
+capabilities:
+  - "domain_intelligence"
+  - "company_data_lookup"
+  - "business_inference"
+  - "public_records_search"
+  - "oauth_data_processing"
+  - "email_domain_analysis"
+
+# Tool Requirements - WHAT tools it needs
+toolRequirements:
+  - "business_enrichment"
+  - "web_search"
+  - "ca_sos_search"
+  - "data_validation"
+
+# A2A Protocol Configuration
+a2a:
+  protocolVersion: "1.0.0"
+  communicationMode: "async"
+  messageFormats:
+    - "json"
+    - "yaml"
+  
+  # Inter-agent communication settings
+  routing:
+    canReceiveFrom:
+      - "TaskOrchestratorAgent"
+      - "ProfileBuilderAgent"
+    canSendTo:
+      - "TaskOrchestratorAgent"
+      - "ProfileBuilderAgent"
+      - "ComplianceAdvisorAgent"
+  
+  # Message handling
+  messageHandling:
+    bufferSize: 100
+    timeoutMs: 30000
+    retryEnabled: true
+
+# Task Execution Configuration
+execution:
+  maxConcurrentTasks: 5
+  timeoutMs: 60000
+  
+  retryStrategy:
+    maxRetries: 3
+    backoffMs: 2000
+    exponentialBackoff: true
+  
+  # Performance settings
+  performance:
+    cachingEnabled: true
+    cacheExpiryMs: 1800000  # 30 minutes
+    batchProcessing: true
+    maxBatchSize: 3
+
+# Context and State Management
+context:
+  persistence: true
+  shareLevel: "task"  # private | task | global
+  
+  # What context keys this agent manages
+  contextKeys:
+    - "enrichmentData"
+    - "domainAnalysis"
+    - "businessInference"
+    - "publicRecordsResults"
+    - "oauthProcessing"
+  
+  # Context transformation rules
+  transformations:
+    - input: "userInput.email"
+      output: "enrichmentData.sourceEmail"
+      validation: "required|email"
+    
+    - input: "userInput.oauthData"
+      output: "enrichmentData.oauthData"
+      validation: "optional|object"
+    
+    - input: "domainAnalysis.businessName"
+      output: "businessInference.suggestedName"
+      validation: "optional|string"
+
+# UI Augmentation Settings
+ui:
+  enableAugmentation: true
+  
+  augmentationTypes:
+    - "enrichment_progress"
+    - "discovery_results"
+    - "confidence_indicators"
+    - "source_attribution"
+  
+  progressReporting: true
+  
+  # UI generation rules
+  formGeneration:
+    enrichmentResults:
+      title: "Business Information Discovery"
+      description: "We found information about your business"
+      
+      sections:
+        - title: "Discovered Information"
+          fields:
+            - field: "discoveredBusinessName"
+              label: "Found Business Name"
+              type: "display"
+              help: "Based on your email domain and public records"
+            
+            - field: "businessType"
+              label: "Inferred Business Type"
+              type: "display"
+              help: "Based on domain analysis and business patterns"
+            
+            - field: "confidence"
+              label: "Confidence Level"
+              type: "progress"
+              help: "How confident we are in this information"
+      
+      quickActions:
+        - id: "confirm_discovery"
+          label: "This looks correct"
+          action: "confirm_enrichment_data"
+          icon: "check"
+        
+        - id: "correct_info"
+          label: "Let me correct this"
+          action: "override_enrichment_data"
+          icon: "edit"
+
+# Workflow and Task Definitions
+workflows:
+  domainAnalysis:
+    description: "Analyze email domain for business insights"
+    
+    steps:
+      - name: "extract_domain"
+        action: "parse_email_domain"
+        required: true
+        
+      - name: "classify_domain_type"
+        action: "determine_personal_vs_business"
+        
+      - name: "infer_business_name"
+        action: "suggest_business_name_from_domain"
+        
+      - name: "analyze_domain_patterns"
+        action: "identify_business_patterns"
+    
+    outputs:
+      - "domainAnalysis.domain"
+      - "domainAnalysis.isPersonalEmail"
+      - "domainAnalysis.suggestedBusinessName"
+      - "domainAnalysis.confidence"
+
+  publicRecordsSearch:
+    description: "Search public records for business information"
+    
+    steps:
+      - name: "search_ca_sos"
+        action: "search_california_secretary_of_state"
+        
+      - name: "search_federal_databases"
+        action: "search_federal_business_registries"
+        
+      - name: "cross_reference_results"
+        action: "validate_cross_database_matches"
+        
+      - name: "extract_business_details"
+        action: "parse_registration_details"
+    
+    outputs:
+      - "publicRecordsResults.found"
+      - "publicRecordsResults.businessName"
+      - "publicRecordsResults.entityNumber"
+      - "publicRecordsResults.registrationState"
+
+  businessInference:
+    description: "Infer business characteristics from available data"
+    
+    steps:
+      - name: "analyze_business_type"
+        action: "classify_business_category"
+        
+      - name: "suggest_entity_structure"
+        action: "recommend_entity_type"
+        
+      - name: "infer_location"
+        action: "suggest_business_location"
+        
+      - name: "calculate_confidence"
+        action: "assess_inference_confidence"
+    
+    outputs:
+      - "businessInference.businessType"
+      - "businessInference.probableStructure"
+      - "businessInference.probableState"
+      - "businessInference.confidence"
+
+# Agent Prompt Templates (Legacy Compatibility)
+prompts:
+  main:
+    version: "1.0"
+    template: |
+      You are a data enrichment specialist that discovers business information from minimal inputs.
+      
+      Available Data: {{input_data}}
+      
+      Your capabilities include:
+      1. Email domain analysis to infer business names and types
+      2. Public records searches across multiple databases
+      3. OAuth data processing for user information
+      4. Business type classification and entity structure recommendations
+      
+      Always provide confidence scores and cite your data sources.
+      Focus on accuracy over speed - incorrect business data has legal implications.
+  
+  domain_analysis:
+    version: "1.0"
+    template: |
+      Analyze this email domain for business insights:
+      
+      Email: {{email}}
+      Domain: {{domain}}
+      
+      Determine:
+      1. Is this a personal email domain (gmail.com, yahoo.com, etc.)?
+      2. If business domain, what business name can be inferred?
+      3. What type of business does this appear to be?
+      4. What geographic location might this business be in?
+      
+      Provide confidence scores (0-1) for each inference.
+  
+  public_records_search:
+    version: "1.0"
+    template: |
+      Search public records for business information:
+      
+      Search Terms: {{search_terms}}
+      Business Name: {{business_name}}
+      
+      Search these sources:
+      1. California Secretary of State database
+      2. Federal business registries
+      3. Professional licensing boards
+      4. Trade name registrations
+      
+      Return structured data with entity numbers, formation dates, and status.
+
+# Error Handling and Monitoring
+errorHandling:
+  logLevel: "info"
+  
+  criticalErrors:
+    - "oauth_data_corruption"
+    - "public_records_api_failure"
+    - "domain_analysis_service_down"
+  
+  retryableErrors:
+    - "network_timeout"
+    - "rate_limit_exceeded"
+    - "temporary_service_unavailable"
+  
+  fallbackActions:
+    - error: "public_records_unavailable"
+      fallback: "use_domain_analysis_only"
+    
+    - error: "domain_analysis_failed"
+      fallback: "request_manual_input"
+
+# Monitoring and Analytics
+monitoring:
+  enabled: true
+  
+  metrics:
+    - "enrichment_success_rate"
+    - "data_quality_score"
+    - "public_records_hit_rate"
+    - "inference_accuracy"
+  
+  alerts:
+    - condition: "success_rate < 0.8"
+      action: "review_enrichment_algorithms"
+      severity: "medium"
+    
+    - condition: "public_records_hit_rate < 0.4"
+      action: "check_api_connectivity"
+      severity: "high"
+
+# Integration Settings
+integrations:
+  # Business data APIs
+  businessEnrichmentAPI:
+    enabled: true
+    rateLimit: 100  # per hour
+    timeout: 10000
+    
+  # Secretary of State APIs
+  sosAPIs:
+    enabled: true
+    rateLimit: 60   # per hour per state
+    timeout: 15000
+  
+  # OAuth providers
+  oauthProviders:
+    enabled: true
+    supportedProviders: ["google", "microsoft", "apple"]
+    
+  # Caching layer
+  cache:
+    enabled: true
+    ttl: 1800000  # 30 minutes
+    maxSize: 1000
+
+# Development and Testing
+development:
+  debugMode: false
+  verboseLogging: true
+  
+  testData:
+    sampleEmail: "john@acmecorp.com"
+    sampleDomain: "acmecorp.com"
+    sampleBusinessName: "Acme Corporation"
+  
+  mockServices:
+    enabled: false
+    responseDelay: 2000

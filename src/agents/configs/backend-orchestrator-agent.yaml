@@ -1,0 +1,328 @@
+# Backend Orchestrator Agent Configuration
+# Migrated from OrchestratorService to BaseAgent A2A Protocol
+# Version: 1.0.0
+
+# Agent Identity and Role
+name: "BackendOrchestratorAgent"
+role: "backend_orchestrator"
+version: "1.0.0"
+description: "Frontend integration layer for backend OrchestratorAgent communication"
+
+# Agent Capabilities - WHAT it can do
+capabilities:
+  - "task_creation"
+  - "task_context_retrieval"
+  - "ui_response_handling"
+  - "event_emission"
+  - "session_management"
+  - "backend_api_integration"
+
+# Tool Requirements - WHAT tools it needs
+toolRequirements:
+  - "backend_api"
+  - "web_search"
+  - "data_validation"
+
+# A2A Protocol Configuration
+a2a:
+  protocolVersion: "1.0.0"
+  communicationMode: "async"
+  messageFormats:
+    - "json"
+    - "yaml"
+  
+  # Inter-agent communication settings
+  routing:
+    canReceiveFrom:
+      - "TaskOrchestratorAgent"
+      - "ProfileBuilderAgent"
+      - "DataEnrichmentAgent"
+      - "ComplianceAdvisorAgent"
+    canSendTo:
+      - "TaskOrchestratorAgent"
+      - "BackendAPIAgent"
+      - "EventsAgent"
+  
+  # Message handling
+  messageHandling:
+    bufferSize: 150
+    timeoutMs: 30000
+    retryEnabled: true
+
+# Task Execution Configuration
+execution:
+  maxConcurrentTasks: 10
+  timeoutMs: 120000
+  
+  retryStrategy:
+    maxRetries: 3
+    backoffMs: 1000
+    exponentialBackoff: true
+  
+  # Performance settings
+  performance:
+    cachingEnabled: true
+    cacheExpiryMs: 300000  # 5 minutes (shorter cache for real-time data)
+    batchProcessing: true
+    maxBatchSize: 5
+
+# Context and State Management
+context:
+  persistence: false  # Backend orchestrator doesn't persist state - database is source of truth
+  shareLevel: "global"  # Can coordinate across tasks
+  
+  # What context keys this agent manages
+  contextKeys:
+    - "sessionData"
+    - "taskCreationRequests"
+    - "uiResponseQueue"
+    - "backendSyncStatus"
+  
+  # Context transformation rules
+  transformations:
+    - input: "userInput.templateId"
+      output: "taskCreationRequests.templateId"
+      validation: "required|string"
+    
+    - input: "userInput.initialData"
+      output: "taskCreationRequests.initialData"
+      validation: "required|object"
+    
+    - input: "backendResponse.contextId"
+      output: "sessionData.activeContextId"
+      validation: "required|string|uuid"
+
+# UI Augmentation Settings
+ui:
+  enableAugmentation: true
+  
+  augmentationTypes:
+    - "task_progress_display"
+    - "backend_sync_status"
+    - "real_time_updates"
+    - "error_notifications"
+  
+  progressReporting: true
+  
+  # UI generation rules
+  formGeneration:
+    taskCreationStatus:
+      title: "Creating Your Task"
+      description: "Setting up your request with our backend agents"
+      
+      progressIndicators:
+        - stage: "validating"
+          label: "Validating request"
+          icon: "shield-check"
+        
+        - stage: "creating"
+          label: "Creating task"
+          icon: "plus-circle"
+        
+        - stage: "orchestrating"
+          label: "Coordinating agents"
+          icon: "users"
+        
+        - stage: "ready"
+          label: "Ready to proceed"
+          icon: "check-circle"
+
+# Workflow and Task Definitions
+workflows:
+  taskCreation:
+    description: "Create and initiate backend task orchestration"
+    
+    steps:
+      - name: "validate_request"
+        action: "validate_task_creation_request"
+        required: true
+        
+      - name: "authenticate_session"
+        action: "verify_user_session"
+        
+      - name: "submit_to_backend"
+        action: "create_backend_task"
+        
+      - name: "initialize_context"
+        action: "setup_task_context_monitoring"
+    
+    outputs:
+      - "taskCreationRequests.taskId"
+      - "taskCreationRequests.contextId"
+      - "taskCreationRequests.status"
+
+  contextRetrieval:
+    description: "Fetch and aggregate task state from backend"
+    
+    steps:
+      - name: "fetch_context"
+        action: "get_backend_task_context"
+        
+      - name: "aggregate_state"
+        action: "compile_task_state"
+        
+      - name: "check_ui_requests"
+        action: "identify_pending_ui_requests"
+        
+      - name: "emit_updates"
+        action: "broadcast_context_changes"
+    
+    outputs:
+      - "sessionData.taskContext"
+      - "sessionData.uiRequests"
+      - "sessionData.completeness"
+
+  uiResponseHandling:
+    description: "Process and submit user interface responses"
+    
+    steps:
+      - name: "validate_response"
+        action: "validate_ui_response_format"
+        
+      - name: "transform_data"
+        action: "transform_ui_data_for_backend"
+        
+      - name: "submit_response"
+        action: "send_response_to_backend"
+        
+      - name: "await_processing"
+        action: "monitor_backend_processing"
+    
+    outputs:
+      - "uiResponseQueue.responseId"
+      - "uiResponseQueue.status"
+      - "uiResponseQueue.processingResult"
+
+# Agent Prompt Templates (Legacy Compatibility)
+prompts:
+  main:
+    version: "1.0"
+    template: |
+      You are a backend orchestration specialist managing frontend-backend communication.
+      
+      User Session: {{session_data}}
+      Request Type: {{request_type}}
+      
+      Your responsibilities:
+      1. Validate and route task creation requests to backend
+      2. Retrieve and aggregate task state from database
+      3. Handle UI responses and submit to backend processing
+      4. Emit real-time updates for frontend components
+      
+      Always maintain session integrity and handle errors gracefully.
+      The database is the single source of truth for all state.
+  
+  task_creation:
+    version: "1.0"
+    template: |
+      Create a new task through the backend universal API:
+      
+      Template ID: {{template_id}}
+      Initial Data: {{initial_data}}
+      User Token: {{user_token}}
+      
+      Steps:
+      1. Validate the template ID exists and user has access
+      2. Sanitize and validate initial data
+      3. Submit to backend /api/tasks/create endpoint
+      4. Parse response and extract contextId
+      5. Initialize context monitoring
+      
+      Return structured response with task details.
+  
+  ui_response_processing:
+    version: "1.0"
+    template: |
+      Process UI response and submit to backend:
+      
+      Context ID: {{context_id}}
+      Request ID: {{request_id}}
+      User Response: {{user_response}}
+      Action Type: {{action_type}}
+      
+      Transform the response data according to backend expectations:
+      1. Validate response format and completeness
+      2. Apply any necessary data transformations
+      3. Submit via /api/tasks/ui-response endpoint
+      4. Monitor processing status
+      
+      Handle validation errors and retry logic appropriately.
+
+# Error Handling and Monitoring
+errorHandling:
+  logLevel: "info"
+  
+  criticalErrors:
+    - "backend_api_unavailable"
+    - "session_authentication_failed"
+    - "task_creation_failed"
+  
+  retryableErrors:
+    - "network_timeout"
+    - "backend_temporary_unavailable"
+    - "rate_limit_exceeded"
+  
+  fallbackActions:
+    - error: "backend_unavailable"
+      fallback: "queue_for_retry"
+    
+    - error: "context_fetch_failed"
+      fallback: "use_cached_context"
+
+# Monitoring and Analytics
+monitoring:
+  enabled: true
+  
+  metrics:
+    - "task_creation_success_rate"
+    - "context_retrieval_latency"
+    - "ui_response_processing_time"
+    - "backend_sync_accuracy"
+  
+  alerts:
+    - condition: "task_creation_success_rate < 0.95"
+      action: "investigate_backend_issues"
+      severity: "high"
+    
+    - condition: "context_retrieval_latency > 5000"
+      action: "optimize_backend_queries"
+      severity: "medium"
+
+# Integration Settings
+integrations:
+  # Backend API
+  backendAPI:
+    enabled: true
+    baseURL: "${RAILWAY_BACKEND_URL}"
+    timeout: 30000
+    rateLimit: 1000  # per hour
+    
+  # Real-time events
+  eventSystem:
+    enabled: true
+    channels: ["task_updates", "agent_coordination"]
+    
+  # Session management
+  sessionStore:
+    enabled: true
+    ttl: 3600000  # 1 hour
+    
+  # Caching
+  cache:
+    enabled: true
+    ttl: 300000  # 5 minutes
+    maxSize: 500
+
+# Development and Testing
+development:
+  debugMode: false
+  verboseLogging: true
+  
+  testData:
+    sampleTemplateId: "user_onboarding"
+    sampleUserId: "test-user-123"
+    sampleContextId: "ctx-456-789"
+  
+  mockServices:
+    enabled: false
+    responseDelay: 1000

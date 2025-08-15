@@ -1,0 +1,342 @@
+# Backend API Agent Configuration
+# Migrated from BackendAPIService to BaseAgent A2A Protocol
+# Version: 1.0.0
+
+# Agent Identity and Role
+name: "BackendAPIAgent"
+role: "backend_api"
+version: "1.0.0"
+description: "Railway backend communication specialist for agents and MCP functionality"
+
+# Agent Capabilities - WHAT it can do
+capabilities:
+  - "backend_communication"
+  - "api_request_management"
+  - "agent_lifecycle_management"
+  - "mcp_integration"
+  - "authentication_handling"
+  - "error_recovery"
+
+# Tool Requirements - WHAT tools it needs
+toolRequirements:
+  - "http_client"
+  - "authentication"
+  - "data_validation"
+
+# A2A Protocol Configuration
+a2a:
+  protocolVersion: "1.0.0"
+  communicationMode: "async"
+  messageFormats:
+    - "json"
+  
+  # Inter-agent communication settings
+  routing:
+    canReceiveFrom:
+      - "BackendOrchestratorAgent"
+      - "TaskManagementAgent"
+      - "EventsAgent"
+    canSendTo:
+      - "BackendOrchestratorAgent"
+      - "EventsAgent"
+      - "NotificationAgent"
+  
+  # Message handling
+  messageHandling:
+    bufferSize: 100
+    timeoutMs: 30000  # Backend calls can be slow
+    retryEnabled: true
+
+# Task Execution Configuration
+execution:
+  maxConcurrentTasks: 10
+  timeoutMs: 45000  # Allow time for backend processing
+  
+  retryStrategy:
+    maxRetries: 3
+    backoffMs: 2000
+    exponentialBackoff: true
+  
+  # Performance settings
+  performance:
+    cachingEnabled: true
+    cacheExpiryMs: 180000  # 3 minutes for API responses
+    batchProcessing: false  # HTTP requests don't batch well
+    maxBatchSize: 1
+
+# Context and State Management
+context:
+  persistence: false  # API agent doesn't need state persistence
+  shareLevel: "task"
+  
+  # What context keys this agent manages
+  contextKeys:
+    - "apiConnectionState"
+    - "authenticationTokens"
+    - "requestQueue"
+    - "responseCache"
+  
+  # Context transformation rules
+  transformations:
+    - input: "userInput.authToken"
+      output: "authenticationTokens.userToken"
+      validation: "required|string"
+    
+    - input: "apiRequest.endpoint"
+      output: "requestQueue.endpoint"
+      validation: "required|string|url"
+    
+    - input: "apiResponse.data"
+      output: "responseCache.responseData"
+      validation: "required|object"
+
+# UI Augmentation Settings
+ui:
+  enableAugmentation: true
+  
+  augmentationTypes:
+    - "connection_status"
+    - "api_health_indicators"
+    - "request_progress"
+    - "error_notifications"
+  
+  progressReporting: true
+  
+  # UI generation rules
+  formGeneration:
+    apiStatus:
+      title: "Backend Connection Status"
+      description: "Railway backend API health and connectivity"
+      
+      fields:
+        - field: "connectionStatus"
+          label: "Connection Status"
+          type: "status_indicator"
+          help: "Current backend API connectivity"
+        
+        - field: "lastResponse"
+          label: "Last Response Time"
+          type: "duration"
+          help: "Time since last successful API call"
+        
+        - field: "errorRate"
+          label: "Error Rate"
+          type: "percentage"
+          help: "Percentage of failed API calls"
+      
+      quickActions:
+        - id: "test_connection"
+          label: "Test Connection"
+          action: "ping_backend_api"
+          icon: "wifi"
+        
+        - id: "retry_failed"
+          label: "Retry Failed Requests"
+          action: "retry_failed_requests"
+          icon: "refresh-cw"
+
+# Workflow and Task Definitions
+workflows:
+  apiRequest:
+    description: "Execute HTTP requests to Railway backend"
+    
+    steps:
+      - name: "validate_request"
+        action: "validate_api_request_format"
+        required: true
+        
+      - name: "authenticate_request"
+        action: "add_authentication_headers"
+        
+      - name: "execute_request"
+        action: "send_http_request"
+        
+      - name: "handle_response"
+        action: "process_api_response"
+    
+    outputs:
+      - "requestQueue.requestId"
+      - "responseCache.statusCode"
+      - "responseCache.responseData"
+
+  agentManagement:
+    description: "Manage backend agent lifecycle and communication"
+    
+    steps:
+      - name: "fetch_agent_list"
+        action: "get_available_agents"
+        
+      - name: "assign_task_to_agent"
+        action: "delegate_task_to_backend_agent"
+        
+      - name: "monitor_agent_status"
+        action: "check_agent_health"
+        
+      - name: "handle_agent_response"
+        action: "process_agent_response"
+    
+    outputs:
+      - "apiConnectionState.availableAgents"
+      - "apiConnectionState.agentAssignments"
+      - "apiConnectionState.agentHealth"
+
+  errorRecovery:
+    description: "Handle API failures and implement recovery strategies"
+    
+    steps:
+      - name: "detect_error_type"
+        action: "classify_api_error"
+        
+      - name: "implement_recovery"
+        action: "execute_recovery_strategy"
+        
+      - name: "retry_if_appropriate"
+        action: "conditional_retry"
+        
+      - name: "escalate_if_needed"
+        action: "escalate_persistent_failures"
+    
+    outputs:
+      - "apiConnectionState.errorStatus"
+      - "apiConnectionState.recoveryAttempts"
+      - "apiConnectionState.escalationLevel"
+
+# Agent Prompt Templates (Legacy Compatibility)
+prompts:
+  main:
+    version: "1.0"
+    template: |
+      You are a backend API communication specialist managing Railway integration.
+      
+      Request Type: {{request_type}}
+      Backend URL: {{backend_url}}
+      Authentication: {{auth_status}}
+      
+      Your responsibilities:
+      1. Execute HTTP requests to Railway backend with proper authentication
+      2. Manage agent lifecycle and task delegation
+      3. Handle API errors and implement recovery strategies
+      4. Provide connection status and health monitoring
+      
+      Always validate requests and handle errors gracefully.
+  
+  api_request_execution:
+    version: "1.0"
+    template: |
+      Execute API request to Railway backend:
+      
+      Endpoint: {{endpoint}}
+      Method: {{method}}
+      Headers: {{headers}}
+      Body: {{request_body}}
+      
+      Execution steps:
+      1. Validate request format and required parameters
+      2. Add authentication headers and user context
+      3. Execute HTTP request with timeout and retry logic
+      4. Parse and validate response
+      5. Handle errors and implement recovery if needed
+      
+      Return structured response with status and data.
+  
+  agent_delegation:
+    version: "1.0"
+    template: |
+      Delegate task to backend agent:
+      
+      Agent ID: {{agent_id}}
+      Task Data: {{task_data}}
+      Priority: {{priority}}
+      
+      Delegation process:
+      1. Verify agent availability and capabilities
+      2. Format task data according to agent requirements
+      3. Submit task via backend API
+      4. Monitor task execution and status
+      5. Handle completion or failure responses
+      
+      Provide delegation status and tracking information.
+
+# Error Handling and Monitoring
+errorHandling:
+  logLevel: "info"
+  
+  criticalErrors:
+    - "backend_api_unreachable"
+    - "authentication_failed"
+    - "agent_delegation_failed"
+  
+  retryableErrors:
+    - "network_timeout"
+    - "server_overloaded"
+    - "rate_limit_exceeded"
+    - "temporary_service_unavailable"
+  
+  fallbackActions:
+    - error: "backend_unreachable"
+      fallback: "queue_requests_for_retry"
+    
+    - error: "authentication_expired"
+      fallback: "refresh_authentication_token"
+
+# Monitoring and Analytics
+monitoring:
+  enabled: true
+  
+  metrics:
+    - "api_request_success_rate"
+    - "api_response_latency"
+    - "agent_delegation_success_rate"
+    - "error_recovery_effectiveness"
+  
+  alerts:
+    - condition: "success_rate < 0.9"
+      action: "investigate_backend_issues"
+      severity: "high"
+    
+    - condition: "response_latency > 10000"
+      action: "optimize_api_performance"
+      severity: "medium"
+
+# Integration Settings
+integrations:
+  # Railway Backend
+  railwayBackend:
+    enabled: true
+    baseURL: "${RAILWAY_BACKEND_URL}"
+    timeout: 30000
+    rateLimit: 1000  # per hour
+    
+  # Authentication
+  authentication:
+    enabled: true
+    tokenRefreshEnabled: true
+    tokenValidation: true
+    
+  # HTTP Client
+  httpClient:
+    enabled: true
+    keepAlive: true
+    compression: true
+    followRedirects: true
+    
+  # Request caching
+  requestCache:
+    enabled: true
+    ttl: 180000  # 3 minutes
+    maxSize: 200
+
+# Development and Testing
+development:
+  debugMode: false
+  verboseLogging: true
+  
+  testData:
+    sampleEndpoint: "/api/agents"
+    sampleAgentId: "agent-123"
+    sampleTaskData: { "type": "test_task" }
+  
+  mockServices:
+    enabled: false
+    responseDelay: 1000
+    successRate: 0.95

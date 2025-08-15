@@ -284,6 +284,233 @@ router.post('/:taskId/events', requireAuth, async (req: AuthenticatedRequest, re
 });
 
 /**
+ * GET /api/tasks/:taskId/context/stream
+ * 
+ * SSE endpoint for streaming TaskContext updates in real-time
+ * Implements the RIGHT way - Server-Sent Events instead of polling
+ */
+router.get('/:taskId/context/stream', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { taskId } = req.params;
+  const userToken = req.userToken!;
+  const userId = req.userId!;
+  
+  try {
+    logger.info('[SSE] Client connecting to TaskContext stream', { taskId, userId });
+    
+    const dbService = DatabaseService.getInstance();
+    
+    // Verify user owns this task
+    const task = await dbService.getTask(userToken, taskId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    // Set SSE headers - CRITICAL for SSE to work!
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no', // Disable Nginx buffering
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+    
+    // Send initial context with full task data
+    try {
+      // Get context events (if they exist)
+      let contextEvents: any[] = [];
+      try {
+        contextEvents = await dbService.getContextHistory(userToken, taskId);
+      } catch (error: any) {
+        if (error.code !== '42P01') {
+          logger.warn('Could not get context events', error);
+        }
+      }
+      
+      // Get UI requests (if they exist)
+      let uiRequests: any[] = [];
+      try {
+        // This would query ui_requests table when it exists
+        // uiRequests = await dbService.getUIRequests(userToken, taskId);
+      } catch (error: any) {
+        // UI requests table might not exist yet
+      }
+      
+      // Build complete TaskContext object matching PR requirements
+      const fullContext = {
+        taskId: task.id,
+        businessId: task.user_id, // Map to business_id when migration is done
+        templateId: task.template_id || task.task_type,
+        initiatedByUserId: task.user_id,
+        currentState: {
+          status: task.status,
+          phase: task.metadata?.currentStep || 'initialization',
+          completeness: task.metadata?.completeness || 0,
+          data: task.metadata || {}
+        },
+        history: contextEvents,
+        activeUIRequests: uiRequests,
+        templateSnapshot: task.metadata?.templateSnapshot || {},
+        metadata: task.metadata || {},
+        createdAt: task.created_at,
+        updatedAt: task.updated_at
+      };
+      
+      res.write(`event: CONTEXT_INITIALIZED\n`);
+      res.write(`data: ${JSON.stringify(fullContext)}\n\n`);
+      
+      logger.info('[SSE] Sent initial context', { taskId, eventsCount: contextEvents.length });
+    } catch (error) {
+      logger.error('[SSE] Failed to send initial context', { taskId, error });
+      res.write(`event: ERROR\n`);
+      res.write(`data: ${JSON.stringify({ error: 'Failed to load initial context' })}\n\n`);
+    }
+    
+    // Set up PostgreSQL LISTEN/NOTIFY for real-time updates
+    let unsubscribe: (() => void) | null = null;
+    
+    try {
+      unsubscribe = await dbService.listenForTaskUpdates(taskId, (payload) => {
+        try {
+          // Send the update to the SSE client
+          switch (payload.type) {
+            case 'event_added':
+              res.write(`event: EVENT_ADDED\n`);
+              res.write(`data: ${JSON.stringify(payload.data)}\n\n`);
+              break;
+            case 'ui_request':
+              res.write(`event: UI_REQUEST\n`);
+              res.write(`data: ${JSON.stringify(payload.data)}\n\n`);
+              break;
+            case 'task_completed':
+              res.write(`event: TASK_COMPLETED\n`);
+              res.write(`data: ${JSON.stringify(payload.data)}\n\n`);
+              break;
+            default:
+              res.write(`event: ${payload.type}\n`);
+              res.write(`data: ${JSON.stringify(payload.data)}\n\n`);
+          }
+        } catch (error) {
+          logger.error('[SSE] Error sending update to client', { taskId, error });
+        }
+      });
+      
+      logger.info('[SSE] Real-time listener set up', { taskId });
+    } catch (error) {
+      logger.error('[SSE] Failed to set up real-time listener', { taskId, error });
+    }
+    
+    // Heartbeat to keep connection alive
+    const heartbeat = setInterval(() => {
+      res.write(':heartbeat\n\n');
+    }, 30000);
+    
+    // Cleanup on disconnect
+    req.on('close', () => {
+      logger.info('[SSE] Client disconnected from TaskContext stream', { taskId, userId });
+      clearInterval(heartbeat);
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    });
+    
+    req.on('error', (error) => {
+      logger.error('[SSE] Stream error', { taskId, userId, error });
+      clearInterval(heartbeat);
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    });
+    
+  } catch (error) {
+    logger.error('[SSE] Failed to setup context stream', { taskId, error });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to setup context stream' });
+    }
+  }
+});
+
+/**
+ * POST /api/tasks/:taskId/context/events
+ * 
+ * REST endpoint for adding context events (Client → Server)
+ * This updates the task's context by adding an event
+ */
+router.post('/:taskId/context/events', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { taskId } = req.params;
+  const { operation, data, reasoning } = req.body;
+  const userToken = req.userToken!;
+  const userId = req.userId!;
+  
+  try {
+    logger.info('[REST] Adding context event to task', { taskId, operation, userId });
+    
+    const dbService = DatabaseService.getInstance();
+    
+    // Verify user owns this task
+    const task = await dbService.getTask(userToken, taskId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    // Create context event
+    const event = {
+      id: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      taskId,
+      sequenceNumber: Date.now(), // TODO: Use proper sequence from database
+      actorType: 'user' as const,
+      actorId: userId,
+      operation,
+      data,
+      reasoning,
+      trigger: { source: 'user_input', timestamp: new Date().toISOString() },
+      createdAt: new Date().toISOString()
+    };
+    
+    // TODO: Insert into context_events table when it exists
+    // For now, we'll emit a task event and update task metadata
+    await emitTaskEvent('context_event_added', {
+      taskId,
+      event
+    }, {
+      userToken,
+      actorType: 'user',
+      reasoning: reasoning || 'User added context event'
+    });
+    
+    // Update task metadata with the event data
+    const updatedMetadata = {
+      ...task.metadata,
+      ...data,
+      lastContextEvent: {
+        operation,
+        timestamp: event.createdAt,
+        actorId: userId
+      }
+    };
+    
+    await dbService.updateTask(userToken, taskId, {
+      metadata: updatedMetadata
+    });
+    
+    // Send notification to SSE subscribers via PostgreSQL NOTIFY
+    await dbService.notifyTaskContextUpdate(taskId, 'event_added', event);
+    
+    logger.info('[REST] Context event added successfully', { taskId, eventId: event.id });
+    
+    res.json({
+      success: true,
+      event,
+      message: 'Context event added successfully'
+    });
+    
+  } catch (error) {
+    logger.error('[REST] Failed to add context event', { taskId, error });
+    res.status(500).json({ error: 'Failed to add context event' });
+  }
+});
+
+/**
  * GET /api/tasks/:taskId/status
  * 
  * Generic endpoint to get status for ANY task
