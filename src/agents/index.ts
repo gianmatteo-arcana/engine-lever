@@ -1,23 +1,24 @@
 /**
- * Simplified Agent Registry - 8 Agents from 8 YAML Configurations
+ * Agent Manager - Simplified architecture with dynamic YAML discovery
  * 
- * Following the principle: "YAML defines WHAT agents do, BaseAgent implements HOW"
+ * Following the principle: "YAML defines WHAT agents do, DefaultAgent implements HOW"
  * 
  * Only 3 actual classes needed:
- * 1. BaseAgent - Standard agent behavior (used by most agents)
- * 2. OrchestratorAgent - Special orchestration logic
- * 3. TaskManagementAgent - Direct database access
+ * 1. BaseAgent - Abstract base for all agents
+ * 2. DefaultAgent - Concrete implementation for YAML-configured agents
+ * 3. OrchestratorAgent & TaskManagementAgent - Special cases only
  */
 
-import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
 import { AgentRole, AgentMessage, TaskContext, TaskPriority, convertPriority } from './base/types';
 import { BaseAgent } from './base/BaseAgent';
+import { DefaultAgent } from './DefaultAgent';
 import { OrchestratorAgent } from './OrchestratorAgent';
 import { TaskManagementAgent } from './TaskManagementAgent';
+import { dynamicAgentRegistry } from './DynamicAgentRegistry';
 import { DatabaseService } from '../services/database';
 
-class AgentManagerClass extends EventEmitter {
+class AgentManagerClass {
   private agents: Map<AgentRole, BaseAgent> = new Map();
   private messageQueue: AgentMessage[] = [];
   private isInitialized = false;
@@ -31,41 +32,37 @@ class AgentManagerClass extends EventEmitter {
     logger.info('Initializing Agent Manager');
 
     try {
-      // Initialize agents using simplified architecture
-      // Most agents are now BaseAgent instances configured by YAML
+      // Initialize agents using dynamic registry
+      // Registry automatically discovers YAML files - no hardcoding
       const defaultBusinessId = 'default_business';
       const defaultUserId = 'default_user';
       
       // OrchestratorAgent is a special case with its own class
       this.agents.set(AgentRole.ORCHESTRATOR, OrchestratorAgent.getInstance());
       
-      // Other agents are BaseAgent instances with YAML configuration
-      // Using the simplified registry to create them
-      this.agents.set(AgentRole.LEGAL_COMPLIANCE, simplifiedAgentRegistry.createAgent('backend-api', defaultBusinessId, defaultUserId));
-      this.agents.set(AgentRole.DATA_COLLECTION, simplifiedAgentRegistry.createAgent('data-enrichment', defaultBusinessId, defaultUserId));
-      this.agents.set(AgentRole.PAYMENT, simplifiedAgentRegistry.createAgent('backend-api', defaultBusinessId, defaultUserId));
-      this.agents.set(AgentRole.AGENCY_INTERACTION, simplifiedAgentRegistry.createAgent('backend-api', defaultBusinessId, defaultUserId));
-      this.agents.set(AgentRole.MONITORING, simplifiedAgentRegistry.createAgent('events', defaultBusinessId, defaultUserId));
-      this.agents.set(AgentRole.COMMUNICATION, simplifiedAgentRegistry.createAgent('events', defaultBusinessId, defaultUserId));
+      // Map AgentRoles to discovered YAML configurations
+      // The registry will find the appropriate YAML file
+      const roleToType: Record<string, string> = {
+        [AgentRole.LEGAL_COMPLIANCE]: 'backend-api',
+        [AgentRole.DATA_COLLECTION]: 'data-enrichment',
+        [AgentRole.PAYMENT]: 'backend-api',
+        [AgentRole.AGENCY_INTERACTION]: 'backend-api',
+        [AgentRole.MONITORING]: 'events',
+        [AgentRole.COMMUNICATION]: 'events'
+      };
 
-      // Set up inter-agent communication for EventEmitter-based agents only
-      this.agents.forEach((agent, _role) => {
-        // Only set up event listeners for agents that support EventEmitter
-        // The new consolidated BaseAgent agents don't use EventEmitter
-        if (typeof (agent as any).on === 'function') {
-          agent.on('sendMessage', (message: AgentMessage) => {
-            this.routeMessage(message);
-          });
-
-          agent.on('taskCompleted', (result: any) => {
-            this.emit('taskCompleted', result);
-          });
-
-          agent.on('agentError', (error: any) => {
-            this.handleAgentError(error);
-          });
+      // Create agents dynamically based on discovered YAMLs
+      for (const [role, agentType] of Object.entries(roleToType)) {
+        if (dynamicAgentRegistry.isAgentAvailable(agentType)) {
+          const agent = dynamicAgentRegistry.createAgent(agentType, defaultBusinessId, defaultUserId);
+          this.agents.set(role as AgentRole, agent);
+        } else {
+          logger.warn(`Agent type ${agentType} not found for role ${role}`);
         }
-      });
+      }
+
+      // Agents now communicate through direct method calls
+      // No EventEmitter needed - simpler and more direct
 
       this.isInitialized = true;
       logger.info('Agent Manager initialized successfully', {
@@ -349,145 +346,36 @@ export * from './base/types';
 
 /**
  * =============================================================================
- * NEW SIMPLIFIED AGENT ARCHITECTURE
+ * DYNAMIC AGENT ARCHITECTURE
  * =============================================================================
- * 8 Agents from 8 YAML configurations, not 15 separate classes
+ * Agents are dynamically discovered from YAML files - no hardcoding
  */
 
-/**
- * Agent types matching our 8 YAML configuration files
- */
-export type YamlAgentType = 
-  | 'backend-api'
-  | 'backend-orchestrator'
-  | 'data-enrichment'
-  | 'events'
-  | 'profile-builder'
-  | 'task-management'
-  | 'task-orchestrator'
-  | 'task-replay';
-
-/**
- * Agent configuration mapping
- */
-const AGENT_CONFIGS: Record<YamlAgentType, string> = {
-  'backend-api': 'backend-api-agent.yaml',
-  'backend-orchestrator': 'backend-orchestrator-agent.yaml',
-  'data-enrichment': 'data-enrichment-agent.yaml',
-  'events': 'events-agent.yaml',
-  'profile-builder': 'profile-builder-agent.yaml',
-  'task-management': 'task-management-agent.yaml',
-  'task-orchestrator': 'task-orchestrator-agent.yaml',
-  'task-replay': 'task-replay-agent.yaml'
-};
-
-/**
- * Simplified Agent Registry
- * Creates agents from YAML configurations
- */
-export class SimplifiedAgentRegistry {
-  private static instance: SimplifiedAgentRegistry;
-  private agents = new Map<string, BaseAgent>();
-
-  private constructor() {}
-
-  static getInstance(): SimplifiedAgentRegistry {
-    if (!SimplifiedAgentRegistry.instance) {
-      SimplifiedAgentRegistry.instance = new SimplifiedAgentRegistry();
-    }
-    return SimplifiedAgentRegistry.instance;
-  }
-
-  /**
-   * Create or get an agent instance
-   * Most agents are just BaseAgent + YAML configuration
-   */
-  createAgent(
-    agentType: YamlAgentType,
-    businessId: string,
-    userId?: string
-  ): BaseAgent {
-    const cacheKey = `${agentType}-${businessId}-${userId || 'system'}`;
-    
-    // Return cached instance if exists
-    const cached = this.agents.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    const configPath = `configs/${AGENT_CONFIGS[agentType]}`;
-    let agent: BaseAgent;
-
-    // Only special cases get their own class
-    switch (agentType) {
-      case 'backend-orchestrator':
-      case 'task-orchestrator':
-        // OrchestratorAgent has special orchestration logic
-        agent = new OrchestratorAgent(configPath, businessId, userId);
-        break;
-      
-      case 'task-management':
-        // TaskManagementAgent needs direct database access
-        agent = TaskManagementAgent.getInstance();
-        break;
-      
-      default:
-        // Most agents are just BaseAgent with YAML configuration
-        // This includes: backend-api, data-enrichment, events, 
-        // profile-builder, task-replay
-        agent = new BaseAgent(configPath, businessId, userId) as BaseAgent;
-    }
-
-    this.agents.set(cacheKey, agent);
-    return agent;
-  }
-
-  /**
-   * Get all available agent types
-   */
-  getAvailableAgentTypes(): YamlAgentType[] {
-    return Object.keys(AGENT_CONFIGS) as YamlAgentType[];
-  }
-
-  /**
-   * Clear the agent cache (useful for testing)
-   */
-  clear(): void {
-    this.agents.clear();
-  }
-}
-
-// Export simplified registry singleton
-export const simplifiedAgentRegistry = SimplifiedAgentRegistry.getInstance();
-
-/**
- * Helper function to create agents using simplified architecture
- */
-export function createSimplifiedAgent(
-  agentType: YamlAgentType,
-  businessId: string,
-  userId?: string
-): BaseAgent {
-  return simplifiedAgentRegistry.createAgent(agentType, businessId, userId);
-}
+// Re-export the dynamic agent registry and helper functions
+export { dynamicAgentRegistry } from './DynamicAgentRegistry';
+export { createAgent } from './DynamicAgentRegistry';
 
 /**
  * Export the main agent classes
  */
 export { BaseAgent } from './base/BaseAgent';
+export { DefaultAgent } from './DefaultAgent';
 export { OrchestratorAgent } from './OrchestratorAgent';
 export { TaskManagementAgent } from './TaskManagementAgent';
 
 /**
- * Agent capability definitions (from YAML)
+ * Get agent capabilities dynamically from discovered YAML files
+ * No hardcoding - capabilities are defined in YAML configurations
  */
-export const AGENT_CAPABILITIES = {
-  'backend-api': ['api_integration', 'webhook_handling', 'external_service_calls'],
-  'backend-orchestrator': ['workflow_management', 'agent_coordination', 'task_sequencing'],
-  'data-enrichment': ['data_gathering', 'information_synthesis', 'profile_enrichment'],
-  'events': ['event_handling', 'notification_dispatch', 'real_time_updates'],
-  'profile-builder': ['profile_assembly', 'data_validation', 'completeness_tracking'],
-  'task-management': ['task_crud', 'status_tracking', 'database_operations'],
-  'task-orchestrator': ['task_coordination', 'phase_management', 'agent_assignment'],
-  'task-replay': ['task_replay', 'history_reconstruction', 'audit_logging']
-};
+export function getAgentCapabilities(agentType: string): string[] {
+  try {
+    const agent = dynamicAgentRegistry.createAgent(agentType, 'temp', 'temp');
+    if (agent && typeof (agent as any).getConfiguration === 'function') {
+      const config = (agent as any).getConfiguration();
+      return config.capabilities || [];
+    }
+  } catch (error) {
+    logger.warn(`Could not get capabilities for agent type: ${agentType}`);
+  }
+  return [];
+}
