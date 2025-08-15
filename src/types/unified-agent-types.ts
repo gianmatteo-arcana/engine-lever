@@ -127,3 +127,85 @@ export function toEngineTaskContext(agentContext: AgentTaskContext): EngineTaskC
 }
 
 export type { TaskContext } from './engine-types';
+
+// Re-export engine types for backward compatibility
+export { EngineTaskContext } from './engine-types';
+
+// Helper function to ensure required context fields
+export function ensureAgentContext(context: AgentTaskContext): Required<AgentTaskContext> {
+  return {
+    ...context,
+    agentContexts: context.agentContexts || {},
+    activeUIRequests: context.activeUIRequests || {},
+    pendingInputRequests: context.pendingInputRequests || [],
+    sharedContext: context.sharedContext || { metadata: {} },
+    taskId: context.taskId || '',
+    userId: context.userId || '',
+    userToken: context.userToken || '',
+    taskType: context.taskType || '',
+    status: context.status || 'active',
+    currentPhase: context.currentPhase || 'initial',
+    completedPhases: context.completedPhases || [],
+    auditTrail: context.auditTrail || [],
+    contextId: context.contextId || `context_${Date.now()}`,
+    taskTemplateId: context.taskTemplateId || '',
+    tenantId: context.tenantId || 'default',
+    createdAt: context.createdAt || new Date().toISOString(),
+    updatedAt: context.updatedAt || new Date().toISOString(),
+    version: context.version || 1,
+    isComplete: context.isComplete || false,
+    currentState: context.currentState || {
+      status: 'processing',
+      phase: 'initial',
+      completeness: 0,
+      data: {}
+    },
+    history: context.history || [],
+    templateSnapshot: context.templateSnapshot || {
+      id: '',
+      name: '',
+      version: '',
+      steps: []
+    },
+    metadata: context.metadata || {}
+  };
+}
+
+// Helper to create a minimal valid context
+export function createMinimalContext(overrides: Partial<AgentTaskContext> = {}): AgentTaskContext {
+  return {
+    taskId: overrides.taskId || 'temp',
+    taskType: overrides.taskType || 'default',
+    userId: overrides.userId || '',
+    userToken: overrides.userToken || '',
+    status: overrides.status || 'active',
+    currentPhase: overrides.currentPhase || 'initial',
+    completedPhases: overrides.completedPhases || [],
+    sharedContext: overrides.sharedContext || { metadata: {} },
+    agentContexts: overrides.agentContexts || {},
+    activeUIRequests: overrides.activeUIRequests || {},
+    pendingInputRequests: overrides.pendingInputRequests || [],
+    auditTrail: overrides.auditTrail || [],
+    contextId: overrides.contextId || `context_${Date.now()}`,
+    taskTemplateId: overrides.taskTemplateId || '',
+    tenantId: overrides.tenantId || 'default',
+    createdAt: overrides.createdAt || new Date().toISOString(),
+    updatedAt: overrides.updatedAt || new Date().toISOString(),
+    version: overrides.version || 1,
+    isComplete: overrides.isComplete || false,
+    currentState: overrides.currentState || {
+      status: 'processing',
+      phase: 'initial',
+      completeness: 0,
+      data: {}
+    },
+    history: overrides.history || [],
+    templateSnapshot: overrides.templateSnapshot || {
+      id: '',
+      name: '',
+      version: '',
+      steps: []
+    },
+    metadata: overrides.metadata || {}
+  };
+}

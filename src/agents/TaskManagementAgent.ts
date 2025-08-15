@@ -4,7 +4,7 @@
  */
 
 import { BaseAgent } from './base/UnifiedBaseAgent';
-import { AgentTaskContext as TaskContext } from '../types/unified-agent-types';
+import { AgentTaskContext as TaskContext, ensureAgentContext, createMinimalContext } from '../types/unified-agent-types';
 import { logger } from '../utils/logger';
 import { supabase } from '../services/supabase';
 
@@ -78,29 +78,31 @@ export class TaskManagementAgent extends BaseAgent {
     context: TaskContext, 
     parameters: Record<string, unknown>
   ): Promise<TaskContext> {
+    // Ensure context has all required fields
+    const safeContext = ensureAgentContext(context);
     const operation = parameters.operation as string;
     
     try {
       // Validate user access for all operations
-      await this.validateUserAccess(context.userId, context.userToken);
+      await this.validateUserAccess(safeContext.userId, safeContext.userToken);
       
       switch (operation) {
         case 'createTask':
-          return await this.handleTaskCreation(taskId, context, parameters);
+          return await this.handleTaskCreation(taskId, safeContext, parameters);
         case 'updateTask':
-          return await this.handleTaskUpdate(taskId, context, parameters);
+          return await this.handleTaskUpdate(taskId, safeContext, parameters);
         case 'deleteTask':
-          return await this.handleTaskDeletion(taskId, context, parameters);
+          return await this.handleTaskDeletion(taskId, safeContext, parameters);
         case 'getTask':
-          return await this.handleTaskRetrieval(taskId, context, parameters);
+          return await this.handleTaskRetrieval(taskId, safeContext, parameters);
         case 'listTasks':
-          return await this.handleTaskListing(taskId, context, parameters);
+          return await this.handleTaskListing(taskId, safeContext, parameters);
         case 'saveContext':
-          return await this.handleContextSaving(taskId, context, parameters);
+          return await this.handleContextSaving(taskId, safeContext, parameters);
         case 'loadContext':
-          return await this.handleContextLoading(taskId, context, parameters);
+          return await this.handleContextLoading(taskId, safeContext, parameters);
         case 'updateTaskStatus':
-          return await this.handleStatusUpdate(taskId, context, parameters);
+          return await this.handleStatusUpdate(taskId, safeContext, parameters);
         default:
           throw new Error(`Unknown operation: ${operation}`);
       }
@@ -113,8 +115,8 @@ export class TaskManagementAgent extends BaseAgent {
       });
       
       // Update context with error information
-      context.agentContexts[this.agentId] = {
-        ...context.agentContexts[this.agentId],
+      safeContext.agentContexts[this.agentId] = {
+        ...safeContext.agentContexts[this.agentId],
         state: {
           ...context.agentContexts[this.agentId]?.state,
           error: error instanceof Error ? error.message : String(error),
@@ -123,7 +125,7 @@ export class TaskManagementAgent extends BaseAgent {
         }
       };
       
-      return context;
+      return safeContext;
     }
   }
 
@@ -672,20 +674,14 @@ export class TaskManagementAgent extends BaseAgent {
 
   // Public convenience methods for backward compatibility
   async createTask(params: CreateTaskParams, userId: string): Promise<Task> {
-    const dummyContext: TaskContext = {
+    const dummyContext = createMinimalContext({
       taskId: 'temp',
       taskType: 'creation',
       userId,
       userToken: 'validated',
       status: 'active',
-      currentPhase: 'creation',
-      completedPhases: [],
-      sharedContext: { metadata: {} },
-      agentContexts: {},
-      activeUIRequests: {},
-      pendingInputRequests: [],
-      auditTrail: []
-    };
+      currentPhase: 'creation'
+    });
 
     const result = await this.executeTask('create-task', dummyContext, {
       operation: 'createTask',
@@ -701,20 +697,14 @@ export class TaskManagementAgent extends BaseAgent {
   }
 
   async getTask(taskId: string, userId: string): Promise<Task | null> {
-    const dummyContext: TaskContext = {
+    const dummyContext = createMinimalContext({
       taskId: 'temp',
       taskType: 'retrieval',
       userId,
       userToken: 'validated',
       status: 'active',
-      currentPhase: 'retrieval',
-      completedPhases: [],
-      sharedContext: { metadata: {} },
-      agentContexts: {},
-      activeUIRequests: {},
-      pendingInputRequests: [],
-      auditTrail: []
-    };
+      currentPhase: 'retrieval'
+    });
 
     try {
       const result = await this.executeTask('get-task', dummyContext, {
@@ -729,20 +719,14 @@ export class TaskManagementAgent extends BaseAgent {
   }
 
   async getUserTasks(userId: string, options?: TaskListOptions): Promise<{ tasks: Task[]; count: number }> {
-    const dummyContext: TaskContext = {
+    const dummyContext = createMinimalContext({
       taskId: 'temp',
       taskType: 'listing',
       userId,
       userToken: 'validated',
       status: 'active',
-      currentPhase: 'listing',
-      completedPhases: [],
-      sharedContext: { metadata: {} },
-      agentContexts: {},
-      activeUIRequests: {},
-      pendingInputRequests: [],
-      auditTrail: []
-    };
+      currentPhase: 'listing'
+    });
 
     const result = await this.executeTask('list-tasks', dummyContext, {
       operation: 'listTasks',

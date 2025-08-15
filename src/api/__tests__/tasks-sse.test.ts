@@ -92,8 +92,12 @@ describe('Tasks SSE API', () => {
       const mockTask = {
         id: taskId,
         user_id: 'test-user-id',
-        status: 'in_progress',
+        title: 'Test Task',
         task_type: 'onboarding',
+        business_id: 'business-123',
+        template_id: 'template-123',
+        status: 'in_progress' as const,
+        priority: 'medium' as const,
         metadata: { 
           currentStep: 'step1',
           completeness: 50
@@ -108,7 +112,9 @@ describe('Tasks SSE API', () => {
           task_id: taskId,
           sequence_number: 1,
           entry_type: 'USER_INPUT',
-          actor_type: 'user',
+          actor_type: 'user' as const,
+          actor_id: 'user-123',
+          actor_role: 'user',
           operation: 'form_submission',
           data: { field: 'value' },
           created_at: new Date().toISOString(),
@@ -157,7 +163,12 @@ describe('Tasks SSE API', () => {
       const mockTask = {
         id: taskId,
         user_id: 'test-user-id',
-        status: 'in_progress',
+        title: 'Test Task',
+        task_type: 'onboarding',
+        business_id: 'business-123',
+        template_id: 'template-123',
+        status: 'in_progress' as const,
+        priority: 'medium' as const,
         metadata: {},
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -188,12 +199,19 @@ describe('Tasks SSE API', () => {
       const mockTask = {
         id: taskId,
         user_id: 'test-user-id',
-        status: 'in_progress',
+        title: 'Test Task',
+        task_type: 'onboarding',
+        business_id: 'business-123',
+        template_id: 'template-123',
+        status: 'in_progress' as const,
+        priority: 'medium' as const,
         metadata: { existing: 'data' },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       mockDbService.getTask.mockResolvedValue(mockTask);
-      mockDbService.updateTask.mockResolvedValue(undefined);
+      mockDbService.updateTask.mockResolvedValue({} as any);
       mockDbService.notifyTaskContextUpdate.mockResolvedValue(undefined);
 
       const eventData = {
@@ -257,12 +275,19 @@ describe('Tasks SSE API', () => {
       const mockTask = {
         id: taskId,
         user_id: 'test-user-id',
-        status: 'in_progress',
+        title: 'Test Task',
+        task_type: 'onboarding',
+        business_id: 'business-123',
+        template_id: 'template-123',
+        status: 'in_progress' as const,
+        priority: 'medium' as const,
         metadata: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       mockDbService.getTask.mockResolvedValue(mockTask);
-      mockDbService.updateTask.mockResolvedValue(undefined);
+      mockDbService.updateTask.mockResolvedValue({} as any);
       mockDbService.notifyTaskContextUpdate.mockRejectedValue(
         new Error('Notification failed')
       );
@@ -287,13 +312,18 @@ describe('Tasks SSE API', () => {
       const mockTask = {
         id: taskId,
         user_id: 'test-user-id',
-        status: 'in_progress',
+        title: 'Test Task',
+        task_type: 'onboarding',
+        business_id: 'business-123',
+        template_id: 'template-123',
+        status: 'in_progress' as const,
+        priority: 'medium' as const,
         metadata: {},
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
 
-      let capturedCallback: ((payload: any) => void) | null = null;
+      let capturedCallback: any = null;
       
       mockDbService.getTask.mockResolvedValue(mockTask);
       mockDbService.getContextHistory.mockResolvedValue([]);
