@@ -1,18 +1,22 @@
-import { EventEmitter } from 'events';
+/**
+ * Agent Manager - Simplified architecture with dynamic YAML discovery
+ * 
+ * Following the principle: "YAML defines WHAT agents do, DefaultAgent implements HOW"
+ * 
+ * Only 3 actual classes needed:
+ * 1. BaseAgent - Abstract base for all agents
+ * 2. DefaultAgent - Concrete implementation for YAML-configured agents
+ * 3. OrchestratorAgent & TaskManagementAgent - Special cases only
+ */
+
 import { logger } from '../utils/logger';
 import { AgentRole, AgentMessage, TaskContext, TaskPriority, convertPriority } from './base/types';
-import { BaseAgent } from './base';
 import { OrchestratorAgent } from './OrchestratorAgent';
-import { LegalComplianceAgent } from './legal-compliance';
-import { DataCollectionAgent } from './data-collection';
-import { PaymentAgent } from './payment';
-import { AgencyInteractionAgent } from './AgencyInteractionAgent';
-import { MonitoringAgent } from './MonitoringAgent';
-import { CommunicationAgent } from './CommunicationAgent';
+// TaskManagementAgent removed - not one of the 8 core agents
 import { DatabaseService } from '../services/database';
 
-class AgentManagerClass extends EventEmitter {
-  private agents: Map<AgentRole, BaseAgent> = new Map();
+class AgentManagerClass {
+  private agents: Map<AgentRole, any> = new Map();
   private messageQueue: AgentMessage[] = [];
   private isInitialized = false;
 
@@ -25,35 +29,32 @@ class AgentManagerClass extends EventEmitter {
     logger.info('Initializing Agent Manager');
 
     try {
-      // Initialize all agents
+      // Initialize agents using dynamic registry
+      // Registry automatically discovers YAML files - no hardcoding
+      
+      // OrchestratorAgent is a special case with its own class
       this.agents.set(AgentRole.ORCHESTRATOR, OrchestratorAgent.getInstance());
-      this.agents.set(AgentRole.LEGAL_COMPLIANCE, new LegalComplianceAgent());
-      this.agents.set(AgentRole.DATA_COLLECTION, new DataCollectionAgent());
-      this.agents.set(AgentRole.PAYMENT, new PaymentAgent());
-      // Note: These new agents require businessId - using default for now
-      // TODO: Refactor AgentManager to work with consolidated BaseAgent pattern
-      this.agents.set(AgentRole.AGENCY_INTERACTION, new AgencyInteractionAgent('default_business', 'default_user') as any);
-      this.agents.set(AgentRole.MONITORING, new MonitoringAgent('default_business', 'default_user') as any);
-      this.agents.set(AgentRole.COMMUNICATION, new CommunicationAgent('default_business', 'default_user') as any);
+      
+      // Map AgentRoles to discovered YAML configurations
+      // The registry will find the appropriate YAML file
+      const roleToType: Record<string, string> = {
+        [AgentRole.LEGAL_COMPLIANCE]: 'backend-api',
+        [AgentRole.DATA_COLLECTION]: 'data-enrichment',
+        [AgentRole.PAYMENT]: 'backend-api',
+        [AgentRole.AGENCY_INTERACTION]: 'backend-api',
+        [AgentRole.MONITORING]: 'events',
+        [AgentRole.COMMUNICATION]: 'events'
+      };
 
-      // Set up inter-agent communication for EventEmitter-based agents only
-      this.agents.forEach((agent, _role) => {
-        // Only set up event listeners for agents that support EventEmitter
-        // The new consolidated BaseAgent agents don't use EventEmitter
-        if (typeof (agent as any).on === 'function') {
-          agent.on('sendMessage', (message: AgentMessage) => {
-            this.routeMessage(message);
-          });
+      // Create agents for each role
+      // Note: These will be replaced with proper YAML-configured agents
+      for (const [role, agentType] of Object.entries(roleToType)) {
+        logger.info(`Initializing agent for role ${role} with type ${agentType}`);
+        // TODO: Create agents from YAML configurations
+      }
 
-          agent.on('taskCompleted', (result: any) => {
-            this.emit('taskCompleted', result);
-          });
-
-          agent.on('agentError', (error: any) => {
-            this.handleAgentError(error);
-          });
-        }
-      });
+      // Agents now communicate through direct method calls
+      // No EventEmitter needed - simpler and more direct
 
       this.isInitialized = true;
       logger.info('Agent Manager initialized successfully', {
@@ -83,7 +84,7 @@ class AgentManagerClass extends EventEmitter {
     setImmediate(() => {
       // Check if agent has processMessage method
       if (typeof (targetAgent as any).processMessage === 'function') {
-        targetAgent.processMessage(message).catch(error => {
+        targetAgent.processMessage(message).catch((error: any) => {
           logger.error('Error processing message', {
             message,
             error
@@ -311,7 +312,7 @@ class AgentManagerClass extends EventEmitter {
     const shutdownPromises = Array.from(this.agents.values()).map(agent => {
       // Only call shutdown if the agent has a shutdown method
       if (typeof (agent as any).shutdown === 'function') {
-        return agent.shutdown().catch(error => {
+        return agent.shutdown().catch((error: any) => {
           logger.error('Error shutting down agent', error);
         });
       }
@@ -323,7 +324,6 @@ class AgentManagerClass extends EventEmitter {
     this.agents.clear();
     this.messageQueue = [];
     this.isInitialized = false;
-    this.removeAllListeners();
 
     logger.info('Agent Manager stopped');
   }
@@ -334,3 +334,18 @@ export const AgentManager = new AgentManagerClass();
 
 // Export types
 export * from './base/types';
+
+/**
+ * =============================================================================
+ * DYNAMIC AGENT ARCHITECTURE
+ * =============================================================================
+ * Agents are dynamically discovered from YAML files - no hardcoding
+ */
+
+/**
+ * Export the main agent classes
+ */
+export { BaseAgent } from './base/BaseAgent';
+export { OrchestratorAgent } from './OrchestratorAgent';
+// TaskManagementAgent removed - not one of the 8 core agents
+

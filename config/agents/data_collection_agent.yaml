@@ -14,6 +14,24 @@ agent:
     
     Key outputs: validated business entities, compliance mappings, progressive disclosure forms.
     
+  # A2A Protocol Configuration (ADDED FOR ISSUE #51)
+  a2a:
+    protocolVersion: "1.0.0"
+    communicationMode: "async"
+    messageFormats:
+      - "json"
+    routing:
+      canReceiveFrom:
+        - "orchestrator_agent"
+        - "legal_compliance_agent"
+      canSendTo:
+        - "orchestrator_agent"
+        - "communication_agent"
+    messageHandling:
+      bufferSize: 50
+      timeoutMs: 20000
+      retryEnabled: true
+  
   # Agent capabilities card for discovery (PRD:187-191)
   agent_card:
     skills:

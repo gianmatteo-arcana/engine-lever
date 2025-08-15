@@ -14,6 +14,23 @@ agent:
     
     Key outputs: health reports, audit summaries, anomaly alerts.
     
+  # A2A Protocol Configuration (ADDED FOR ISSUE #51)
+  a2a:
+    protocolVersion: "1.0.0"
+    communicationMode: "async"
+    messageFormats:
+      - "json"
+    routing:
+      canReceiveFrom:
+        - "*"  # Monitors all agents
+      canSendTo:
+        - "orchestrator_agent"
+        - "communication_agent"  # Can trigger alerts
+    messageHandling:
+      bufferSize: 200  # Larger buffer for monitoring
+      timeoutMs: 10000
+      retryEnabled: false  # Don't retry monitoring messages
+    
   agent_card:
     skills:
       - "System health monitoring and performance tracking"

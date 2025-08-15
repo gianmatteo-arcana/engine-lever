@@ -7,6 +7,26 @@ agent:
   version: "1.0.0"
   role: "entity_compliance_specialist"
   
+  # A2A Protocol Configuration (ADDED FOR ISSUE #51)
+  a2a:
+    protocolVersion: "1.0.0"
+    communicationMode: "async"
+    messageFormats:
+      - "json"
+    routing:
+      canReceiveFrom:
+        - "orchestrator_agent"
+        - "data_collection_agent"  # Receive entity data
+        - "legal_compliance_agent"  # Coordinate on compliance
+      canSendTo:
+        - "orchestrator_agent"
+        - "legal_compliance_agent"  # Share compliance findings
+        - "monitoring_agent"  # Report compliance deadlines
+    messageHandling:
+      bufferSize: 75
+      timeoutMs: 20000
+      retryEnabled: true
+  
   # Agent mission - entity-specific compliance analysis
   mission: |
     You are an Entity Compliance Agent specialized in analyzing business entities

@@ -7,6 +7,26 @@ agent:
   version: "1.0.0"
   role: "legal_compliance_specialist"
   
+  # A2A Protocol Configuration (ADDED FOR ISSUE #51)
+  a2a:
+    protocolVersion: "1.0.0"
+    communicationMode: "async"
+    messageFormats:
+      - "json"
+    routing:
+      canReceiveFrom:
+        - "orchestrator_agent"
+        - "data_collection_agent"  # Receive business entity data
+      canSendTo:
+        - "orchestrator_agent"
+        - "payment_agent"  # Send fee requirements
+        - "agency_interaction_agent"  # Send compliance requirements
+        - "communication_agent"  # Send compliance updates
+    messageHandling:
+      bufferSize: 75
+      timeoutMs: 25000
+      retryEnabled: true
+  
   # Agent mission - concise and focused for optimal LLM performance
   mission: |
     Analyze business compliance requirements and translate complex regulations into actionable steps.

@@ -7,6 +7,25 @@ agent:
   version: "1.0.0"
   role: "payment_specialist"
   
+  # A2A Protocol Configuration (ADDED FOR ISSUE #51)
+  a2a:
+    protocolVersion: "1.0.0"
+    communicationMode: "async"
+    messageFormats:
+      - "json"
+    routing:
+      canReceiveFrom:
+        - "orchestrator_agent"
+        - "legal_compliance_agent"  # Receive fee requirements
+      canSendTo:
+        - "orchestrator_agent"
+        - "agency_interaction_agent"  # Send payment confirmations
+        - "communication_agent"  # Send payment status updates
+    messageHandling:
+      bufferSize: 50
+      timeoutMs: 20000
+      retryEnabled: true
+  
   # Agent mission - concise and focused for optimal LLM performance
   mission: |
     Process secure payments for government fees and regulatory filings. Calculate costs,

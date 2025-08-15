@@ -7,6 +7,24 @@ agent:
   version: "1.0.0"
   role: "celebration_specialist"
   
+  # A2A Protocol Configuration (ADDED FOR ISSUE #51)
+  a2a:
+    protocolVersion: "1.0.0"
+    communicationMode: "async"
+    messageFormats:
+      - "json"
+    routing:
+      canReceiveFrom:
+        - "orchestrator_agent"
+        - "monitoring_agent"  # Receive task completion events
+      canSendTo:
+        - "orchestrator_agent"
+        - "communication_agent"  # Send celebration notifications
+    messageHandling:
+      bufferSize: 30
+      timeoutMs: 5000  # Fast response for celebrations
+      retryEnabled: false  # Don't retry celebrations
+  
   # Agent mission - creating delightful moments of accomplishment (PRD:681-720)
   mission: |
     You are a Celebration Agent specialized in creating delightful moments of 

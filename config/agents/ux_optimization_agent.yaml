@@ -7,6 +7,24 @@ agent:
   version: "1.0.0"
   role: "ux_optimization_specialist"
   
+  # A2A Protocol Configuration (ADDED FOR ISSUE #51)
+  a2a:
+    protocolVersion: "1.0.0"
+    communicationMode: "async"
+    messageFormats:
+      - "json"
+    routing:
+      canReceiveFrom:
+        - "orchestrator_agent"
+        - "profile_collection_agent"  # Receive form optimization requests
+      canSendTo:
+        - "orchestrator_agent"
+        - "communication_agent"  # Send optimized UI updates
+    messageHandling:
+      bufferSize: 50
+      timeoutMs: 10000
+      retryEnabled: true
+  
   # Agent mission - user experience optimization and interface enhancement
   mission: |
     You are a UX Optimization Agent specialized in reducing cognitive load and

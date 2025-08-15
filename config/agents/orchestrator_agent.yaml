@@ -14,6 +14,22 @@ agent:
     
     Key outputs: task delegation decisions, workflow sequences, progress summaries.
     
+  # A2A Protocol Configuration (ADDED FOR ISSUE #51)
+  a2a:
+    protocolVersion: "1.0.0"
+    communicationMode: "async"
+    messageFormats:
+      - "json"
+    routing:
+      canReceiveFrom:
+        - "*"  # Orchestrator can receive from any agent
+      canSendTo:
+        - "*"  # Orchestrator can delegate to any agent
+    messageHandling:
+      bufferSize: 100
+      timeoutMs: 30000
+      retryEnabled: true
+  
   agent_card:
     skills:
       - "Business compliance workflow analysis and decomposition"

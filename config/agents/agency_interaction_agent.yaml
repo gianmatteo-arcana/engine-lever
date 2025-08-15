@@ -7,6 +7,25 @@ agent:
   version: "1.0.0"
   role: "agency_interaction_specialist"
   
+  # A2A Protocol Configuration (ADDED FOR ISSUE #51)
+  a2a:
+    protocolVersion: "1.0.0"
+    communicationMode: "async"
+    messageFormats:
+      - "json"
+    routing:
+      canReceiveFrom:
+        - "orchestrator_agent"
+        - "legal_compliance_agent"  # Receive compliance requirements
+        - "payment_agent"  # Receive payment confirmations
+      canSendTo:
+        - "orchestrator_agent"
+        - "communication_agent"  # Send status updates
+    messageHandling:
+      bufferSize: 75
+      timeoutMs: 30000  # Longer timeout for portal interactions
+      retryEnabled: true
+  
   # Agent mission - concise and focused for optimal LLM performance
   mission: |
     Navigate government portals and submit compliance forms accurately. Monitor submission

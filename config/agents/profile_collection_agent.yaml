@@ -7,6 +7,24 @@ agent:
   version: "1.0.0"
   role: "profile_collection_specialist"
   
+  # A2A Protocol Configuration (ADDED FOR ISSUE #51)
+  a2a:
+    protocolVersion: "1.0.0"
+    communicationMode: "async"
+    messageFormats:
+      - "json"
+    routing:
+      canReceiveFrom:
+        - "orchestrator_agent"
+        - "data_collection_agent"  # Can receive enriched data
+      canSendTo:
+        - "orchestrator_agent"
+        - "communication_agent"  # Send UI updates
+    messageHandling:
+      bufferSize: 50
+      timeoutMs: 15000
+      retryEnabled: true
+  
   # Agent mission - user profile and business information collection
   mission: |
     You are a Profile Collection Agent specialized in gathering user profile
