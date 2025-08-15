@@ -121,17 +121,17 @@ describe('Agent Migration Integration', () => {
     it('should provide all expected agent types', () => {
       const availableTypes = agentRegistry.getAvailableAgentTypes();
       
-      // Should include YAML-configured agents
-      expect(availableTypes).toContain('SOISpecialistAgent');
-      expect(availableTypes).toContain('ComplianceAdvisorAgent');
+      // Should include YAML-configured agents  
       expect(availableTypes).toContain('ProfileBuilderAgent');
-      expect(availableTypes).toContain('GeneralAssistantAgent');
       expect(availableTypes).toContain('TaskOrchestratorAgent');
+      expect(availableTypes).toContain('DataEnrichmentAgent');
       
       // Should include service-based agents
-      expect(availableTypes).toContain('DataEnrichmentAgent');
       expect(availableTypes).toContain('BackendOrchestratorAgent');
       expect(availableTypes).toContain('TaskManagementAgent');
+      expect(availableTypes).toContain('EventsAgent');
+      expect(availableTypes).toContain('BackendAPIAgent');
+      expect(availableTypes).toContain('TaskReplayAgent');
     });
 
     it('should create singleton instances for service agents', () => {
@@ -255,34 +255,22 @@ describe('Agent Migration Integration', () => {
   });
 
   describe('YAML-Configured Agents', () => {
-    it('should create SOI Specialist Agent from YAML config', () => {
-      const agent = createAgent('SOISpecialistAgent');
-      expect(agent).toBeDefined();
-      expect(agent['agentId']).toContain('soi-specialist');
-    });
-
-    it('should create Compliance Advisor Agent from YAML config', () => {
-      const agent = createAgent('ComplianceAdvisorAgent');
-      expect(agent).toBeDefined();
-      expect(agent['agentId']).toContain('compliance-advisor');
-    });
-
     it('should create Profile Builder Agent from YAML config', () => {
       const agent = createAgent('ProfileBuilderAgent');
       expect(agent).toBeDefined();
       expect(agent['agentId']).toContain('profile-builder');
     });
 
-    it('should create General Assistant Agent from YAML config', () => {
-      const agent = createAgent('GeneralAssistantAgent');
-      expect(agent).toBeDefined();
-      expect(agent['agentId']).toContain('general-assistant');
-    });
-
     it('should create Task Orchestrator Agent from YAML config', () => {
       const agent = createAgent('TaskOrchestratorAgent');
       expect(agent).toBeDefined();
-      expect(agent['agentId']).toContain('orchestrator');
+      expect(agent['agentId']).toContain('task-orchestrator');
+    });
+
+    it('should create Data Enrichment Agent from YAML config', () => {
+      const agent = createAgent('DataEnrichmentAgent');
+      expect(agent).toBeDefined();
+      expect(agent['agentId']).toContain('data-enrichment');
     });
   });
 
@@ -294,11 +282,9 @@ describe('Agent Migration Integration', () => {
     });
 
     it('should track YAML-configured agents', () => {
-      expect(MIGRATION_STATUS.yamlConfigured).toContain('SOISpecialistAgent');
-      expect(MIGRATION_STATUS.yamlConfigured).toContain('ComplianceAdvisorAgent');
       expect(MIGRATION_STATUS.yamlConfigured).toContain('ProfileBuilderAgent');
-      expect(MIGRATION_STATUS.yamlConfigured).toContain('GeneralAssistantAgent');
       expect(MIGRATION_STATUS.yamlConfigured).toContain('TaskOrchestratorAgent');
+      expect(MIGRATION_STATUS.yamlConfigured).toContain('DataEnrichmentAgent');
     });
 
     it('should track pending migrations', () => {

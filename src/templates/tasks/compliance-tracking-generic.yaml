@@ -1,0 +1,126 @@
+# Generic Compliance Tracking Task Template
+# This template can be customized for any jurisdiction/entity type
+# Version: 1.0.0
+
+# Task Template Identity
+templateId: "compliance-tracking-generic"
+templateType: "compliance_monitoring"
+version: "1.0.0"
+name: "Generic Compliance Tracking"
+description: "Configurable template for tracking any compliance requirements"
+
+# Configuration Schema (to be filled by specific implementations)
+configuration:
+  jurisdiction:
+    location: "${LOCATION}"  # To be replaced with specific location
+    agency: "${AGENCY}"      # To be replaced with specific agency
+  
+  entityType: "${ENTITY_TYPE}"  # To be replaced with specific entity type
+  
+  # Dynamic requirements based on configuration
+  requirements: []  # Populated at runtime based on jurisdiction/entity
+
+# Generic Workflow Phases
+phases:
+  - id: "requirement_identification"
+    name: "Identify Requirements"
+    requiredAgents:
+      - "DataEnrichmentAgent"   # To gather requirement data
+      - "ProfileBuilderAgent"   # To match requirements to profile
+    outputs:
+      - "applicable_requirements"
+      - "compliance_calendar"
+  
+  - id: "status_assessment"
+    name: "Assess Compliance Status"
+    requiredAgents:
+      - "ProfileBuilderAgent"   # To check profile completeness
+    outputs:
+      - "compliance_gaps"
+      - "required_actions"
+  
+  - id: "deadline_tracking"
+    name: "Track Deadlines"
+    requiredAgents:
+      - "TaskManagementAgent"   # To manage deadline tasks
+      - "EventsAgent"           # To handle deadline events
+    outputs:
+      - "upcoming_deadlines"
+      - "overdue_items"
+  
+  - id: "action_planning"
+    name: "Plan Compliance Actions"
+    requiredAgents:
+      - "TaskOrchestratorAgent"  # To orchestrate compliance tasks
+    outputs:
+      - "action_plan"
+      - "task_assignments"
+
+# Generic Data Requirements
+dataRequirements:
+  businessProfile:
+    required:
+      - "businessName"
+      - "entityType"
+      - "location"
+      - "registrationDate"
+    optional:
+      - "industryType"
+      - "businessSize"
+      - "annualRevenue"
+  
+  complianceHistory:
+    - "previousFilings"
+    - "violations"
+    - "penalties"
+
+# Generic Validation Rules (customizable)
+validationRules:
+  profile:
+    mustHaveRequiredFields: true
+    mustBeCurrentYear: false
+  
+  deadlines:
+    requireConfirmation: true
+    allowExtensions: false
+
+# Generic Monitoring Configuration
+monitoring:
+  checkFrequency: "weekly"
+  alertThresholds:
+    urgent: "7 days"
+    warning: "30 days"
+    informational: "90 days"
+  
+  escalationPath:
+    - level: 1
+      trigger: "30 days before deadline"
+      action: "email_notification"
+    - level: 2
+      trigger: "7 days before deadline"
+      action: "urgent_alert"
+    - level: 3
+      trigger: "overdue"
+      action: "escalate_to_admin"
+
+# Generic UI Configuration
+uiConfiguration:
+  dashboardWidgets:
+    - type: "deadline_calendar"
+      title: "Compliance Calendar"
+      refreshInterval: "daily"
+    
+    - type: "requirement_checklist"
+      title: "Compliance Requirements"
+      groupBy: "category"
+    
+    - type: "status_indicator"
+      title: "Overall Compliance Status"
+      displayAs: "gauge"
+
+# Extensibility Points
+extensions:
+  customValidators: []     # Add jurisdiction-specific validators
+  customCalculators: []    # Add deadline/fee calculators
+  customDataSources: []    # Add external data sources
+  customNotifications: []  # Add custom notification templates

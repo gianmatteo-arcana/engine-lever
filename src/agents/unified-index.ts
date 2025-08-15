@@ -19,11 +19,9 @@ export { TaskManagementAgent } from './TaskManagementAgent';
 
 // YAML-configured agents (load dynamically)
 export type YAMLAgentType = 
-  | 'SOISpecialistAgent'
-  | 'ComplianceAdvisorAgent'
   | 'ProfileBuilderAgent'
-  | 'GeneralAssistantAgent'
-  | 'TaskOrchestratorAgent';
+  | 'TaskOrchestratorAgent'
+  | 'DataEnrichmentAgent';
 
 export type ServiceAgentType = 
   | 'DataEnrichmentAgent'
@@ -42,12 +40,10 @@ class AgentRegistry {
   private yamlAgents = new Map<YAMLAgentType, string>();
 
   private constructor() {
-    // Initialize YAML agent paths
-    this.yamlAgents.set('SOISpecialistAgent', 'src/agents/configs/soi-specialist.yaml');
-    this.yamlAgents.set('ComplianceAdvisorAgent', 'src/agents/configs/compliance-advisor.yaml');
-    this.yamlAgents.set('ProfileBuilderAgent', 'src/agents/configs/profile-builder.yaml');
-    this.yamlAgents.set('GeneralAssistantAgent', 'src/agents/configs/general-assistant.yaml');
-    this.yamlAgents.set('TaskOrchestratorAgent', 'src/agents/configs/orchestrator.yaml');
+    // Initialize YAML agent paths (with proper naming conventions)
+    this.yamlAgents.set('ProfileBuilderAgent', 'src/agents/configs/profile-builder-agent.yaml');
+    this.yamlAgents.set('TaskOrchestratorAgent', 'src/agents/configs/task-orchestrator-agent.yaml');
+    this.yamlAgents.set('DataEnrichmentAgent', 'src/agents/configs/data-enrichment-agent.yaml');
   }
 
   static getInstance(): AgentRegistry {
@@ -208,11 +204,9 @@ export const MIGRATION_STATUS = {
     'TaskManagementAgent'
   ],
   yamlConfigured: [
-    'SOISpecialistAgent',
-    'ComplianceAdvisorAgent',
     'ProfileBuilderAgent',
-    'GeneralAssistantAgent',
-    'TaskOrchestratorAgent'
+    'TaskOrchestratorAgent',
+    'DataEnrichmentAgent'
   ],
   pending: [
     'EventsAgent',
