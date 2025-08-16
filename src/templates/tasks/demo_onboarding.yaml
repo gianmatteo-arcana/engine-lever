@@ -1,0 +1,42 @@
+id: demo_onboarding
+name: "Demo: Complete Business Onboarding"
+description: "Interactive demo of the onboarding process"
+taskType: onboarding
+priority: medium
+estimatedDuration: 15
+
+agents:
+  - type: demo_agent
+    name: "Demo Assistant"
+    role: "Guides through demo onboarding"
+
+phases:
+  - id: welcome
+    name: "Welcome"
+    description: "Welcome to SmallBizAlly demo"
+    agent: demo_agent
+    
+  - id: profile_demo
+    name: "Profile Demo"
+    description: "Demo profile collection"
+    agent: demo_agent
+    
+  - id: complete
+    name: "Demo Complete"
+    description: "Onboarding demo completed"
+    agent: demo_agent
+
+states:
+  initial: pending
+  terminal:
+    - completed
+  allowed:
+    - pending
+    - active
+    - completed
+
+metadata:
+  category: demo
+  isDemo: true
+  automationLevel: high
+  requiresAuth: false

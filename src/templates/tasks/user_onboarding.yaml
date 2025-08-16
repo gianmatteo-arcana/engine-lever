@@ -1,0 +1,70 @@
+id: user_onboarding
+name: "Complete Business Onboarding"
+description: "Set up your business profile and get started with SmallBizAlly"
+taskType: onboarding
+priority: high
+estimatedDuration: 30
+
+agents:
+  - type: profile_collector
+    name: "Profile Collector"
+    role: "Gathers user and business information"
+  - type: business_discovery
+    name: "Business Discovery"
+    role: "Analyzes business structure and needs"
+  - type: compliance_analyzer
+    name: "Compliance Analyzer"
+    role: "Identifies compliance requirements"
+
+phases:
+  - id: profile_setup
+    name: "Profile Setup"
+    description: "Collect basic user and business information"
+    agent: profile_collector
+    requiredFields:
+      - firstName
+      - lastName
+      - businessName
+      - entityType
+    
+  - id: business_discovery
+    name: "Business Discovery"
+    description: "Analyze business structure and requirements"
+    agent: business_discovery
+    requiredFields:
+      - industry
+      - stateOfFormation
+      - ein
+    
+  - id: compliance_assessment
+    name: "Compliance Assessment"
+    description: "Identify initial compliance requirements"
+    agent: compliance_analyzer
+    requiredFields:
+      - hasEmployees
+      - annualRevenue
+    
+  - id: initial_tasks
+    name: "Initial Tasks"
+    description: "Create first set of compliance tasks"
+    agent: orchestrator
+    actions:
+      - createInitialTasks
+
+states:
+  initial: pending
+  terminal:
+    - completed
+    - cancelled
+  allowed:
+    - pending
+    - active
+    - in_progress
+    - completed
+    - cancelled
+
+metadata:
+  category: onboarding
+  automationLevel: high
+  requiresAuth: true
+  trackingEnabled: true
