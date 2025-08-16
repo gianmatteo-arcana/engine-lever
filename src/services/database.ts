@@ -1320,4 +1320,43 @@ export class DatabaseService {
       return () => {}; // Return empty cleanup function
     }
   }
+
+  /**
+   * Listen to a generic PostgreSQL channel (not task-specific)
+   * Used for system-wide events like new user registrations
+   */
+  async listenToChannel(channelName: string, callback: (payload: string) => void): Promise<() => void> {
+    try {
+      const serviceClient = this.getServiceClient();
+      
+      // Subscribe to the channel
+      const subscription = serviceClient
+        .channel(channelName)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: channelName // This might need adjustment based on Supabase's API
+        }, (payload: any) => {
+          try {
+            // Extract the actual payload from the event
+            const data = payload.new || payload.payload || payload;
+            callback(typeof data === 'string' ? data : JSON.stringify(data));
+          } catch (error) {
+            logger.error('Failed to process channel payload', { channelName, error });
+          }
+        })
+        .subscribe();
+
+      logger.info(`Listening to channel: ${channelName}`);
+
+      // Return unsubscribe function
+      return () => {
+        subscription.unsubscribe();
+        logger.info(`Stopped listening to channel: ${channelName}`);
+      };
+    } catch (error) {
+      logger.error('Error setting up channel listener', { channelName, error });
+      return () => {}; // Return empty cleanup function
+    }
+  }
 }
