@@ -18,9 +18,7 @@
  * - BaseOrchestrator: Core message handling
  */
 
-// OrchestratorAgent is a special case - doesn't extend BaseAgent
-// It's the master coordinator that manages all other agents
-import { LLMProvider } from '../services/llm-provider-interface';
+import { BaseAgent } from './base/BaseAgent';
 import { ConfigurationManager } from '../services/configuration-manager';
 import { DatabaseService } from '../services/database';
 import { StateComputer } from '../services/state-computer';
@@ -73,14 +71,13 @@ interface AgentCapability {
  * Universal OrchestratorAgent
  * The conductor of the SmallBizAlly symphony
  * 
- * NOTE: OrchestratorAgent is a special case - does NOT extend BaseAgent
- * It's the master coordinator that manages all DefaultAgent instances
+ * Now extends BaseAgent to gain event emission and standard agent capabilities
+ * while maintaining its special orchestration responsibilities
  */
-export class OrchestratorAgent {
+export class OrchestratorAgent extends BaseAgent {
   private static instance: OrchestratorAgent;
   
   private config: OrchestratorConfig;
-  private llmProvider: LLMProvider;
   private configManager: ConfigurationManager;
   private dbService: DatabaseService;
   private stateComputer: StateComputer;
@@ -91,8 +88,11 @@ export class OrchestratorAgent {
   private pendingUIRequests: Map<string, UIRequest[]>;
   
   private constructor() {
+    // Call BaseAgent constructor with orchestrator config
+    // Using 'system' as businessId since orchestrator works across all businesses
+    super('orchestrator.yaml', 'system', 'system');
+    
     this.config = this.loadConfig();
-    this.llmProvider = new LLMProvider();
     this.configManager = new ConfigurationManager();
     this.dbService = DatabaseService.getInstance();
     this.stateComputer = new StateComputer();
@@ -838,35 +838,4 @@ export class OrchestratorAgent {
     }
   }
   
-  /**
-   * Required abstract methods from BaseAgent
-   */
-  protected async handleMessage(message: any): Promise<any> {
-    // Delegate to orchestrateTask for universal handling
-    if (message.type === 'task' && message.context) {
-      await this.orchestrateTask(message.context);
-    }
-    return { success: true };
-  }
-  
-  protected async handleTask(task: any): Promise<any> {
-    // Delegate to orchestrateTask for universal handling
-    if (task.context) {
-      await this.orchestrateTask(task.context);
-    }
-    return { success: true };
-  }
-  
-  protected async makeDecision(context: any): Promise<any> {
-    // Use LLM for decision making
-    return this.createExecutionPlan(context);
-  }
-  
-  protected async executeAction(action: any): Promise<any> {
-    // Execute agent actions
-    if (action.agent && action.phase) {
-      return this.executeAgent(action.context, action.agent, action.phase);
-    }
-    return { success: true };
-  }
 }

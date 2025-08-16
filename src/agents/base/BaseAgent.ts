@@ -76,6 +76,15 @@ import {
   BaseAgentResponse,
   ContextEntry
 } from '../../types/base-agent-types';
+import { logger } from '../../utils/logger';
+import {
+  AgentExecutor,
+  RequestContext,
+  ExecutionEventBus,
+  Task,
+  TaskStatusUpdateEvent,
+  TaskArtifactUpdateEvent
+} from '../../types/a2a-types';
 
 /**
  * BaseAgent Class - Unified Agent Foundation
@@ -85,8 +94,9 @@ import {
  * - Enforces business context and access control
  * - Manages task context and state progression
  * - Provides standardized LLM interaction patterns
+ * - Implements A2A AgentExecutor interface for event-driven execution
  */
-export abstract class BaseAgent {
+export abstract class BaseAgent implements AgentExecutor {
   protected baseTemplate: BaseAgentTemplate;
   protected specializedTemplate: SpecializedAgentConfig;
   protected llmProvider!: LLMProvider;
@@ -209,33 +219,6 @@ export abstract class BaseAgent {
     }
   }
   
-  /**
-   * Main execution method - implements template inheritance
-   * 
-   * Constructs LLM prompt by merging:
-   * - Base agent principles from base_agent.yaml
-   * - Specialized agent mission and capabilities
-   * - Current business context and profile
-   * - Task context and request parameters
-   * - Standard reasoning framework
-   */
-  async execute(request: BaseAgentRequest): Promise<BaseAgentResponse> {
-    // Build merged prompt from base + specialized templates
-    const fullPrompt = this.buildInheritedPrompt(request);
-    
-    // Call LLM with merged prompt
-    const llmResponse = await this.llmProvider.complete({
-      model: request.llmModel || 'gpt-4',
-      prompt: fullPrompt,
-      responseFormat: 'json',
-      schema: this.specializedTemplate.schemas.output
-    });
-    
-    // Validate and enforce standard schema
-    const validatedResponse = this.enforceStandardSchema(llmResponse, request);
-    
-    return validatedResponse;
-  }
   
   /**
    * Build prompt from merged base + specialized templates
@@ -574,6 +557,191 @@ Remember: You are an autonomous agent following the universal principles while a
       errors,
       warnings
     };
+  }
+  
+  /**
+   * A2A AgentExecutor Implementation
+   * Executes agent logic based on request context and publishes events
+   */
+  async execute(requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> {
+    const startTime = Date.now();
+    const { userMessage, task, taskId, contextId } = requestContext;
+    
+    try {
+      logger.info('Agent execution started', {
+        agentId: this.specializedTemplate.agent.id,
+        taskId,
+        contextId
+      });
+      
+      // Execute agent reasoning directly with A2A context
+      // TODO: Consider refactoring executeInternal to accept RequestContext directly
+      const agentRequest: BaseAgentRequest = {
+        operation: 'a2a_execute',
+        parameters: {
+          userMessage,
+          task,
+          a2aContext: requestContext // Pass A2A context directly
+        },
+        taskContext: {
+          contextId,
+          taskId,
+          task,
+          businessProfile: { businessId: this.businessId }
+        }
+      };
+      
+      // Execute core agent reasoning (🧠 THE INTELLIGENCE HAPPENS HERE)
+      const response = await this.executeInternal(agentRequest);
+      
+      // Publish response as events
+      await this.publishResponseEvents(response, taskId, eventBus);
+      
+      // Mark task as completed if successful
+      if (response.status === 'completed') {
+        const statusUpdate: TaskStatusUpdateEvent = {
+          taskId,
+          status: 'completed',
+          final: true
+        };
+        await eventBus.publish(statusUpdate);
+      }
+      
+      logger.info('Agent execution completed', {
+        agentId: this.specializedTemplate.agent.id,
+        taskId,
+        duration: Date.now() - startTime
+      });
+      
+    } catch (error) {
+      logger.error('Agent execution failed', {
+        agentId: this.specializedTemplate.agent.id,
+        taskId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      
+      // Publish error event
+      const errorUpdate: TaskStatusUpdateEvent = {
+        taskId,
+        status: 'failed',
+        final: true
+      };
+      await eventBus.publish(errorUpdate);
+      
+      throw error;
+    }
+  }
+  
+  /**
+   * Cancel a running task
+   * Required by AgentExecutor interface
+   */
+  async cancelTask(taskId: string, eventBus: ExecutionEventBus): Promise<void> {
+    logger.info('Cancelling task', {
+      agentId: this.specializedTemplate.agent.id,
+      taskId
+    });
+    
+    // Publish cancellation event
+    const cancelUpdate: TaskStatusUpdateEvent = {
+      taskId,
+      status: 'canceled',
+      final: true
+    };
+    
+    await eventBus.publish(cancelUpdate);
+    
+    // Clean up any agent-specific resources
+    this.cleanupTask(taskId);
+  }
+  
+  /**
+   * 🧠 AGENT REASONING CORE - WHERE THE INTELLIGENCE HAPPENS
+   * 
+   * This is the CRITICAL METHOD where actual agent reasoning occurs.
+   * Everything before this point is protocol adaptation and setup.
+   * Everything after this point is event emission and response formatting.
+   * 
+   * ## WHAT HAPPENS HERE:
+   * 1. **LLM Interaction** - The agent's "brain" processes the request
+   * 2. **Domain Expertise** - Specialized agent knowledge is applied
+   * 3. **Decision Making** - The agent chooses what actions to take
+   * 4. **Response Generation** - Structured output with reasoning
+   * 5. **Context Recording** - Decision process is documented
+   * 
+   * ## ARCHITECTURAL SIGNIFICANCE:
+   * - This method contains the ACTUAL ARTIFICIAL INTELLIGENCE
+   * - Subclasses can override this to implement specialized reasoning
+   * - The LLM call here is where costs are incurred and intelligence is generated
+   * - All agent behavior stems from what happens in this method
+   * 
+   * ## FOR DEBUGGING/MONITORING:
+   * - Monitor this method to understand agent decision-making
+   * - Log entries here show the agent's thought process
+   * - Performance metrics here indicate reasoning complexity
+   * 
+   * Internal execution method (core reasoning engine)
+   * This is the heart of agent intelligence - subclasses override for specialized behavior
+   */
+  async executeInternal(request: BaseAgentRequest): Promise<BaseAgentResponse> {
+    // Build merged prompt from base + specialized templates
+    const fullPrompt = this.buildInheritedPrompt(request);
+    
+    // Call LLM with merged prompt
+    const llmResponse = await this.llmProvider.complete({
+      model: request.llmModel || 'gpt-4',
+      prompt: fullPrompt,
+      responseFormat: 'json',
+      schema: this.specializedTemplate.schemas.output
+    });
+    
+    // Validate and enforce standard schema
+    const validatedResponse = this.enforceStandardSchema(llmResponse, request);
+    
+    return validatedResponse;
+  }
+  
+  /**
+   * Publish agent response as A2A events
+   */
+  private async publishResponseEvents(
+    response: BaseAgentResponse,
+    taskId: string,
+    eventBus: ExecutionEventBus
+  ): Promise<void> {
+    // Publish context update as task update
+    if (response.contextUpdate) {
+      const taskUpdate: Task = {
+        id: taskId,
+        status: response.status === 'completed' ? 'completed' : 'running',
+        result: {
+          operation: response.contextUpdate.operation,
+          data: response.contextUpdate.data,
+          reasoning: response.contextUpdate.reasoning,
+          confidence: response.confidence
+        }
+      };
+      
+      await eventBus.publish(taskUpdate);
+    }
+    
+    // Publish UI requests as task artifacts if present
+    if (response.uiRequests && response.uiRequests.length > 0) {
+      const artifactUpdate: TaskArtifactUpdateEvent = {
+        taskId,
+        artifacts: response.uiRequests
+      };
+      await eventBus.publish(artifactUpdate);
+    }
+  }
+  
+  /**
+   * Clean up task-specific resources
+   * Can be overridden by subclasses for specific cleanup
+   */
+  protected cleanupTask(taskId: string): void {
+    // Default implementation - subclasses can override
+    logger.debug('Cleaning up task resources', { taskId });
   }
 
 }

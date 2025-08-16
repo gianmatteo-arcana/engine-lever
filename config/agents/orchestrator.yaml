@@ -1,0 +1,157 @@
+# OrchestratorAgent Configuration
+# Universal task orchestration and agent coordination
+
+agent:
+  id: orchestrator_agent
+  name: Universal Task Orchestrator
+  role: orchestrator_specialist
+  version: "1.0.0"
+  extends: base_agent
+  
+  mission: |
+    You are the Universal Task Orchestrator for SmallBizAlly.
+    
+    Your responsibilities:
+    1. Interpret task templates to understand goals
+    2. Create dynamic execution plans based on context
+    3. Coordinate specialist agents to achieve goals
+    4. Minimize user interruption through progressive disclosure
+    5. Record all decisions with complete reasoning
+    
+    Critical principles:
+    - UNIVERSAL: Handle ANY task type identically
+    - PROGRESSIVE: Batch and reorder UI requests intelligently
+    - RESILIENT: Gracefully degrade when automation unavailable
+    - TRACEABLE: Record everything for complete audit trail
+    - DECLARATIVE: Follow templates, never hardcode business logic
+  
+  agent_card:
+    skills:
+      - Task template interpretation
+      - Dynamic execution planning
+      - Multi-agent coordination
+      - Progressive disclosure optimization
+      - Resilient fallback strategies
+      - Complete audit trail recording
+    
+    specializations:
+      - Universal task handling
+      - Agent capability assessment
+      - Workflow optimization
+      - Error recovery strategies
+      - User interaction minimization
+
+tools:
+  orchestration:
+    - agent_registry
+    - execution_planner
+    - state_computer
+    - progressive_disclosure_optimizer
+  
+  agents:
+    - business_discovery_agent
+    - profile_collector_agent  
+    - compliance_analyzer_agent
+    - payment_processor_agent
+    - communication_agent
+    - monitoring_agent
+
+schemas:
+  output:
+    type: object
+    properties:
+      status:
+        type: string
+        enum: [completed, needs_input, delegated, error]
+      executionPlan:
+        type: object
+        properties:
+          phases:
+            type: array
+            items:
+              type: object
+              properties:
+                id:
+                  type: string
+                name:
+                  type: string
+                agents:
+                  type: array
+                  items:
+                    type: string
+                dependencies:
+                  type: array
+                  items:
+                    type: string
+      contextUpdate:
+        type: object
+        properties:
+          operation:
+            type: string
+          data:
+            type: object
+          reasoning:
+            type: string
+          confidence:
+            type: number
+            minimum: 0
+            maximum: 1
+      uiRequests:
+        type: array
+        items:
+          type: object
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+    required:
+      - status
+      - contextUpdate
+      - confidence
+
+examples:
+  create_execution_plan:
+    input:
+      taskTemplate: "user_onboarding"
+      currentState: 
+        status: "pending"
+    output:
+      status: "completed"
+      executionPlan:
+        phases:
+          - id: "authentication"
+            name: "User Authentication"
+            agents: ["authentication_agent"]
+          - id: "business_discovery"
+            name: "Business Discovery"
+            agents: ["business_discovery_agent"]
+          - id: "profile_collection"
+            name: "Profile Collection"
+            agents: ["profile_collector_agent"]
+      contextUpdate:
+        operation: "execution_plan_created"
+        data:
+          planId: "plan_123"
+          phaseCount: 3
+        reasoning: "Created 3-phase execution plan for user onboarding"
+        confidence: 0.95
+      confidence: 0.95
+
+  handle_agent_failure:
+    input:
+      agentId: "payment_processor"
+      error: "Service unavailable"
+    output:
+      status: "needs_input"
+      contextUpdate:
+        operation: "fallback_to_manual"
+        data:
+          failedAgent: "payment_processor"
+          fallbackStrategy: "user_input"
+        reasoning: "Payment processor unavailable, requesting manual payment details from user"
+        confidence: 0.8
+      uiRequests:
+        - templateType: "payment_form"
+          semanticData:
+            title: "Payment Information Needed"
+      confidence: 0.8
