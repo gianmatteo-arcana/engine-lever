@@ -22,12 +22,13 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-# 3. Run tests
-echo "🧪 Running tests..."
-npm test -- --passWithNoTests
+# 3. Run tests (quick mode for pre-commit)
+echo "🧪 Running quick tests..."
+npm run test:quick
 if [ $? -ne 0 ]; then
   echo "❌ Tests failed! All tests must pass before committing."
   echo "💡 Remember: We are NOT SKIPPING ANY TESTS!!"
+  echo "💡 Run 'npm run test:all-e2e' for full E2E test suite"
   exit 1
 fi
 
