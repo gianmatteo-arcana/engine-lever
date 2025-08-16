@@ -5,8 +5,8 @@
  * This agent analyzes business compliance requirements and identifies potential issues.
  */
 
-import { BaseAgent } from '../base/BaseAgent';
-import { BaseAgentRequest, BaseAgentResponse } from '../../types/base-agent-types';
+import { BaseAgent } from '../../src/agents/base/BaseAgent';
+import { BaseAgentRequest, BaseAgentResponse } from '../../src/types/base-agent-types';
 
 export class ComplianceAnalyzer extends BaseAgent {
   constructor(businessId: string, userId?: string) {
