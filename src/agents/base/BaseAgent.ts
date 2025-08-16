@@ -574,12 +574,14 @@ Remember: You are an autonomous agent following the universal principles while a
         contextId
       });
       
-      // Convert A2A request to BaseAgentRequest
+      // Execute agent reasoning directly with A2A context
+      // TODO: Consider refactoring executeInternal to accept RequestContext directly
       const agentRequest: BaseAgentRequest = {
-        operation: 'execute',
+        operation: 'a2a_execute',
         parameters: {
-          message: userMessage.content.join('\n'),
-          role: userMessage.role
+          userMessage,
+          task,
+          a2aContext: requestContext // Pass A2A context directly
         },
         taskContext: {
           contextId,
@@ -589,7 +591,7 @@ Remember: You are an autonomous agent following the universal principles while a
         }
       };
       
-      // Execute using existing BaseAgent logic
+      // Execute core agent reasoning (🧠 THE INTELLIGENCE HAPPENS HERE)
       const response = await this.executeInternal(agentRequest);
       
       // Publish response as events
@@ -654,8 +656,32 @@ Remember: You are an autonomous agent following the universal principles while a
   }
   
   /**
-   * Internal execution method (renamed from execute)
-   * This is the original execute method that subclasses can override
+   * 🧠 AGENT REASONING CORE - WHERE THE INTELLIGENCE HAPPENS
+   * 
+   * This is the CRITICAL METHOD where actual agent reasoning occurs.
+   * Everything before this point is protocol adaptation and setup.
+   * Everything after this point is event emission and response formatting.
+   * 
+   * ## WHAT HAPPENS HERE:
+   * 1. **LLM Interaction** - The agent's "brain" processes the request
+   * 2. **Domain Expertise** - Specialized agent knowledge is applied
+   * 3. **Decision Making** - The agent chooses what actions to take
+   * 4. **Response Generation** - Structured output with reasoning
+   * 5. **Context Recording** - Decision process is documented
+   * 
+   * ## ARCHITECTURAL SIGNIFICANCE:
+   * - This method contains the ACTUAL ARTIFICIAL INTELLIGENCE
+   * - Subclasses can override this to implement specialized reasoning
+   * - The LLM call here is where costs are incurred and intelligence is generated
+   * - All agent behavior stems from what happens in this method
+   * 
+   * ## FOR DEBUGGING/MONITORING:
+   * - Monitor this method to understand agent decision-making
+   * - Log entries here show the agent's thought process
+   * - Performance metrics here indicate reasoning complexity
+   * 
+   * Internal execution method (core reasoning engine)
+   * This is the heart of agent intelligence - subclasses override for specialized behavior
    */
   async executeInternal(request: BaseAgentRequest): Promise<BaseAgentResponse> {
     // Build merged prompt from base + specialized templates

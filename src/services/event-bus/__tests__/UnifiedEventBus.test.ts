@@ -18,6 +18,11 @@ import {
 // Mock the database service
 jest.mock('../../database');
 
+// Mock the task events service  
+jest.mock('../../task-events', () => ({
+  emitTaskEvent: jest.fn().mockResolvedValue(undefined)
+}));
+
 describe('UnifiedEventBus', () => {
   let eventBus: UnifiedEventBus;
   let mockDbService: jest.Mocked<any>;
@@ -25,29 +30,19 @@ describe('UnifiedEventBus', () => {
   const taskId = 'test-task-456';
 
   beforeEach(() => {
-    // Setup mock database service
+    // Setup mock database service with new architecture
     mockDbService = {
-      getUserClient: jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          insert: jest.fn().mockResolvedValue({ error: null }),
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              gte: jest.fn().mockReturnValue({
-                order: jest.fn().mockResolvedValue({
-                  data: [],
-                  error: null
-                })
-              })
-            })
-          })
-        })
-      })
+      addContextEvent: jest.fn().mockResolvedValue({ 
+        id: 'event-123', 
+        sequence_number: 1 
+      }),
+      getContextHistory: jest.fn().mockResolvedValue([])
     };
 
     (DatabaseService.getInstance as jest.Mock).mockReturnValue(mockDbService);
     
-    // Create new event bus instance
-    eventBus = new UnifiedEventBus(contextId, taskId);
+    // Create new event bus instance with userToken
+    eventBus = new UnifiedEventBus(contextId, taskId, 'mock-user-token');
   });
 
   afterEach(() => {
@@ -69,22 +64,18 @@ describe('UnifiedEventBus', () => {
       // Verify event was emitted
       expect(eventListener).toHaveBeenCalledWith(message);
 
-      // Verify database persistence was called
-      const mockFrom = mockDbService.getUserClient('service-role').from;
-      expect(mockFrom).toHaveBeenCalledWith('task_context_events');
-      
-      const mockInsert = mockFrom('task_context_events').insert;
-      expect(mockInsert).toHaveBeenCalledWith(
+      // Verify database persistence was called using established patterns
+      expect(mockDbService.addContextEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           context_id: contextId,
-          task_id: taskId,
-          sequence_number: 1,
-          operation: 'message_received',
+          actor_type: 'user',
+          actor_id: 'user',
+          operation: 'agent_message',
           data: {
-            content: 'Test message content',
+            content: ['Test message content'],
             role: 'user'
           },
-          reasoning: 'User message received'
+          reasoning: 'user message processed'
         })
       );
     });
@@ -104,18 +95,19 @@ describe('UnifiedEventBus', () => {
       // Verify event was emitted
       expect(eventListener).toHaveBeenCalledWith(task);
 
-      // Verify database persistence
-      const mockInsert = mockDbService.getUserClient('service-role')
-        .from('task_context_events').insert;
-      
-      expect(mockInsert).toHaveBeenCalledWith(
+      // Verify database persistence with new architecture
+      expect(mockDbService.addContextEvent).toHaveBeenCalledWith(
         expect.objectContaining({
-          operation: 'task_created',
+          context_id: contextId,
+          actor_type: 'agent',
+          actor_id: 'agent-executor',
+          operation: 'task_execution',
           data: {
-            id: 'task-789',
+            taskId: 'task-789',
             status: 'running',
             result: { data: 'test result' }
-          }
+          },
+          reasoning: 'Task running'
         })
       );
     });
@@ -129,18 +121,18 @@ describe('UnifiedEventBus', () => {
 
       await eventBus.publish(statusUpdate);
 
-      const mockInsert = mockDbService.getUserClient('service-role')
-        .from('task_context_events').insert;
-      
-      expect(mockInsert).toHaveBeenCalledWith(
+      expect(mockDbService.addContextEvent).toHaveBeenCalledWith(
         expect.objectContaining({
-          operation: 'task_status_updated',
+          context_id: contextId,
+          actor_type: 'agent',
+          actor_id: 'agent-executor',
+          operation: 'status_update',
           data: {
             taskId: 'task-123',
             status: 'completed',
             final: true
           },
-          reasoning: 'Task status changed to completed'
+          reasoning: 'Task status updated to completed'
         })
       );
     });
@@ -155,18 +147,19 @@ describe('UnifiedEventBus', () => {
 
       await eventBus.publish(artifactUpdate);
 
-      const mockInsert = mockDbService.getUserClient('service-role')
-        .from('task_context_events').insert;
-      
-      expect(mockInsert).toHaveBeenCalledWith(
+      expect(mockDbService.addContextEvent).toHaveBeenCalledWith(
         expect.objectContaining({
-          operation: 'task_artifact_updated',
+          context_id: contextId,
+          actor_type: 'agent',
+          actor_id: 'agent-executor',
+          operation: 'artifact_update',
           data: {
             taskId: 'task-456',
             artifacts: [
               { type: 'document', url: 'http://example.com/doc.pdf' }
             ]
-          }
+          },
+          reasoning: 'Task artifacts updated'
         })
       );
     });
@@ -178,34 +171,36 @@ describe('UnifiedEventBus', () => {
       await eventBus.publish(message1);
       await eventBus.publish(message2);
 
-      const mockInsert = mockDbService.getUserClient('service-role')
-        .from('task_context_events').insert;
+      // Verify both events were persisted via addContextEvent
+      expect(mockDbService.addContextEvent).toHaveBeenCalledTimes(2);
       
-      // First call should have sequence_number: 1
-      expect(mockInsert).toHaveBeenNthCalledWith(1, 
-        expect.objectContaining({ sequence_number: 1 })
+      // Verify first message
+      expect(mockDbService.addContextEvent).toHaveBeenNthCalledWith(1,
+        expect.objectContaining({
+          operation: 'agent_message',
+          data: expect.objectContaining({ content: ['First'] })
+        })
       );
       
-      // Second call should have sequence_number: 2
-      expect(mockInsert).toHaveBeenNthCalledWith(2, 
-        expect.objectContaining({ sequence_number: 2 })
+      // Verify second message  
+      expect(mockDbService.addContextEvent).toHaveBeenNthCalledWith(2,
+        expect.objectContaining({
+          operation: 'agent_message',
+          data: expect.objectContaining({ content: ['Second'] })
+        })
       );
     });
 
     it('should handle database persistence errors', async () => {
-      // Setup mock to return error
-      mockDbService.getUserClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          insert: jest.fn().mockResolvedValue({
-            error: { message: 'Database error' }
-          })
-        })
-      });
+      // Setup mock to throw error
+      mockDbService.addContextEvent.mockRejectedValue(
+        new Error('Database connection failed')
+      );
 
       const message: Message = { content: ['Test'], role: 'user' };
 
       await expect(eventBus.publish(message))
-        .rejects.toThrow('Failed to persist event: Database error');
+        .rejects.toThrow('Database connection failed');
     });
   });
 
@@ -277,34 +272,27 @@ describe('UnifiedEventBus', () => {
     it('should reconstruct events from database', async () => {
       const mockData = [
         {
-          operation: 'message_received',
-          data: { content: 'Hello', role: 'user' }
+          sequence_number: 1,
+          operation: 'agent_message',
+          data: { content: ['Hello'], role: 'user' },
+          actor_type: 'user'
         },
         {
-          operation: 'task_created',
-          data: { id: 'task-1', status: 'running' }
+          sequence_number: 2,
+          operation: 'task_execution',
+          data: { taskId: 'task-1', status: 'running' },
+          actor_type: 'agent'
         },
         {
-          operation: 'task_status_updated',
-          data: { taskId: 'task-1', status: 'completed', final: true }
+          sequence_number: 3,
+          operation: 'status_update',
+          data: { taskId: 'task-1', status: 'completed', final: true },
+          actor_type: 'agent'
         }
       ];
 
-      // Setup mock to return data
-      mockDbService.getUserClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              gte: jest.fn().mockReturnValue({
-                order: jest.fn().mockResolvedValue({
-                  data: mockData,
-                  error: null
-                })
-              })
-            })
-          })
-        })
-      });
+      // Setup mock to return data from getContextHistory
+      mockDbService.getContextHistory.mockResolvedValue(mockData);
 
       const events = await eventBus.subscribeFromSequence(1);
 
@@ -312,7 +300,7 @@ describe('UnifiedEventBus', () => {
       
       // Verify first event (Message)
       expect(events[0]).toEqual({
-        content: 'Hello',
+        content: ['Hello'],
         role: 'user'
       });
 
@@ -331,21 +319,8 @@ describe('UnifiedEventBus', () => {
     });
 
     it('should handle database query errors gracefully', async () => {
-      // Setup mock to return error
-      mockDbService.getUserClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              gte: jest.fn().mockReturnValue({
-                order: jest.fn().mockResolvedValue({
-                  data: null,
-                  error: { message: 'Query failed' }
-                })
-              })
-            })
-          })
-        })
-      });
+      // Setup mock to throw error from getContextHistory
+      mockDbService.getContextHistory.mockRejectedValue(new Error('Query failed'));
 
       const events = await eventBus.subscribeFromSequence(1);
 
@@ -361,28 +336,17 @@ describe('UnifiedEventBus', () => {
     it('should reconstruct artifact update events correctly', async () => {
       const mockData = [
         {
-          operation: 'task_artifact_updated',
+          sequence_number: 1,
+          operation: 'artifact_update',
           data: {
             taskId: 'task-123',
             artifacts: [{ type: 'doc', url: 'http://example.com' }]
-          }
+          },
+          actor_type: 'agent'
         }
       ];
 
-      mockDbService.getUserClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              gte: jest.fn().mockReturnValue({
-                order: jest.fn().mockResolvedValue({
-                  data: mockData,
-                  error: null
-                })
-              })
-            })
-          })
-        })
-      });
+      mockDbService.getContextHistory.mockResolvedValue(mockData);
 
       const events = await eventBus.subscribeFromSequence(1);
 
@@ -395,6 +359,13 @@ describe('UnifiedEventBus', () => {
 
   describe('Factory Function', () => {
     it('should create UnifiedEventBus instances', () => {
+      const { createUnifiedEventBus } = require('../UnifiedEventBus');
+      const bus = createUnifiedEventBus('context-789', 'task-012', 'user-token');
+      
+      expect(bus).toBeInstanceOf(UnifiedEventBus);
+    });
+    
+    it('should create UnifiedEventBus instances without userToken', () => {
       const { createUnifiedEventBus } = require('../UnifiedEventBus');
       const bus = createUnifiedEventBus('context-789', 'task-012');
       

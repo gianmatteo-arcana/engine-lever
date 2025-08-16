@@ -3,6 +3,12 @@
  * 
  * Extends A2A ExecutionEventBus with PostgreSQL persistence
  * Provides unified event handling for all agents with automatic database recording
+ * 
+ * ARCHITECTURAL INTEGRATION:
+ * - Uses existing dbService.addContextEvent() for persistence
+ * - Integrates with SSE infrastructure via context_events table
+ * - Maintains A2A protocol compliance while leveraging our established patterns
+ * - Events automatically flow to existing SSE endpoints for real-time updates
  */
 
 import { EventEmitter } from 'events';
@@ -16,24 +22,26 @@ import {
 } from '../../types/a2a-types';
 import { DatabaseService } from '../database';
 import { logger } from '../../utils/logger';
-import { ContextEntry } from '../../types/engine-types';
+import { emitTaskEvent } from '../task-events';
 
 /**
  * UnifiedEventBus Implementation
  * 
  * Combines A2A protocol event handling with PostgreSQL persistence
- * Automatically records all events to task_context_events table
+ * Automatically records all events to context_events table using established patterns
+ * Integrates seamlessly with existing SSE infrastructure for real-time updates
  */
 export class UnifiedEventBus extends EventEmitter implements ExecutionEventBus {
   private dbService: DatabaseService;
   private contextId: string;
   private taskId: string;
-  private sequenceCounter: number = 0;
+  private userToken?: string; // For database operations
   
-  constructor(contextId: string, taskId: string) {
+  constructor(contextId: string, taskId: string, userToken?: string) {
     super();
     this.contextId = contextId;
     this.taskId = taskId;
+    this.userToken = userToken;
     this.dbService = DatabaseService.getInstance();
   }
   
@@ -71,102 +79,127 @@ export class UnifiedEventBus extends EventEmitter implements ExecutionEventBus {
   }
   
   /**
-   * Persist event to PostgreSQL task_context_events table
+   * Persist event to PostgreSQL using established patterns
+   * 
+   * ARCHITECTURAL INTEGRATION:
+   * - Uses existing dbService.addContextEvent() method
+   * - Events go to context_events table (established pattern)
+   * - Automatically integrates with existing SSE infrastructure
+   * - Maintains A2A event structure while following our database schema
    */
   private async persistEvent(event: AgentExecutionEvent): Promise<void> {
-    const contextEntry = this.convertToContextEntry(event);
-    
-    // Use service role to insert into database
-    const { error } = await this.dbService.getUserClient('service-role')
-      .from('task_context_events')
-      .insert({
+    try {
+      // Convert A2A event to context_events format
+      const { operation, actorType, actorId, data, reasoning } = this.convertA2AEventToContextEvent(event);
+      
+      // Use established addContextEvent method for persistence
+      await this.dbService.addContextEvent({
         context_id: this.contextId,
-        task_id: this.taskId,
-        sequence_number: ++this.sequenceCounter,
-        actor_type: contextEntry.actor.type,
-        actor_id: contextEntry.actor.id,
-        operation: contextEntry.operation,
-        data: contextEntry.data,
-        reasoning: contextEntry.reasoning,
-        trigger: contextEntry.trigger
+        actor_type: actorType,
+        actor_id: actorId,
+        operation,
+        data,
+        reasoning
       });
-    
-    if (error) {
-      throw new Error(`Failed to persist event: ${error.message}`);
+      
+      // Also emit via established task event system for SSE integration
+      if (this.userToken) {
+        await emitTaskEvent(operation, {
+          taskId: this.taskId,
+          contextId: this.contextId,
+          ...data
+        }, {
+          userToken: this.userToken,
+          actorType,
+          actorId,
+          reasoning
+        });
+      }
+      
+    } catch (error) {
+      logger.error('Failed to persist A2A event', {
+        contextId: this.contextId,
+        taskId: this.taskId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
     }
   }
   
   /**
-   * Convert A2A event to ContextEntry format
+   * Convert A2A event to context_events format
+   * 
+   * Maps A2A AgentExecutionEvent types to our established database schema
    */
-  private convertToContextEntry(event: AgentExecutionEvent): ContextEntry {
-    const baseEntry = {
-      entryId: `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      sequenceNumber: this.sequenceCounter + 1,
-      actor: {
-        type: 'agent' as const,
-        id: 'unified_event_bus',
-        version: '1.0.0'
-      }
-    };
-    
+  private convertA2AEventToContextEvent(event: AgentExecutionEvent): {
+    operation: string;
+    actorType: 'agent' | 'user' | 'system';
+    actorId: string;
+    data: any;
+    reasoning: string;
+  } {
     if (this.isMessage(event)) {
       return {
-        ...baseEntry,
-        operation: 'message_received',
+        operation: 'agent_message',
+        actorType: event.role === 'user' ? 'user' : 'agent',
+        actorId: event.role === 'user' ? 'user' : 'agent',
         data: {
-          content: event.content.join('\n'),
+          content: event.content,
           role: event.role
         },
-        reasoning: 'User message received'
+        reasoning: `${event.role} message processed`
       };
     }
     
     if (this.isTask(event)) {
       return {
-        ...baseEntry,
-        operation: 'task_created',
+        operation: 'task_execution',
+        actorType: 'agent',
+        actorId: 'agent-executor',
         data: {
-          id: event.id,
+          taskId: event.id,
           status: event.status,
           result: event.result
         },
-        reasoning: 'Task created or updated'
+        reasoning: `Task ${event.status}`
       };
     }
     
     if (this.isTaskStatusUpdate(event)) {
       return {
-        ...baseEntry,
-        operation: 'task_status_updated',
+        operation: 'status_update',
+        actorType: 'agent',
+        actorId: 'agent-executor',
         data: {
           taskId: event.taskId,
           status: event.status,
           final: event.final
         },
-        reasoning: `Task status changed to ${event.status}`
+        reasoning: `Task status updated to ${event.status}`
       };
     }
     
     if (this.isTaskArtifactUpdate(event)) {
       return {
-        ...baseEntry,
-        operation: 'task_artifact_updated',
+        operation: 'artifact_update',
+        actorType: 'agent',
+        actorId: 'agent-executor',
         data: {
           taskId: event.taskId,
-          artifacts: event.artifacts
+          artifacts: event.artifacts,
+          artifact: event.artifact
         },
         reasoning: 'Task artifacts updated'
       };
     }
     
-    // Default case
+    // Default case for unknown A2A events
     return {
-      ...baseEntry,
-      operation: 'unknown_event',
+      operation: 'a2a_event',
+      actorType: 'agent',
+      actorId: 'agent-executor',
       data: event as any,
-      reasoning: 'Unknown event type received'
+      reasoning: 'A2A event processed'
     };
   }
   
@@ -202,71 +235,102 @@ export class UnifiedEventBus extends EventEmitter implements ExecutionEventBus {
   
   /**
    * Subscribe to events with automatic database query
-   * Returns events from sequence number if provided
+   * Returns events from sequence number if provided using established patterns
    */
   async subscribeFromSequence(fromSequence?: number): Promise<AgentExecutionEvent[]> {
     if (!fromSequence) return [];
     
-    // Query historical events from database
-    const { data, error } = await this.dbService.getUserClient('service-role')
-      .from('task_context_events')
-      .select('*')
-      .eq('task_id', this.taskId)
-      .gte('sequence_number', fromSequence)
-      .order('sequence_number', { ascending: true });
-    
-    if (error) {
-      logger.error('Failed to fetch historical events', { error });
+    try {
+      // Use existing getContextHistory method to query context_events table
+      // This method already uses established patterns and handles errors properly
+      const contextHistory = await this.dbService.getContextHistory(
+        this.userToken || 'system-token', 
+        this.contextId
+      );
+      
+      // Filter by sequence number and convert to A2A events
+      const filteredHistory = contextHistory.filter(record => 
+        record.sequence_number >= fromSequence
+      );
+      
+      // Convert context_events back to A2A events
+      return filteredHistory.map(record => this.reconstructA2AEvent(record));
+    } catch (error) {
+      logger.error('Error querying historical events', {
+        contextId: this.contextId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return [];
     }
-    
-    // Convert database records back to A2A events
-    return data.map(record => this.reconstructEvent(record));
   }
   
   /**
-   * Reconstruct A2A event from database record
+   * Reconstruct A2A event from context_events database record
    */
-  private reconstructEvent(record: { operation: string; data: any }): AgentExecutionEvent {
-    // Reconstruct based on operation type
+  private reconstructA2AEvent(record: { operation: string; data: any; actor_type: string }): AgentExecutionEvent {
+    // Reconstruct A2A events from context_events format
     switch (record.operation) {
-      case 'message_received':
+      case 'agent_message':
         return {
-          content: record.data.content,
-          role: record.data.role
+          content: Array.isArray(record.data.content) ? record.data.content : [record.data.content],
+          role: record.data.role || (record.actor_type === 'user' ? 'user' : 'assistant')
         } as Message;
       
-      case 'task_created':
-      case 'task_updated':
+      case 'task_execution':
         return {
-          id: record.data.id,
+          id: record.data.taskId,
           status: record.data.status,
           result: record.data.result
         } as Task;
       
-      case 'task_status_updated':
+      case 'status_update':
         return {
           taskId: record.data.taskId,
           status: record.data.status,
           final: record.data.final
         } as TaskStatusUpdateEvent;
       
-      case 'task_artifact_updated':
+      case 'artifact_update':
         return {
           taskId: record.data.taskId,
-          artifacts: record.data.artifacts
+          artifacts: record.data.artifacts,
+          artifact: record.data.artifact
         } as TaskArtifactUpdateEvent;
       
       default:
-        // Return raw data as fallback
-        return record.data as AgentExecutionEvent;
+        // For legacy or unknown operations, try to reconstruct based on data structure
+        if (record.data.content && record.data.role) {
+          return {
+            content: Array.isArray(record.data.content) ? record.data.content : [record.data.content],
+            role: record.data.role
+          } as Message;
+        }
+        
+        if (record.data.taskId && record.data.status) {
+          return {
+            taskId: record.data.taskId,
+            status: record.data.status,
+            final: record.data.final
+          } as TaskStatusUpdateEvent;
+        }
+        
+        // Fallback: return as generic task
+        return {
+          id: this.taskId,
+          status: 'running',
+          result: record.data
+        } as Task;
     }
   }
 }
 
 /**
  * Factory function to create UnifiedEventBus instances
+ * 
+ * @param contextId - The context ID for the event bus
+ * @param taskId - The task ID for the event bus
+ * @param userToken - Optional user token for database operations and SSE integration
  */
-export function createUnifiedEventBus(contextId: string, taskId: string): UnifiedEventBus {
-  return new UnifiedEventBus(contextId, taskId);
+export function createUnifiedEventBus(contextId: string, taskId: string, userToken?: string): UnifiedEventBus {
+  return new UnifiedEventBus(contextId, taskId, userToken);
 }

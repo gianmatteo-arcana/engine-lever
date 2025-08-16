@@ -74,7 +74,7 @@ describe('BaseAgent Event Emission', () => {
           id: taskId,
           status: 'completed',
           result: expect.objectContaining({
-            operation: 'execute',
+            operation: 'a2a_execute',
             confidence: expect.any(Number)
           })
         })
@@ -214,11 +214,20 @@ describe('BaseAgent Event Emission', () => {
 
       expect(executeInternalSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          operation: 'execute',
-          parameters: {
-            message: 'Line 1\nLine 2\nLine 3',
-            role: 'assistant'
-          },
+          operation: 'a2a_execute',
+          parameters: expect.objectContaining({
+            userMessage: {
+              content: ['Line 1', 'Line 2', 'Line 3'],
+              role: 'assistant'
+            },
+            task: requestContext.task,
+            a2aContext: expect.objectContaining({
+              contextId,
+              taskId,
+              userMessage: expect.any(Object),
+              task: requestContext.task
+            })
+          }),
           taskContext: {
             contextId,
             taskId,
