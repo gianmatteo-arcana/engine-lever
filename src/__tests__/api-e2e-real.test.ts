@@ -7,18 +7,29 @@
  */
 
 import request from 'supertest';
-import app from '../app';
+import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import * as jwt from 'jsonwebtoken';
+import { apiRoutes } from '../api';
+import { extractUserContext } from '../middleware/auth';
 
-// Real database connection
-const SUPABASE_URL = 'https://raenkewzlvrdqufwxjpl.supabase.co';
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhZW5rZXd6bHZyZHF1Znd4anBsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzA0NzM4MywiZXhwIjoyMDY4NjIzMzgzfQ.tPBuIjB_JF4aW0NEmYwzVfbg1zcFUo1r1eOTeZVWuyw';
+// Create test app instance
+const app = express();
+app.use(express.json());
+app.use(extractUserContext);
+app.use('/api', apiRoutes);
 
-// Test user from actual database
-const TEST_USER_ID = '8e8ea7bd-b7fb-4e77-8e34-aa551fe26934';
-const TEST_USER_EMAIL = 'gianmatteo.allyn.test@gmail.com';
+// Real database connection - MUST use environment variables
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://raenkewzlvrdqufwxjpl.supabase.co';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!SUPABASE_SERVICE_KEY) {
+  throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is required for E2E tests');
+}
+
+// Test user from environment or defaults
+const TEST_USER_ID = process.env.TEST_USER_ID || '8e8ea7bd-b7fb-4e77-8e34-aa551fe26934';
+const TEST_USER_EMAIL = process.env.TEST_USER_EMAIL || 'gianmatteo.allyn.test@gmail.com';
 
 // Generate a valid JWT for testing
 const JWT_SECRET = process.env.JWT_SECRET || 'your-256-bit-secret';

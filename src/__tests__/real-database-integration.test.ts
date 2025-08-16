@@ -7,16 +7,19 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Use REAL database connection - NO MOCKS
-const SUPABASE_URL = 'https://raenkewzlvrdqufwxjpl.supabase.co';
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhZW5rZXd6bHZyZHF1Znd4anBsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzA0NzM4MywiZXhwIjoyMDY4NjIzMzgzfQ.tPBuIjB_JF4aW0NEmYwzVfbg1zcFUo1r1eOTeZVWuyw';
+// Use REAL database connection - MUST use environment variables
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://raenkewzlvrdqufwxjpl.supabase.co';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!SUPABASE_SERVICE_KEY) {
+  throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is required for database tests');
+}
 
 describe('REAL Database Integration - NO MOCKS', () => {
   let supabase: SupabaseClient;
-  // Use actual test user ID from database
-  const testUserId = '8e8ea7bd-b7fb-4e77-8e34-aa551fe26934';
-  const _testUserEmail = 'gianmatteo.allyn.test@gmail.com'; // Kept for reference
+  // Use actual test user ID from environment or defaults
+  const testUserId = process.env.TEST_USER_ID || '8e8ea7bd-b7fb-4e77-8e34-aa551fe26934';
+  const _testUserEmail = process.env.TEST_USER_EMAIL || 'gianmatteo.allyn.test@gmail.com'; // Kept for reference
   const createdIds = {
     tasks: [] as string[],
     businesses: [] as string[],

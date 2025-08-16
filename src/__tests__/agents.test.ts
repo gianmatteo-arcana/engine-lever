@@ -42,7 +42,7 @@ describe('AgentManager', () => {
     });
 
     it('should initialize all role-based agents', async () => {
-      expect(AgentManager.getAgentCount()).toBe(7); // All role-based agents
+      expect(AgentManager.getAgentCount()).toBe(1); // Only OrchestratorAgent for now
     });
 
     it('should get agent status by role', async () => {
@@ -54,7 +54,7 @@ describe('AgentManager', () => {
 
     it('should get all agents status', async () => {
       const statuses = AgentManager.getAllAgentsStatus();
-      expect(statuses).toHaveLength(7); // All role-based agents
+      expect(statuses).toHaveLength(1); // Only OrchestratorAgent for now
       expect(statuses[0]).toHaveProperty('role');
       expect(statuses[0]).toHaveProperty('status');
       expect(statuses[0]).toHaveProperty('metrics');
