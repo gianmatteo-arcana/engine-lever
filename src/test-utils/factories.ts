@@ -154,7 +154,7 @@ export class TaskTemplateFactory {
           id: 'collect_soi_data',
           name: 'Collect SOI Data',
           description: 'Collect Statement of Information data',
-          agents: ['DataCollectionAgent'],
+          agents: ['DefaultAgent'],
           maxDuration: 600,
           canSkip: false
         },
@@ -487,7 +487,7 @@ export class TestDataBuilder {
       ContextEntryFactory.createSystemEntry('task_created', {
         templateId: template.id
       }),
-      ContextEntryFactory.createAgentEntry('DataCollectionAgent', 'data_collected', {
+      ContextEntryFactory.createAgentEntry('DefaultAgent', 'data_collected', {
         form: 'ca_soi',
         complete: true
       }),
