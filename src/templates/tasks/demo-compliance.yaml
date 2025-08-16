@@ -1,0 +1,76 @@
+# Demo Task Template: Multi-Agent Compliance Workflow
+# Showcases A2A Event Bus coordination between multiple agents
+
+id: demo-compliance
+name: "Compliance Analysis Demo"
+description: "Demonstrates multi-agent coordination for compliance analysis"
+version: "1.0.0"
+
+metadata:
+  category: demo
+  estimatedDuration: 300
+  priority: medium
+  agents:
+    - BusinessDiscoveryAgent
+    - ComplianceAnalyzer  
+    - DataCollectionAgent
+    - CommunicationAgent
+
+goals:
+  primary:
+    - "Demonstrate real-time agent coordination"
+    - "Show event bus communication patterns"
+    - "Validate event persistence and reconstruction"
+
+phases:
+  - id: discovery
+    name: "Business Discovery"
+    description: "Agent discovers business information"
+    agents: [BusinessDiscoveryAgent]
+    maxDuration: 60
+    canSkip: false
+    
+  - id: data_collection  
+    name: "Data Collection"
+    description: "Agent collects relevant business data"
+    agents: [DataCollectionAgent]
+    maxDuration: 90
+    canSkip: false
+    dependencies: [discovery]
+    
+  - id: compliance_analysis
+    name: "Compliance Analysis" 
+    description: "Agent analyzes compliance requirements"
+    agents: [ComplianceAnalyzer]
+    maxDuration: 120
+    canSkip: false
+    dependencies: [data_collection]
+    
+  - id: communication
+    name: "Results Communication"
+    description: "Agent communicates findings to user"
+    agents: [CommunicationAgent] 
+    maxDuration: 30
+    canSkip: false
+    dependencies: [compliance_analysis]
+
+completion_criteria:
+  - "all phases completed successfully"
+  - "events persisted in database"
+  - "user notified of results"
+
+demo_features:
+  event_types:
+    - "TaskCreated"
+    - "AgentAssigned" 
+    - "PhaseStarted"
+    - "PhaseCompleted"
+    - "DataDiscovered"
+    - "ComplianceIssueFound"
+    - "UserNotified"
+    
+  coordination_patterns:
+    - "Sequential agent execution"
+    - "Data passing between agents"
+    - "Event-driven state transitions"
+    - "Real-time progress updates"

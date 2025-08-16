@@ -4,6 +4,7 @@ import { AgentManager } from '../agents';
 import { TemplateExecutor } from '../templates/executor';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import tasksRoutes from './tasks';
+import demoRoutes from './demo-execution';
 
 const router = Router();
 const templateExecutor = new TemplateExecutor();
@@ -152,5 +153,7 @@ router.get('/queues/status', (req, res) => {
 // Generic tasks endpoints (ENGINE PRD compliant)
 router.use('/tasks', tasksRoutes);
 
+// Demo endpoints for A2A Event Bus production demo
+router.use('/api', demoRoutes);
 
 export { router as apiRoutes };
