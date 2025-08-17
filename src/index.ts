@@ -181,7 +181,7 @@ process.on('SIGINT', gracefulShutdown);
 // Start server
 async function startServer() {
   try {
-    logger.info('🚀 Starting Biz Buddy Backend Services...');
+    logger.info('🚀 Starting Biz Buddy Backend Services (v1.0.2 with enhanced logging)...');
     
     // Initialize dependency injection container
     initializeServices();
