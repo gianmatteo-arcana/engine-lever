@@ -89,48 +89,35 @@ export class OrchestratorAgent extends BaseAgent {
   
   private constructor() {
     try {
-      console.log('DEBUG: OrchestratorAgent constructor starting...');
       logger.info('🚀 OrchestratorAgent constructor starting...');
       
       // Call BaseAgent constructor with orchestrator config
       // Using 'system' as businessId since orchestrator works across all businesses
-      console.log('DEBUG: About to load BaseAgent...');
       logger.info('📄 Loading BaseAgent with orchestrator.yaml...');
-      console.log('DEBUG: About to call super() in OrchestratorAgent');
       super('orchestrator.yaml', 'system', 'system');
-      console.log('DEBUG: super() call completed successfully');
       logger.info('✅ BaseAgent constructor completed successfully');
       
-      console.log('DEBUG: About to load orchestrator config...');
       logger.info('⚙️ Loading orchestrator config...');
       this.config = this.loadConfig();
-      console.log('DEBUG: Config loaded successfully');
       logger.info('✅ Orchestrator config loaded successfully');
       
-      console.log('DEBUG: About to initialize data structures...');
       logger.info('🗃️ Initializing data structures...');
       this.agentRegistry = new Map();
       this.activeExecutions = new Map();
       this.pendingUIRequests = new Map();
-      console.log('DEBUG: Data structures initialized');
       logger.info('✅ Data structures initialized');
       
       // Lazy initialization to avoid startup crashes
-      console.log('DEBUG: Setting up lazy initialization...');
       logger.info('🔌 Setting up lazy initialization for services...');
       this.configManager = null as any;
       this.dbService = null as any;
       this.stateComputer = null as any;
-      console.log('DEBUG: Lazy initialization configured');
       logger.info('✅ Lazy initialization configured');
       
-      console.log('DEBUG: About to initialize agent registry...');
       logger.info('📋 Initializing agent registry...');
       this.initializeAgentRegistry();
-      console.log('DEBUG: Agent registry initialized');
       logger.info('✅ Agent registry initialized');
       
-      console.log('DEBUG: OrchestratorAgent constructor completed!');
       logger.info('🎉 OrchestratorAgent constructor completed successfully!');
     } catch (error) {
       console.error('ERROR: OrchestratorAgent constructor failed:', error);
