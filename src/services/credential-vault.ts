@@ -42,28 +42,37 @@ export class CredentialVault {
     console.log('  SUPABASE_SERVICE_KEY raw:', process.env.SUPABASE_SERVICE_KEY);
     console.log('  SUPABASE_SERVICE_ROLE_KEY raw:', process.env.SUPABASE_SERVICE_ROLE_KEY);
     
-    // Validate and get Supabase configuration
-    const supabaseUrl = process.env.SUPABASE_URL?.trim();
-    // DEBUG: Check each option separately
+    // Check ALL possible env var names Railway might use
     console.log('  Checking SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'EXISTS' : 'NOT SET');
-    console.log('  Checking SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? 'EXISTS' : 'NOT SET');
+    console.log('  Checking SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? 'EXISTS' : 'NOT SET');  
     console.log('  Checking SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? 'EXISTS' : 'NOT SET');
+    console.log('  Checking NEXT_PUBLIC_SUPABASE_ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'EXISTS' : 'NOT SET');
+    console.log('  Checking REACT_APP_SUPABASE_ANON_KEY:', process.env.REACT_APP_SUPABASE_ANON_KEY ? 'EXISTS' : 'NOT SET');
     
-    const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY)?.trim();
+    // Get configuration - check multiple possible env var names
+    const supabaseUrl = process.env.SUPABASE_URL?.trim() || 
+                       process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || 
+                       process.env.REACT_APP_SUPABASE_URL?.trim();
     
-    // Validate configuration RIGHT WHERE IT'S USED
+    const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || 
+                        process.env.SUPABASE_SERVICE_KEY || 
+                        process.env.SUPABASE_ANON_KEY ||
+                        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+                        process.env.REACT_APP_SUPABASE_ANON_KEY)?.trim();
+    
+    // Validate configuration - FAIL HARD if not configured
     const errors = [];
     
     // Check URL
     if (!supabaseUrl) {
-      errors.push('SUPABASE_URL is not set');
+      errors.push('SUPABASE_URL is not set (checked: SUPABASE_URL, NEXT_PUBLIC_SUPABASE_URL, REACT_APP_SUPABASE_URL)');
     } else if (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co')) {
       errors.push(`SUPABASE_URL is invalid: "${supabaseUrl}"`);
     }
     
-    // Check Key - must be valid
+    // Check Key - MUST be valid
     if (!supabaseKey) {
-      errors.push('SUPABASE_SERVICE_KEY/SUPABASE_SERVICE_ROLE_KEY is not set');
+      errors.push('No Supabase key found (checked: SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY, NEXT_PUBLIC_SUPABASE_ANON_KEY, REACT_APP_SUPABASE_ANON_KEY)');
     } else if (supabaseKey.length < 30) {
       // DEBUG: Show first few chars to diagnose truncation
       const preview = supabaseKey.substring(0, 10);
@@ -81,7 +90,7 @@ export class CredentialVault {
     }
     
     if (errors.length > 0) {
-      // Fail with clear, actionable error AT THE POINT OF FAILURE
+      // FAIL HARD with clear error message
       console.error(`
 ========================================
 🚨 CREDENTIAL VAULT INITIALIZATION FAILED 🚨
