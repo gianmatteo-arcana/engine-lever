@@ -161,7 +161,27 @@ This is required for:
       if (process.env.NODE_ENV !== 'production') {
         this.encryptionKey = this.encryptionKey.padEnd(64, '0');
       } else {
-        throw new Error('Encryption key is invalid - must be at least 32 bytes');
+        console.error(`
+========================================
+🚨 ENCRYPTION KEY ERROR 🚨
+========================================
+In production, you must set ENCRYPTION_KEY environment variable.
+The key must be at least 32 bytes (64 hex characters).
+
+Current key length: ${this.encryptionKey.length} characters
+
+To fix in Railway:
+1. Generate a 64-character hex key:
+   openssl rand -hex 32
+   
+2. Add to Railway environment variables:
+   ENCRYPTION_KEY=[your-64-char-hex-key]
+
+Example:
+ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+========================================
+`);
+        throw new Error(`ENCRYPTION_KEY is too short for production (${this.encryptionKey.length} chars, need 64)`);
       }
     }
   }
