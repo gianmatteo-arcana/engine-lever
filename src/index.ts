@@ -201,25 +201,6 @@ process.on('SIGINT', gracefulShutdown);
  */
 async function startServer() {
   try {
-    // DEBUG: Log what environment variables Railway is actually providing
-    console.log('🔍 RAILWAY ENV DEBUG:');
-    console.log('  TEST_VAR:', process.env.TEST_VAR || 'NOT SET');
-    console.log('  SUPABASE_URL:', process.env.SUPABASE_URL ? '✅ SET' : '❌ NOT SET');
-    console.log('  SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? '✅ SET' : '❌ NOT SET');
-    console.log('  SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ SET' : '❌ NOT SET');
-    console.log('  SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✅ SET' : '❌ NOT SET');
-    console.log('  PORT:', process.env.PORT || 'NOT SET');
-    console.log('  NODE_ENV:', process.env.NODE_ENV || 'NOT SET');
-    console.log('  Total env vars:', Object.keys(process.env).length);
-    
-    // List ALL env vars that contain SUPABASE
-    console.log('  All SUPABASE vars:');
-    Object.keys(process.env).forEach(key => {
-      if (key.includes('SUPABASE')) {
-        console.log(`    ${key}: ${process.env[key] ? 'SET' : 'NOT SET'}`);
-      }
-    });
-    
     // STEP 1: ENVIRONMENT VALIDATION
     // Basic check for critical configuration - detailed validation happens in CredentialVault
     const configErrors = [];
@@ -311,31 +292,25 @@ async function startServer() {
     // If we get here, all required vars are set
     console.log('✅ All required environment variables are configured');
     
-    logger.info('🚀 Starting Biz Buddy Backend Services (v1.0.2 with enhanced logging)...');
+    logger.info('🚀 Starting Biz Buddy Backend Services...');
     
     // Initialize dependency injection container
-    console.log('DEBUG: Initializing services...');
     initializeServices();
     logger.info('✅ Dependency injection container initialized');
     
     // Initialize task events service
-    console.log('DEBUG: Initializing task events...');
     initializeTaskEvents();
     logger.info('✅ Task Events service initialized');
     
     // Initialize core services
-    console.log('DEBUG: Initializing QueueManager...');
     await QueueManager.initialize();
     logger.info('✅ Queue Manager initialized');
     
-    console.log('DEBUG: Initializing MCPServer...');
     await MCPServer.initialize();
     logger.info('✅ MCP Server initialized');
     
-    console.log('DEBUG: About to initialize AgentManager...');
-    logger.info('🤖 Starting Agent Manager initialization...');
     await AgentManager.initialize();
-    logger.info('✅ Agent Manager initialized successfully');
+    logger.info('✅ Agent Manager initialized');
     
     // Initialize Persistent Agent Manager if Supabase is configured
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
@@ -362,7 +337,7 @@ async function startServer() {
       logger.info(`🔗 Health check: http://localhost:${PORT}/health`);
       logger.info(`🤖 Agents: ${AgentManager.getAgentCount()} active`);
       logger.info(`🛠️ MCP Tools: ${MCPServer.getToolCount()} available`);
-      logger.info(`🚀 Version: 1.0.1 - DevOps test ${new Date().toISOString()}`);
+      logger.info(`🚀 Ready to serve requests!`);
     });
     
   } catch (error) {
