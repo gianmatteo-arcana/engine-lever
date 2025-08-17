@@ -512,29 +512,49 @@ router.post('/:taskId/context/events', requireAuth, async (req: AuthenticatedReq
       return res.status(404).json({ error: 'Task not found' });
     }
     
-    // Create context event
-    const event = {
-      id: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      taskId,
-      sequenceNumber: Date.now(), // TODO: Use proper sequence from database
-      actorType: 'user' as const,
-      actorId: userId,
-      operation,
-      data,
-      reasoning,
-      trigger: { source: 'user_input', timestamp: new Date().toISOString() },
-      createdAt: new Date().toISOString()
-    };
+    // Determine actor type from request
+    const actorType = req.body.agentId ? 'agent' : 'user';
+    const actorId = req.body.agentId || userId;
     
-    // TODO: Insert into context_events table when it exists
-    // For now, we'll emit a task event and update task metadata
+    // Create context event with proper structure for task_context_events table
+    const eventId = `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const contextId = req.body.contextId || taskId; // Use taskId as contextId if not provided
+    
+    // Get Supabase client for direct insertion
+    const supabase = dbService.getServiceClient();
+    
+    // Insert into task_context_events table
+    const { data: insertedEvent, error: insertError } = await supabase
+      .from('task_context_events')
+      .insert({
+        id: eventId,
+        context_id: contextId,
+        task_id: taskId,
+        actor_type: actorType,
+        actor_id: actorId,
+        operation: operation || req.body.operation,
+        data: data || req.body.data || {},
+        reasoning: reasoning || req.body.reasoning || 'Context event added',
+        trigger: { source: 'api', timestamp: new Date().toISOString() }
+      })
+      .select()
+      .single();
+    
+    if (insertError) {
+      logger.error('Failed to insert context event', { error: insertError, taskId });
+      throw new Error('Failed to insert context event');
+    }
+    
+    const event = insertedEvent;
+    
+    // Also emit the task event for compatibility
     await emitTaskEvent('context_event_added', {
       taskId,
       event
     }, {
       userToken,
-      actorType: 'user',
-      reasoning: reasoning || 'User added context event'
+      actorType: actorType,
+      reasoning: reasoning || 'Context event added'
     });
     
     // Update task metadata with the event data

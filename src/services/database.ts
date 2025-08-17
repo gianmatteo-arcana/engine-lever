@@ -230,7 +230,7 @@ export class DatabaseService {
    * Initialize the service role client for system operations
    * This should only be used for operations that don't involve user data
    */
-  private getServiceClient(): SupabaseClient {
+  public getServiceClient(): SupabaseClient {
     if (!this.serviceClient) {
       const supabaseUrl = process.env.SUPABASE_URL;
       const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -912,34 +912,31 @@ export class DatabaseService {
   }
 
   /**
-   * Legacy: Get a task by ID (maps to context)
+   * Get a task by ID - queries the actual tasks table
    */
   async getTask(userToken: string, taskId: string): Promise<TaskRecord | null> {
-    const context = await this.getContext(taskId);
-    if (!context) return null;
-    
-    // Extract user ID from token
+    // Extract user ID from token for validation
     const { data: { user } } = await this.getServiceClient().auth.getUser(userToken);
     if (!user) throw new Error('Invalid user token');
     
-    // Map context to legacy task format
-    return {
-      id: context.id,
-      user_id: context.initiated_by_user_id || user.id,
-      business_id: context.business_id,
-      template_id: context.template_id,
-      title: context.metadata?.title || 'Task',
-      description: context.metadata?.description,
-      task_type: context.template_id,
-      status: context.current_state.status === 'created' ? 'pending' as const : 
-              context.current_state.status === 'active' ? 'in_progress' as const : 
-              context.current_state.status === 'completed' ? 'completed' as const : 'pending' as const,
-      priority: 'medium',
-      metadata: context.metadata || {},
-      created_at: context.created_at,
-      updated_at: context.updated_at,
-      task_context: context.current_state.data
-    };
+    // Use service client to query tasks table directly
+    const client = this.getServiceClient();
+    const { data: task, error } = await client
+      .from('tasks')
+      .select('*')
+      .eq('id', taskId)
+      .eq('user_id', user.id)  // Ensure user owns this task
+      .single();
+    
+    if (error) {
+      if (error.code === 'PGRST116') {  // Not found
+        return null;
+      }
+      logger.error('Failed to get task', error);
+      throw error;
+    }
+    
+    return task as TaskRecord;
   }
 
   /**
@@ -963,7 +960,7 @@ export class DatabaseService {
   }
 
   /**
-   * Legacy: Get all tasks for a user (maps to contexts)
+   * Get all tasks for a user - queries the actual tasks table
    */
   async getUserTasks(userToken: string, filters?: { 
     status?: string; 
@@ -974,37 +971,33 @@ export class DatabaseService {
     const { data: { user } } = await this.getServiceClient().auth.getUser(userToken);
     if (!user) throw new Error('Invalid user token');
     
-    // Get user's businesses
-    const businesses = await this.getUserBusinesses(user.id);
-    if (businesses.length === 0) return [];
+    // Query tasks table directly with service client
+    const client = this.getServiceClient();
+    let query = client
+      .from('tasks')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
     
-    // Get contexts for the businesses
-    const allContexts: ContextRecord[] = [];
-    for (const business of businesses) {
-      const contexts = await this.getBusinessContexts(business.id, {
-        status: filters?.status,
-        limit: filters?.limit
-      });
-      allContexts.push(...contexts);
+    // Apply filters if provided
+    if (filters?.status) {
+      query = query.eq('status', filters.status);
+    }
+    if (filters?.businessId) {
+      query = query.eq('business_id', filters.businessId);
+    }
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
     }
     
-    // Map contexts to legacy task format
-    return allContexts.map(context => ({
-      id: context.id,
-      user_id: context.initiated_by_user_id || user.id,
-      business_id: context.business_id,
-      template_id: context.template_id,
-      title: context.metadata?.title || 'Task',
-      description: context.metadata?.description,
-      task_type: context.template_id,
-      status: context.current_state.status === 'created' ? 'pending' as const : 
-              context.current_state.status === 'active' ? 'in_progress' as const : 'completed' as const,
-      priority: 'medium' as const,
-      metadata: context.metadata || {},
-      created_at: context.created_at,
-      updated_at: context.updated_at,
-      task_context: context.current_state.data
-    }));
+    const { data: tasks, error } = await query;
+    
+    if (error) {
+      logger.error('Failed to get user tasks', error);
+      throw error;
+    }
+    
+    return (tasks || []) as TaskRecord[];
   }
 
   /**
