@@ -112,6 +112,16 @@ This is required for:
     }
     
     // If we get here, configuration is valid - TypeScript needs explicit type assertion
+    // DEBUG: Log exactly what we're passing to createClient
+    console.log('🔍 CREATING SUPABASE CLIENT WITH:');
+    console.log('  URL type:', typeof supabaseUrl, 'value:', supabaseUrl);
+    console.log('  Key type:', typeof supabaseKey, 'length:', supabaseKey?.length, 'starts with:', supabaseKey?.substring(0, 10));
+    
+    // Extra safety check before calling createClient
+    if (!supabaseKey || supabaseKey === '') {
+      throw new Error('CRITICAL: supabaseKey is empty or undefined even after validation!');
+    }
+    
     this.supabase = createClient(supabaseUrl!, supabaseKey!);
     this.encryptionKey = process.env.ENCRYPTION_KEY || 'default-encryption-key-for-dev';
     

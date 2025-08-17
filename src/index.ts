@@ -207,9 +207,18 @@ async function startServer() {
     console.log('  SUPABASE_URL:', process.env.SUPABASE_URL ? '✅ SET' : '❌ NOT SET');
     console.log('  SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? '✅ SET' : '❌ NOT SET');
     console.log('  SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ SET' : '❌ NOT SET');
+    console.log('  SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✅ SET' : '❌ NOT SET');
     console.log('  PORT:', process.env.PORT || 'NOT SET');
     console.log('  NODE_ENV:', process.env.NODE_ENV || 'NOT SET');
     console.log('  Total env vars:', Object.keys(process.env).length);
+    
+    // List ALL env vars that contain SUPABASE
+    console.log('  All SUPABASE vars:');
+    Object.keys(process.env).forEach(key => {
+      if (key.includes('SUPABASE')) {
+        console.log(`    ${key}: ${process.env[key] ? 'SET' : 'NOT SET'}`);
+      }
+    });
     
     // STEP 1: ENVIRONMENT VALIDATION
     // Basic check for critical configuration - detailed validation happens in CredentialVault
