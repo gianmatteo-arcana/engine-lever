@@ -734,33 +734,208 @@ router.put('/:taskId', requireAuth, async (req: AuthenticatedRequest, res) => {
 });
 
 /**
+ * GET /api/tasks/dashboard/summary
+ * 
+ * Dashboard summary endpoint - provides task counts by status for dashboard widgets
+ */
+router.get('/dashboard/summary', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
+    const userId = req.userId!;
+    
+    logger.info('Getting dashboard summary for user', { userId });
+    
+    const dbService = DatabaseService.getInstance();
+    const tasks = await dbService.getUserTasks(req.userId!);
+    
+    // Calculate status counts
+    const statusCounts = tasks.reduce((acc: any, task: any) => {
+      const status = task.status;
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {});
+    
+    // Calculate upcoming vs completed
+    const upcoming = (statusCounts.pending || 0) + (statusCounts.in_progress || 0);
+    const completed = statusCounts.completed || 0;
+    
+    // Calculate priority distribution
+    const priorityCounts = tasks.reduce((acc: any, task: any) => {
+      const priority = task.priority || 'medium';
+      acc[priority] = (acc[priority] || 0) + 1;
+      return acc;
+    }, {});
+    
+    // Get recent activity (tasks updated in last 7 days)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const recentActivity = tasks.filter((task: any) => 
+      new Date(task.updated_at) > sevenDaysAgo
+    ).length;
+    
+    res.json({
+      totalTasks: tasks.length,
+      statusCounts: {
+        pending: statusCounts.pending || 0,
+        in_progress: statusCounts.in_progress || 0,
+        completed: statusCounts.completed || 0,
+        blocked: statusCounts.blocked || 0,
+        cancelled: statusCounts.cancelled || 0
+      },
+      overview: {
+        upcoming,
+        completed,
+        recentActivity
+      },
+      priorityCounts: {
+        low: priorityCounts.low || 0,
+        medium: priorityCounts.medium || 0,
+        high: priorityCounts.high || 0,
+        urgent: priorityCounts.urgent || 0
+      },
+      generatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Failed to get dashboard summary', error);
+    res.status(500).json({ error: 'Failed to get dashboard summary' });
+  }
+});
+
+/**
+ * GET /api/tasks/dashboard/recent-activity
+ * 
+ * Get recent task activity for dashboard feed
+ */
+router.get('/dashboard/recent-activity', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
+    const userId = req.userId!;
+    const limit = parseInt(req.query.limit as string) || 10;
+    
+    logger.info('Getting recent activity for user', { userId, limit });
+    
+    const dbService = DatabaseService.getInstance();
+    const tasks = await dbService.getUserTasks(req.userId!);
+    
+    // Sort by updated_at and limit
+    const recentTasks = tasks
+      .sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .slice(0, limit)
+      .map((task: any) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        priority: task.priority,
+        taskType: task.task_type,
+        updatedAt: task.updated_at,
+        createdAt: task.created_at,
+        completedAt: task.completed_at,
+        agent: task.metadata?.agent_assigned || task.metadata?.assignedAgent || 'System',
+        progress: task.metadata?.progress_percentage || 0,
+        lastAction: task.metadata?.last_action || task.metadata?.lastAction || 'Task updated',
+        statusChange: {
+          from: task.metadata?.previousStatus,
+          to: task.status,
+          timestamp: task.updated_at
+        }
+      }));
+    
+    res.json({
+      activities: recentTasks,
+      count: recentTasks.length,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Failed to get recent activity', error);
+    res.status(500).json({ error: 'Failed to get recent activity' });
+  }
+});
+
+/**
  * GET /api/tasks
  * 
- * List all tasks for the authenticated user
+ * List all tasks for the authenticated user with optional filtering
+ * Enhanced with status filtering for dashboard UX
  */
 router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
     const userId = req.userId!;
     
-    logger.info('Listing tasks for user', { userId });
+    // Extract query parameters for filtering
+    const status = req.query.status as string;
+    const priority = req.query.priority as string;
+    const taskType = req.query.task_type as string;
+    const limit = parseInt(req.query.limit as string) || undefined;
+    const offset = parseInt(req.query.offset as string) || 0;
+    
+    logger.info('Listing tasks for user', { 
+      userId, 
+      filters: { status, priority, taskType, limit, offset }
+    });
     
     const dbService = DatabaseService.getInstance();
-    const tasks = await dbService.getUserTasks(req.userId!);
+    let tasks = await dbService.getUserTasks(req.userId!);
+    
+    // Apply filters
+    if (status) {
+      // Support multiple statuses (e.g., ?status=pending,in_progress)
+      const statusList = status.split(',').map(s => s.trim());
+      tasks = tasks.filter((task: any) => statusList.includes(task.status));
+    }
+    
+    if (priority) {
+      const priorityList = priority.split(',').map(p => p.trim());
+      tasks = tasks.filter((task: any) => priorityList.includes(task.priority));
+    }
+    
+    if (taskType) {
+      const typeList = taskType.split(',').map(t => t.trim());
+      tasks = tasks.filter((task: any) => typeList.includes(task.task_type));
+    }
+    
+    // Sort by created_at desc by default
+    tasks.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    
+    // Apply pagination
+    const totalCount = tasks.length;
+    if (limit) {
+      tasks = tasks.slice(offset, offset + limit);
+    }
+    
+    // Map to consistent response format
+    const mappedTasks = tasks.map((task: any) => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      taskType: task.task_type,
+      status: task.status,
+      priority: task.priority,
+      dueDate: task.due_date,
+      completedAt: task.completed_at,
+      createdAt: task.created_at,
+      updatedAt: task.updated_at,
+      metadata: task.metadata,
+      // Dashboard-specific fields
+      progress: task.metadata?.progress_percentage || 0,
+      agent: task.metadata?.agent_assigned || task.metadata?.assignedAgent || 'System',
+      estimatedTime: task.metadata?.estimated_time || task.metadata?.estimatedTime,
+      nextAction: task.metadata?.next_action || task.metadata?.nextAction
+    }));
     
     res.json({
-      tasks: tasks.map((task: any) => ({
-        id: task.id,
-        title: task.title,
-        description: task.description,
-        taskType: task.task_type,
-        status: task.status,
-        priority: task.priority,
-        createdAt: task.created_at,
-        updatedAt: task.updated_at,
-        metadata: task.metadata
-      })),
-      count: tasks.length
+      tasks: mappedTasks,
+      count: mappedTasks.length,
+      totalCount,
+      pagination: {
+        offset,
+        limit: limit || totalCount,
+        hasMore: limit ? (offset + limit < totalCount) : false
+      },
+      filters: {
+        status: status || null,
+        priority: priority || null,
+        taskType: taskType || null
+      }
     });
   } catch (error) {
     logger.error('Failed to list tasks', error);
