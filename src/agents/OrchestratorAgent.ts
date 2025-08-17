@@ -167,9 +167,11 @@ export class OrchestratorAgent extends BaseAgent {
    * Engine PRD Lines 799-841
    */
   private loadConfig(): OrchestratorConfig {
-    // In production, load from YAML
-    // For now, return PRD-compliant config
-    return {
+    try {
+      logger.info('📋 loadConfig() called - returning hardcoded config');
+      // In production, load from YAML
+      // For now, return PRD-compliant config
+      return {
       id: 'universal_orchestrator',
       version: '1.0.0',
       mission: `
@@ -208,6 +210,30 @@ export class OrchestratorAgent extends BaseAgent {
         timeoutMs: 30000
       }
     };
+    } catch (error) {
+      logger.error('💥 FATAL: loadConfig() failed!', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      // Return minimal config to prevent crash
+      return {
+        id: 'universal_orchestrator',
+        version: '1.0.0',
+        mission: 'Emergency fallback orchestrator',
+        planningRules: [],
+        progressiveDisclosure: {
+          enabled: false,
+          batchingStrategy: 'sequential' as const,
+          minBatchSize: 1,
+          maxUserInterruptions: 10
+        },
+        resilience: {
+          fallbackStrategy: 'degrade' as const,
+          maxRetries: 3,
+          timeoutMs: 30000
+        }
+      };
+    }
   }
   
   /**

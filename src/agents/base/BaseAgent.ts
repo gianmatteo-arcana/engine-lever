@@ -227,6 +227,7 @@ export abstract class BaseAgent implements AgentExecutor {
       if (config.agent?.extends === 'base_agent') {
         // Agent explicitly inherits from base template
         console.log(`Agent ${config.agent.id} inheriting from base_agent template`);
+        logger.info(`✅ Successfully loaded specialized config for ${config.agent.id}`);
       }
       
       return config;
