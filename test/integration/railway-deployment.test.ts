@@ -31,7 +31,7 @@ describe('Railway Deployment Integration', () => {
 
       expect(() => {
         OrchestratorAgent.getInstance();
-      }).toThrow('CRITICAL: Supabase configuration invalid');
+      }).toThrow('CredentialVault initialization failed');
     });
 
     it('should fail hard when SUPABASE_SERVICE_KEY is missing', async () => {
@@ -47,7 +47,7 @@ describe('Railway Deployment Integration', () => {
 
       expect(() => {
         OrchestratorAgent.getInstance();
-      }).toThrow('CRITICAL: Supabase configuration invalid');
+      }).toThrow('CredentialVault initialization failed');
     });
 
     // Skip this test - it requires actual valid Supabase credentials
@@ -80,13 +80,13 @@ describe('Railway Deployment Integration', () => {
       } catch (error) {
         // Verify actionable error message was logged
         expect(consoleSpy).toHaveBeenCalledWith(
-          expect.stringContaining('CRITICAL CONFIGURATION ERROR')
+          expect.stringContaining('CREDENTIAL VAULT INITIALIZATION FAILED')
         );
         expect(consoleSpy).toHaveBeenCalledWith(
           expect.stringContaining('Go to your Railway project dashboard')
         );
         expect(consoleSpy).toHaveBeenCalledWith(
-          expect.stringContaining('Example: https://raenkewzlvrdqufwxjpl.supabase.co')
+          expect.stringContaining('SUPABASE_URL=https://raenkewzlvrdqufwxjpl.supabase.co')
         );
       }
     });

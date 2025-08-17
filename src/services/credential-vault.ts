@@ -36,11 +36,75 @@ export class CredentialVault {
   // private metricsCollector: MetricsCollector;
   
   constructor() {
-    // Initialize Supabase client
-    const supabaseUrl = process.env.SUPABASE_URL || 'https://raenkewzlvrdqufwxjpl.supabase.co';
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+    // Validate and get Supabase configuration
+    const supabaseUrl = process.env.SUPABASE_URL?.trim();
+    const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY)?.trim();
     
-    this.supabase = createClient(supabaseUrl, supabaseKey);
+    // Validate configuration RIGHT WHERE IT'S USED
+    const errors = [];
+    
+    // Check URL
+    if (!supabaseUrl) {
+      errors.push('SUPABASE_URL is not set');
+    } else if (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co')) {
+      errors.push(`SUPABASE_URL is invalid: "${supabaseUrl}"`);
+    }
+    
+    // Check Key - must be valid
+    if (!supabaseKey) {
+      errors.push('SUPABASE_SERVICE_KEY/SUPABASE_SERVICE_ROLE_KEY is not set');
+    } else if (supabaseKey.length < 30) {
+      errors.push(`SUPABASE_SERVICE_KEY is too short (${supabaseKey.length} chars) - likely empty or invalid`);
+    } else if (supabaseKey.includes('[') || supabaseKey.includes('Get from')) {
+      errors.push('SUPABASE_SERVICE_KEY contains placeholder text - not a real key');
+    } else {
+      // Check for valid formats
+      const isJWT = supabaseKey.startsWith('eyJ') && supabaseKey.includes('.');
+      const isAPIKey = supabaseKey.startsWith('sbp_') || supabaseKey.length === 40;
+      
+      if (!isJWT && !isAPIKey) {
+        errors.push(`SUPABASE_SERVICE_KEY has invalid format (not JWT or API key)`);
+      }
+    }
+    
+    if (errors.length > 0) {
+      // Fail with clear, actionable error AT THE POINT OF FAILURE
+      console.error(`
+========================================
+🚨 CREDENTIAL VAULT INITIALIZATION FAILED 🚨
+========================================
+Cannot connect to Supabase. Configuration problems:
+
+${errors.map(e => `  ❌ ${e}`).join('\n')}
+
+To fix this in Railway:
+1. Go to your Railway project dashboard
+2. Click on the biz-buddy-backend service
+3. Go to the Variables tab
+4. Add/fix these variables:
+
+   SUPABASE_URL=https://raenkewzlvrdqufwxjpl.supabase.co
+   SUPABASE_SERVICE_KEY=[Get from Supabase Dashboard > Settings > API > service_role]
+
+The service_role key:
+- Starts with "eyJ" (JWT format)
+- Is a long string (200+ characters)
+- Never expires (perfect for backend services)
+- Has full database access
+
+DO NOT use the anon/public key - it has RLS restrictions.
+
+This is required for:
+- Storing encrypted credentials
+- Managing tenant secrets
+- Database connections
+========================================
+`);
+      throw new Error(`CredentialVault initialization failed: ${errors.join(', ')}`);
+    }
+    
+    // If we get here, configuration is valid - TypeScript needs explicit type assertion
+    this.supabase = createClient(supabaseUrl!, supabaseKey!);
     this.encryptionKey = process.env.ENCRYPTION_KEY || 'default-encryption-key-for-dev';
     
     // Validate encryption key format (must be 32 bytes / 64 hex chars for AES-256)

@@ -24,7 +24,8 @@ describe('CredentialVault - Core Functionality', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.SUPABASE_URL = 'https://test.supabase.co';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key';
+    // Use a valid JWT-like format for the service key (must be 30+ chars)
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.service-key-for-testing-only';
     process.env.ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
     
     vault = new CredentialVault();
@@ -67,6 +68,9 @@ describe('CredentialVault - Core Functionality', () => {
   describe('Encryption', () => {
     it('should require encryption key', () => {
       delete process.env.ENCRYPTION_KEY;
+      // Keep the valid Supabase config for vault creation
+      process.env.SUPABASE_URL = 'https://test.supabase.co';
+      process.env.SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.service-key-for-testing-only';
       
       // Should use default key or throw
       const newVault = new CredentialVault();

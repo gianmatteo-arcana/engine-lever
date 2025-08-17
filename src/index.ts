@@ -202,10 +202,10 @@ process.on('SIGINT', gracefulShutdown);
 async function startServer() {
   try {
     // STEP 1: ENVIRONMENT VALIDATION
-    // Check critical configuration FIRST - fail fast with actionable errors
+    // Basic check for critical configuration - detailed validation happens in CredentialVault
     const configErrors = [];
     
-    // Validate Supabase URL
+    // Check if Supabase URL exists (detailed validation in CredentialVault)
     const supabaseUrl = process.env.SUPABASE_URL?.trim();
     if (!supabaseUrl) {
       configErrors.push({
@@ -213,62 +213,25 @@ async function startServer() {
         issue: 'MISSING',
         fix: 'https://raenkewzlvrdqufwxjpl.supabase.co'
       });
-    } else if (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co')) {
-      configErrors.push({
-        key: 'SUPABASE_URL',
-        issue: `INVALID: "${supabaseUrl.substring(0, 40)}..."`,
-        fix: 'Must be https://[project].supabase.co format'
-      });
     }
     
-    // Validate Supabase Service Key - can be JWT or API key
-    const supabaseKey = process.env.SUPABASE_SERVICE_KEY?.trim();
+    // Check if Supabase Service Key exists (detailed validation in CredentialVault)
+    const supabaseKey = (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)?.trim();
     if (!supabaseKey) {
       configErrors.push({
         key: 'SUPABASE_SERVICE_KEY',
         issue: 'MISSING',
-        fix: 'Get from Supabase Dashboard > Settings > API'
+        fix: 'Get from Supabase Dashboard > Settings > API > service_role'
       });
-    } else if (supabaseKey.includes('[') || supabaseKey.includes('Get from')) {
-      configErrors.push({
-        key: 'SUPABASE_SERVICE_KEY',
-        issue: 'PLACEHOLDER VALUE',
-        fix: 'Replace with actual key from Supabase'
-      });
-    } else if (supabaseKey.length < 30) {
-      configErrors.push({
-        key: 'SUPABASE_SERVICE_KEY',
-        issue: 'TOO SHORT (likely invalid)',
-        fix: 'Use service_role or anon key from Supabase'
-      });
-    } else {
-      // Validate key format
-      const isJWT = supabaseKey.startsWith('eyJ') && supabaseKey.includes('.');
-      const isNewAPIKey = supabaseKey.startsWith('sbp_');
-      const isLegacyAPIKey = supabaseKey.length === 40 && !isJWT && !isNewAPIKey;
-      
-      if (!isJWT && !isNewAPIKey && !isLegacyAPIKey) {
-        configErrors.push({
-          key: 'SUPABASE_SERVICE_KEY',
-          issue: 'INVALID FORMAT',
-          fix: 'Use JWT (eyJ...), API key (sbp_...), or legacy key'
-        });
-      }
     }
     
-    // Validate API Keys (less strict, just check they exist and aren't placeholders)
+    // Validate API Keys (basic existence check)
     const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
     if (!anthropicKey) {
       configErrors.push({
         key: 'ANTHROPIC_API_KEY',
         issue: 'MISSING',
         fix: 'Get from https://console.anthropic.com/settings/keys'
-      });
-    } else if (anthropicKey.includes('[') || anthropicKey.length < 10) {
-      configErrors.push({
-        key: 'ANTHROPIC_API_KEY',
-        issue: 'INVALID (placeholder or too short)',
-        fix: 'Use actual API key from Anthropic console'
       });
     }
     
@@ -278,12 +241,6 @@ async function startServer() {
         key: 'OPENAI_API_KEY',
         issue: 'MISSING', 
         fix: 'Get from https://platform.openai.com/api-keys'
-      });
-    } else if (openaiKey.includes('[') || openaiKey.length < 10) {
-      configErrors.push({
-        key: 'OPENAI_API_KEY',
-        issue: 'INVALID (placeholder or too short)',
-        fix: 'Use actual API key from OpenAI platform'
       });
     }
     

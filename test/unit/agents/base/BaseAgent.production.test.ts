@@ -31,7 +31,7 @@ describe('BaseAgent Production Environment', () => {
       // This test verifies we fail hard as intended!
       expect(() => {
         OrchestratorAgent.getInstance();
-      }).toThrow('CRITICAL: Supabase configuration invalid');
+      }).toThrow('CredentialVault initialization failed');
     });
 
     it('should display actionable error message', () => {
@@ -44,7 +44,7 @@ describe('BaseAgent Production Environment', () => {
       }
       
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('CRITICAL CONFIGURATION ERROR')
+        expect.stringContaining('CREDENTIAL VAULT INITIALIZATION FAILED')
       );
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Go to your Railway project dashboard')
@@ -67,7 +67,7 @@ describe('BaseAgent Production Environment', () => {
       // This is the NEW behavior - we want it to fail hard!
       expect(() => {
         OrchestratorAgent.getInstance();
-      }).toThrow('CRITICAL: Supabase configuration invalid');
+      }).toThrow('CredentialVault initialization failed');
     });
   });
 });
