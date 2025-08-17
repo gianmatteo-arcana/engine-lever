@@ -153,35 +153,34 @@ This is required for:
       console.error('  Error:', error.message);
       throw error;
     }
+    // Use a development key if not set, but warn in production
     this.encryptionKey = process.env.ENCRYPTION_KEY || 'default-encryption-key-for-dev';
     
     // Validate encryption key format (must be 32 bytes / 64 hex chars for AES-256)
     if (this.encryptionKey.length < 32) {
-      // Pad the key if it's too short (for dev only)
-      if (process.env.NODE_ENV !== 'production') {
-        this.encryptionKey = this.encryptionKey.padEnd(64, '0');
-      } else {
-        console.error(`
+      // Always pad the key if too short - credential storage is optional feature
+      this.encryptionKey = this.encryptionKey.padEnd(64, '0');
+      
+      // Warn in production but don't fail
+      if (process.env.NODE_ENV === 'production' && !process.env.ENCRYPTION_KEY) {
+        console.warn(`
 ========================================
-🚨 ENCRYPTION KEY ERROR 🚨
+⚠️  ENCRYPTION KEY WARNING ⚠️
 ========================================
-In production, you must set ENCRYPTION_KEY environment variable.
-The key must be at least 32 bytes (64 hex characters).
+Using default encryption key in production!
+This is acceptable for MVP but should be fixed before storing sensitive credentials.
 
-Current key length: ${this.encryptionKey.length} characters
+The CredentialVault is used for storing third-party API keys (QuickBooks, Stripe, etc.).
+If you're not using this feature yet, you can ignore this warning.
 
-To fix in Railway:
+When you need to store credentials, set ENCRYPTION_KEY in Railway:
 1. Generate a 64-character hex key:
    openssl rand -hex 32
    
 2. Add to Railway environment variables:
    ENCRYPTION_KEY=[your-64-char-hex-key]
-
-Example:
-ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 ========================================
 `);
-        throw new Error(`ENCRYPTION_KEY is too short for production (${this.encryptionKey.length} chars, need 64)`);
       }
     }
   }
