@@ -248,29 +248,72 @@ export abstract class BaseAgent implements AgentExecutor {
    * Ensures naming conventions and required fields
    */
   private validateInheritance(): void {
-    const agent = this.specializedTemplate.agent;
+    console.log('DEBUG: validateInheritance() called');
     
-    if (!agent) {
-      throw new Error('Specialized config missing agent section');
-    }
-    
-    // Validate required fields follow naming conventions
-    if (!agent.id.endsWith('_agent')) {
-      console.warn(`Agent ID '${agent.id}' should end with '_agent' for consistency`);
-    }
-    
-    if (!agent.role.endsWith('_specialist')) {
-      console.warn(`Agent role '${agent.role}' should end with '_specialist' for consistency`);
-    }
-    
-    // Validate required schemas exist
-    if (!this.specializedTemplate.schemas?.output) {
-      throw new Error(`Agent ${agent.id} missing required output schema`);
-    }
-    
-    // Validate mission exists
-    if (!agent.mission || agent.mission.trim() === '') {
-      throw new Error(`Agent ${agent.id} missing required mission statement`);
+    try {
+      const agent = this.specializedTemplate.agent;
+      
+      console.log('DEBUG: Checking if agent object exists...');
+      if (!agent) {
+        console.error('ERROR: Specialized config missing agent section');
+        throw new Error('Specialized config missing agent section');
+      }
+      console.log('DEBUG: Agent object exists');
+      
+      // Validate required fields follow naming conventions
+      console.log('DEBUG: Checking agent.id...');
+      if (!agent.id) {
+        console.error('ERROR: Agent missing id field');
+        throw new Error('Agent missing id field');
+      }
+      console.log(`DEBUG: agent.id = "${agent.id}"`);
+      
+      if (!agent.id.endsWith('_agent')) {
+        console.warn(`Agent ID '${agent.id}' should end with '_agent' for consistency`);
+      }
+      
+      console.log('DEBUG: Checking agent.role...');
+      if (!agent.role) {
+        console.error('ERROR: Agent missing role field');
+        throw new Error('Agent missing role field');
+      }
+      console.log(`DEBUG: agent.role = "${agent.role}"`);
+      
+      if (!agent.role.endsWith('_specialist')) {
+        console.warn(`Agent role '${agent.role}' should end with '_specialist' for consistency`);
+      }
+      
+      // Validate required schemas exist
+      console.log('DEBUG: Checking schemas...');
+      if (!this.specializedTemplate.schemas) {
+        console.error('ERROR: Specialized config missing schemas section');
+        throw new Error('Specialized config missing schemas section');
+      }
+      console.log('DEBUG: schemas section exists');
+      
+      if (!this.specializedTemplate.schemas.output) {
+        console.error(`ERROR: Agent ${agent.id} missing required output schema`);
+        throw new Error(`Agent ${agent.id} missing required output schema`);
+      }
+      console.log('DEBUG: output schema exists');
+      
+      // Validate mission exists
+      console.log('DEBUG: Checking mission...');
+      if (!agent.mission) {
+        console.error(`ERROR: Agent ${agent.id} missing mission field`);
+        throw new Error(`Agent ${agent.id} missing required mission statement`);
+      }
+      
+      if (agent.mission.trim() === '') {
+        console.error(`ERROR: Agent ${agent.id} has empty mission statement`);
+        throw new Error(`Agent ${agent.id} missing required mission statement`);
+      }
+      console.log('DEBUG: mission exists and is not empty');
+      
+      console.log('DEBUG: validateInheritance() completed successfully');
+    } catch (error) {
+      console.error('ERROR: validateInheritance() failed:', error);
+      throw error;
     }
   }
   
