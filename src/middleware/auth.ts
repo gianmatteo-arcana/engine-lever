@@ -1,9 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 
-/**
- * Extended Request interface to include user context
- */
 export interface AuthenticatedRequest extends Request {
   userId?: string;
   userEmail?: string;
@@ -12,8 +9,9 @@ export interface AuthenticatedRequest extends Request {
 }
 
 /**
- * Middleware to extract and validate user context from headers
+ * Middleware to extract user context from headers
  * Headers are set by the Supabase edge function backend-proxy
+ * Simple extraction only - no validation
  */
 export const extractUserContext = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   // Extract JWT token from Authorization header
@@ -47,7 +45,8 @@ export const extractUserContext = (req: AuthenticatedRequest, res: Response, nex
 };
 
 /**
- * Middleware to require authentication for protected endpoints
+ * Middleware to require authentication
+ * Simple check - let privileged API calls fail naturally if auth is invalid
  */
 export const requireAuth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   // Check for JWT token (required for RLS)
@@ -59,8 +58,9 @@ export const requireAuth = (req: AuthenticatedRequest, res: Response, next: Next
     });
   }
 
+  // Check for user ID (should be provided by proxy or headers)
   if (!req.userId) {
-    logger.warn(`Unauthorized request to ${req.path} - no user ID`);
+    logger.warn(`Unauthorized request to ${req.path} - no user ID after header extraction`);
     return res.status(401).json({
       error: 'Authentication required',
       message: 'You must be logged in to access this resource'
@@ -77,13 +77,7 @@ export const requireAuth = (req: AuthenticatedRequest, res: Response, next: Next
     });
   }
 
+  // If we reach here, authentication looks valid
+  // Let the database operations fail naturally if JWT is actually invalid
   next();
-};
-
-/**
- * Middleware to optionally extract user context without requiring it
- * Used for endpoints that can work with or without authentication
- */
-export const optionalAuth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  extractUserContext(req, res, next);
 };

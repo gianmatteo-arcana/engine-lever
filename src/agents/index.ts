@@ -97,10 +97,10 @@ class AgentManagerClass {
       templateId: taskContext.templateId
     });
 
-    // If we have a user token, save the task to the database using RLS
-    if (taskRequest.userToken) {
+    // If we have a userId, save the task to the database
+    if (taskRequest.userId) {
       const db = DatabaseService.getInstance();
-      const taskRecord = await db.createTask(taskRequest.userToken, {
+      const taskRecord = await db.createTask(taskRequest.userId, {
         id: taskContext.taskId,
         user_id: taskRequest.userId,
         title: `${taskRequest.templateId} Task`,
@@ -130,11 +130,11 @@ class AgentManagerClass {
     return taskContext.taskId;
   }
 
-  public async getTaskStatus(taskId: string, userToken: string): Promise<any> {
+  public async getTaskStatus(taskId: string, userId: string): Promise<any> {
     try {
-      // Get task from database using user token (RLS handles authorization)
+      // Get task from database using userId
       const db = DatabaseService.getInstance();
-      const task = await db.getTask(userToken, taskId);
+      const task = await db.getTask(userId, taskId);
       
       if (!task) {
         // Task not found or user doesn't have access
@@ -159,11 +159,11 @@ class AgentManagerClass {
     }
   }
 
-  public async getUserTasks(userToken: string): Promise<any[]> {
+  public async getUserTasks(userId: string): Promise<any[]> {
     try {
       const db = DatabaseService.getInstance();
-      // RLS automatically filters to only the user's tasks
-      const tasks = await db.getUserTasks(userToken);
+      // Database service validates userId and returns only user's tasks
+      const tasks = await db.getUserTasks(userId);
       
       return tasks.map(task => ({
         taskId: task.id,
@@ -192,10 +192,10 @@ class AgentManagerClass {
     }
 
     // Check if agent has getStatus and getMetrics methods
-    const status = typeof (agent as any).getStatus === 'function' 
+    const status = (agent && typeof (agent as any).getStatus === 'function') 
       ? agent.getStatus() 
       : 'active';
-    const metrics = typeof (agent as any).getMetrics === 'function'
+    const metrics = (agent && typeof (agent as any).getMetrics === 'function')
       ? agent.getMetrics()
       : {};
 
@@ -208,11 +208,11 @@ class AgentManagerClass {
 
   public getAllAgentsStatus(): any[] {
     return Array.from(this.agents.entries()).map(([role, agent]) => {
-      // Check if agent has getStatus and getMetrics methods
-      const status = typeof (agent as any).getStatus === 'function' 
+      // Check if agent exists and has getStatus and getMetrics methods
+      const status = (agent && typeof (agent as any).getStatus === 'function') 
         ? agent.getStatus() 
         : 'active';
-      const metrics = typeof (agent as any).getMetrics === 'function'
+      const metrics = (agent && typeof (agent as any).getMetrics === 'function')
         ? agent.getMetrics()
         : {};
         
@@ -244,8 +244,8 @@ class AgentManagerClass {
 
     // Shutdown all agents
     const shutdownPromises = Array.from(this.agents.values()).map(agent => {
-      // Only call shutdown if the agent has a shutdown method
-      if (typeof (agent as any).shutdown === 'function') {
+      // Only call shutdown if the agent exists and has a shutdown method
+      if (agent && typeof (agent as any).shutdown === 'function') {
         return agent.shutdown().catch((error: any) => {
           logger.error('Error shutting down agent', error);
         });

@@ -57,28 +57,22 @@ describe('DatabaseService - Core Functionality', () => {
       delete process.env.SUPABASE_ANON_KEY;
       (DatabaseService as any).instance = undefined;
       
-      // Test getUserClient which requires configuration
+      // Test getUserClient which is now deprecated
       const newService = DatabaseService.getInstance();
-      expect(() => newService.getUserClient('test-token')).toThrow('Supabase configuration missing');
+      expect(() => newService.getUserClient('test-token')).toThrow('getUserClient is deprecated - use service role pattern instead');
     });
   });
 
-  describe('User Client Management', () => {
-    it('should create user-scoped client', () => {
+  describe('User Client Management (Deprecated)', () => {
+    it('should throw on deprecated getUserClient', () => {
       const userToken = 'user-jwt-token';
-      const client = dbService.getUserClient(userToken);
-      
-      expect(client).toBeDefined();
+      expect(() => dbService.getUserClient(userToken)).toThrow('getUserClient is deprecated - use service role pattern instead');
     });
 
-    it('should clear user client', () => {
-      const userToken = 'user-jwt-token';
-      dbService.getUserClient(userToken);
-      dbService.clearUserClient(userToken);
-      
-      // Should create new client after clearing
-      const newClient = dbService.getUserClient(userToken);
-      expect(newClient).toBeDefined();
+    it('should use service role pattern instead', () => {
+      // The new pattern is to use the service client directly
+      const serviceClient = (dbService as any).getServiceClient();
+      expect(serviceClient).toBeDefined();
     });
   });
 

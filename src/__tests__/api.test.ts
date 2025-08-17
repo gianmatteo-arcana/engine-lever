@@ -11,10 +11,17 @@ const mockSupabaseClient = {
   insert: jest.fn().mockReturnThis(),
   update: jest.fn().mockReturnThis(),
   eq: jest.fn().mockReturnThis(),
+  order: jest.fn().mockReturnThis(),
+  limit: jest.fn().mockReturnThis(),
   single: jest.fn(),
   auth: {
     getUser: jest.fn().mockResolvedValue({
-      data: { user: { id: '123e4567-e89b-12d3-a456-426614174000' } },
+      data: { 
+        user: { 
+          id: '123e4567-e89b-12d3-a456-426614174000',
+          email: 'test@example.com'
+        } 
+      },
       error: null
     })
   }
@@ -322,8 +329,11 @@ describe('API Routes', () => {
 
   describe('Route parameters validation', () => {
     it('should handle invalid taskId format', async () => {
-      // Mock getTaskStatus to return null for invalid task
-      jest.spyOn(AgentManager, 'getTaskStatus').mockResolvedValueOnce(null);
+      // Mock getTask to return null for invalid task
+      mockSupabaseClient.single.mockResolvedValueOnce({ 
+        data: null, 
+        error: { code: 'PGRST116' } 
+      });
       
       const response = await request(app)
         .get('/api/tasks/invalid-id')
@@ -343,6 +353,20 @@ describe('API Routes', () => {
     });
 
     it('should handle empty taskId', async () => {
+      // Mock the getUserTasks chain to return empty array
+      mockSupabaseClient.order.mockReturnValueOnce({
+        limit: jest.fn().mockResolvedValueOnce({
+          data: [],
+          error: null
+        })
+      });
+      
+      // Make sure order returns promise when no limit is called
+      mockSupabaseClient.order.mockResolvedValueOnce({
+        data: [],
+        error: null
+      });
+      
       await request(app)
         .get('/api/tasks/')
         .set(authHeaders)

@@ -17,6 +17,7 @@ import { requestContextMiddleware } from './services/request-context';
 import { initializeServices } from './services/dependency-injection';
 import { applySecurityValidations } from './middleware/validation';
 import { complianceAuditLogger, securityAuditLogger, performanceAuditLogger } from './middleware/audit-logging';
+import { getEventListener } from './services/event-listener';
 import { productionSecurityHeaders, developmentSecurityHeaders, cacheControlHeaders } from './middleware/security-headers';
 
 dotenv.config();
@@ -147,7 +148,14 @@ const gracefulShutdown = async () => {
       // Shutdown services
       await AgentManager.stop();
       if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
-        // PersistentAgentManager removed
+        // Stop Event Listener
+        try {
+          const eventListener = getEventListener();
+          await eventListener.stopListening();
+          logger.info('✅ Event Listener stopped');
+        } catch (error) {
+          logger.error('Error stopping Event Listener', error);
+        }
       }
       await MCPServer.stop();
       await QueueManager.stop();
@@ -197,6 +205,16 @@ async function startServer() {
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
       // AgentManager initialization handled elsewhere
       logger.info('✅ Persistent Agent Manager initialized');
+      
+      // Start Event Listener for system events
+      try {
+        const eventListener = getEventListener();
+        await eventListener.startListening();
+        logger.info('✅ Event Listener started - listening for system events');
+      } catch (error) {
+        logger.error('Failed to start Event Listener', error);
+        // Non-critical - continue startup even if listener fails
+      }
     } else {
       logger.warn('⚠️ Supabase not configured - using in-memory agent manager only');
     }
