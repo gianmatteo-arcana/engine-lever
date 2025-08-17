@@ -4,10 +4,18 @@
  * 
  * Secure storage for tenant credentials
  * 
+ * PRODUCTION BEHAVIOR:
+ * - ENCRYPTION_KEY is optional at startup (warns if missing)
+ * - Runtime operations REQUIRE ENCRYPTION_KEY in production
+ * - Any store/get/delete operation will FAIL with clear error if key missing
+ * - Must be 64 hexadecimal characters (32 bytes for AES-256)
+ * - Generate with: openssl rand -hex 32
+ * 
  * MVP IMPLEMENTATION:
- * - Single server-side encryption key for simplicity
- * - Works consistently in dev/test/production
- * - No external dependencies (KMS, HSM, etc.)
+ * - Service starts even without ENCRYPTION_KEY (for MVP flexibility)
+ * - Operations fail with actionable error messages
+ * - Development uses default key for convenience
+ * - Production requires explicit key for actual operations
  * 
  * TODO: POST-MVP SECURITY IMPROVEMENTS:
  * - [ ] CRITICAL: Implement per-tenant encryption keys (derived from master)
@@ -35,6 +43,7 @@ import * as crypto from 'crypto';
 export class CredentialVault {
   private supabase: any;
   private encryptionKey: string;
+  private encryptionKeyMissing: boolean = false; // Track if key is missing in production
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   
@@ -119,24 +128,25 @@ This is required for:
     const envKey = process.env.ENCRYPTION_KEY;
     
     if (!envKey) {
-      // No key provided - use environment-appropriate defaults
+      // No key provided - handle based on environment
       if (process.env.NODE_ENV === 'production') {
-        // Production without key: Generate deterministic key from Supabase URL
-        // This ensures consistency across deployments but is NOT secure long-term
-        // TODO: REQUIRE explicit ENCRYPTION_KEY in production post-MVP
-        const deterministicSeed = supabaseUrl + ':credential-vault';
-        this.encryptionKey = crypto
-          .createHash('sha256')
-          .update(deterministicSeed)
-          .digest('hex');
+        // Production: WARN at startup, but will ERROR on actual use
+        this.encryptionKeyMissing = true;
+        // Set a dummy key so initialization doesn't fail
+        this.encryptionKey = 'missing-key-will-error-on-use'.padEnd(64, '0');
         
         console.warn(`
 ========================================
-⚠️  ENCRYPTION KEY WARNING - MVP MODE ⚠️
+⚠️  ENCRYPTION KEY WARNING ⚠️
 ========================================
-No ENCRYPTION_KEY provided. Using deterministic key derived from SUPABASE_URL.
+ENCRYPTION_KEY is not configured in production.
 
-This is ACCEPTABLE for MVP but MUST be fixed before production launch:
+The CredentialVault will initialize, but ANY attempt to store or
+retrieve credentials will FAIL with an error.
+
+If you're not using credential storage features yet, you can ignore this.
+
+To enable credential storage, add ENCRYPTION_KEY to Railway:
 
 1. Generate a secure 64-character hex key:
    openssl rand -hex 32
@@ -144,12 +154,8 @@ This is ACCEPTABLE for MVP but MUST be fixed before production launch:
 2. Add to Railway environment variables:
    ENCRYPTION_KEY=[your-64-char-hex-key]
 
-3. This warning will disappear once set.
-
-NOTE: The CredentialVault stores third-party API keys (QuickBooks, Stripe, etc).
-If you're not using this feature yet, this warning is not critical.
-
-TODO: Post-MVP, implement per-tenant encryption keys for better security.
+Example:
+   ENCRYPTION_KEY=a1b2c3d4e5f6789012345678901234567890123456789012345678901234abcd
 ========================================
 `);
       } else {
@@ -199,6 +205,21 @@ TODO: Post-MVP, implement per-tenant encryption keys for better security.
     service: string,
     credentials: any
   ): Promise<void> {
+    // Check if encryption key is properly configured
+    if (this.encryptionKeyMissing) {
+      throw new Error(`
+ENCRYPTION_KEY not configured in production.
+Cannot store credentials without proper encryption.
+
+To fix:
+1. Generate key: openssl rand -hex 32
+2. Add to Railway: ENCRYPTION_KEY=[your-64-char-hex-key]
+3. Restart the service
+
+This is required for storing third-party API credentials securely.
+`);
+    }
+    
     // Validate inputs
     if (!tenantId || typeof tenantId !== 'string') {
       throw new Error('Valid tenant ID is required');
@@ -249,6 +270,21 @@ TODO: Post-MVP, implement per-tenant encryption keys for better security.
     tenantId: string,
     service: string
   ): Promise<any | null> {
+    // Check if encryption key is properly configured
+    if (this.encryptionKeyMissing) {
+      throw new Error(`
+ENCRYPTION_KEY not configured in production.
+Cannot retrieve credentials without proper encryption key.
+
+To fix:
+1. Generate key: openssl rand -hex 32
+2. Add to Railway: ENCRYPTION_KEY=[your-64-char-hex-key]
+3. Restart the service
+
+This is required for retrieving third-party API credentials securely.
+`);
+    }
+    
     // Validate inputs
     if (!tenantId || !service) {
       throw new Error('Both tenantId and service are required');
@@ -343,6 +379,18 @@ TODO: Post-MVP, implement per-tenant encryption keys for better security.
    * Delete credentials for a service
    */
   async delete(tenantId: string, service: string): Promise<void> {
+    // Check if encryption key is properly configured
+    if (this.encryptionKeyMissing) {
+      throw new Error(`
+ENCRYPTION_KEY not configured in production.
+Cannot manage credentials without proper encryption key.
+
+To fix:
+1. Generate key: openssl rand -hex 32
+2. Add to Railway: ENCRYPTION_KEY=[your-64-char-hex-key]
+3. Restart the service
+`);
+    }
     const { error } = await this.supabase
       .from('tenant_credentials')
       .delete()
