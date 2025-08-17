@@ -44,6 +44,11 @@ export class CredentialVault {
     
     // Validate and get Supabase configuration
     const supabaseUrl = process.env.SUPABASE_URL?.trim();
+    // DEBUG: Check each option separately
+    console.log('  Checking SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'EXISTS' : 'NOT SET');
+    console.log('  Checking SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? 'EXISTS' : 'NOT SET');
+    console.log('  Checking SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? 'EXISTS' : 'NOT SET');
+    
     const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY)?.trim();
     
     // Validate configuration RIGHT WHERE IT'S USED
@@ -119,10 +124,26 @@ This is required for:
     
     // Extra safety check before calling createClient
     if (!supabaseKey || supabaseKey === '') {
+      console.error('CRITICAL: About to call createClient with:');
+      console.error('  URL:', supabaseUrl);
+      console.error('  Key:', supabaseKey);
       throw new Error('CRITICAL: supabaseKey is empty or undefined even after validation!');
     }
     
-    this.supabase = createClient(supabaseUrl!, supabaseKey!);
+    // Final check - make absolutely sure both values exist
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error(`CRITICAL: Missing required values - URL: ${!!supabaseUrl}, Key: ${!!supabaseKey}`);
+    }
+    
+    try {
+      this.supabase = createClient(supabaseUrl, supabaseKey);
+    } catch (error: any) {
+      console.error('CRITICAL: createClient failed with:');
+      console.error('  URL provided:', supabaseUrl);
+      console.error('  Key provided (length):', supabaseKey?.length);
+      console.error('  Error:', error.message);
+      throw error;
+    }
     this.encryptionKey = process.env.ENCRYPTION_KEY || 'default-encryption-key-for-dev';
     
     // Validate encryption key format (must be 32 bytes / 64 hex chars for AES-256)
