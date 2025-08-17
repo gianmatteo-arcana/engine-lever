@@ -198,8 +198,9 @@ async function startServer() {
     await MCPServer.initialize();
     logger.info('✅ MCP Server initialized');
     
+    logger.info('🤖 Starting Agent Manager initialization...');
     await AgentManager.initialize();
-    logger.info('✅ Agent Manager initialized');
+    logger.info('✅ Agent Manager initialized successfully');
     
     // Initialize Persistent Agent Manager if Supabase is configured
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {

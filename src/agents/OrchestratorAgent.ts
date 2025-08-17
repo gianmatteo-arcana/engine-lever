@@ -88,20 +88,44 @@ export class OrchestratorAgent extends BaseAgent {
   private pendingUIRequests: Map<string, UIRequest[]>;
   
   private constructor() {
-    // Call BaseAgent constructor with orchestrator config
-    // Using 'system' as businessId since orchestrator works across all businesses
-    super('orchestrator.yaml', 'system', 'system');
-    
-    this.config = this.loadConfig();
-    this.configManager = new ConfigurationManager();
-    this.dbService = DatabaseService.getInstance();
-    this.stateComputer = new StateComputer();
-    
-    this.agentRegistry = new Map();
-    this.activeExecutions = new Map();
-    this.pendingUIRequests = new Map();
-    
-    this.initializeAgentRegistry();
+    try {
+      logger.info('🚀 OrchestratorAgent constructor starting...');
+      
+      // Call BaseAgent constructor with orchestrator config
+      // Using 'system' as businessId since orchestrator works across all businesses
+      logger.info('📄 Loading BaseAgent with orchestrator.yaml...');
+      super('orchestrator.yaml', 'system', 'system');
+      logger.info('✅ BaseAgent constructor completed successfully');
+      
+      logger.info('⚙️ Loading orchestrator config...');
+      this.config = this.loadConfig();
+      logger.info('✅ Orchestrator config loaded successfully');
+      
+      logger.info('🗃️ Initializing data structures...');
+      this.agentRegistry = new Map();
+      this.activeExecutions = new Map();
+      this.pendingUIRequests = new Map();
+      logger.info('✅ Data structures initialized');
+      
+      // Lazy initialization to avoid startup crashes
+      logger.info('🔌 Setting up lazy initialization for services...');
+      this.configManager = null as any;
+      this.dbService = null as any;
+      this.stateComputer = null as any;
+      logger.info('✅ Lazy initialization configured');
+      
+      logger.info('📋 Initializing agent registry...');
+      this.initializeAgentRegistry();
+      logger.info('✅ Agent registry initialized');
+      
+      logger.info('🎉 OrchestratorAgent constructor completed successfully!');
+    } catch (error) {
+      logger.error('💥 FATAL: OrchestratorAgent constructor failed!', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      throw error;
+    }
   }
   
   /**
@@ -112,6 +136,30 @@ export class OrchestratorAgent extends BaseAgent {
       OrchestratorAgent.instance = new OrchestratorAgent();
     }
     return OrchestratorAgent.instance;
+  }
+
+  /**
+   * Lazy initialize services to avoid startup crashes
+   */
+  private getConfigManager(): ConfigurationManager {
+    if (!this.configManager) {
+      this.configManager = new ConfigurationManager();
+    }
+    return this.configManager;
+  }
+
+  private getDBService(): DatabaseService {
+    if (!this.dbService) {
+      this.dbService = DatabaseService.getInstance();
+    }
+    return this.dbService;
+  }
+
+  private getStateComputer(): StateComputer {
+    if (!this.stateComputer) {
+      this.stateComputer = new StateComputer();
+    }
+    return this.stateComputer;
   }
   
   /**
@@ -166,38 +214,52 @@ export class OrchestratorAgent extends BaseAgent {
    * Initialize agent registry with available agents
    */
   private initializeAgentRegistry(): void {
-    // Discover available agents
-    const agents: AgentCapability[] = [
-      {
-        agentId: 'business_discovery',
-        role: 'data_enrichment',
-        capabilities: ['business_lookup', 'ein_validation', 'address_verification'],
-        availability: 'available'
-      },
-      {
-        agentId: 'profile_collector',
-        role: 'data_collection',
-        capabilities: ['form_generation', 'data_validation', 'document_parsing'],
-        availability: 'available'
-      },
-      {
-        agentId: 'compliance_analyzer',
-        role: 'legal_compliance',
-        capabilities: ['requirement_analysis', 'deadline_tracking', 'form_preparation'],
-        availability: 'available'
-      },
-      {
-        agentId: 'payment_processor',
-        role: 'payment',
-        capabilities: ['payment_collection', 'receipt_generation'],
-        availability: 'not_implemented',
-        fallbackStrategy: 'user_input'
-      }
-    ];
-    
-    agents.forEach(agent => {
-      this.agentRegistry.set(agent.agentId, agent);
-    });
+    try {
+      logger.info('🤖 Initializing agent registry with available agents...');
+      
+      // Discover available agents
+      const agents: AgentCapability[] = [
+        {
+          agentId: 'business_discovery',
+          role: 'data_enrichment',
+          capabilities: ['business_lookup', 'ein_validation', 'address_verification'],
+          availability: 'available'
+        },
+        {
+          agentId: 'profile_collector',
+          role: 'data_collection',
+          capabilities: ['form_generation', 'data_validation', 'document_parsing'],
+          availability: 'available'
+        },
+        {
+          agentId: 'compliance_analyzer',
+          role: 'legal_compliance',
+          capabilities: ['requirement_analysis', 'deadline_tracking', 'form_preparation'],
+          availability: 'available'
+        },
+        {
+          agentId: 'payment_processor',
+          role: 'payment',
+          capabilities: ['payment_collection', 'receipt_generation'],
+          availability: 'not_implemented',
+          fallbackStrategy: 'user_input'
+        }
+      ];
+      
+      logger.info(`📊 Registering ${agents.length} agents...`);
+      agents.forEach((agent, index) => {
+        logger.info(`🔧 Registering agent ${index + 1}/${agents.length}: ${agent.agentId} (${agent.role})`);
+        this.agentRegistry.set(agent.agentId, agent);
+      });
+      
+      logger.info(`✅ Agent registry initialized with ${this.agentRegistry.size} agents`);
+    } catch (error) {
+      logger.error('💥 FATAL: Agent registry initialization failed!', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      throw error;
+    }
   }
   
   /**
@@ -829,7 +891,7 @@ export class OrchestratorAgent extends BaseAgent {
     
     // Persist to database
     try {
-      await this.dbService.createContextHistoryEntry(context.contextId, fullEntry);
+      await this.getDBService().createContextHistoryEntry(context.contextId, fullEntry);
     } catch (error) {
       logger.error('Failed to persist context entry', {
         contextId: context.contextId,
