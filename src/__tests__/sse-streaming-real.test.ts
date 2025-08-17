@@ -102,7 +102,7 @@ describe('REAL SSE Streaming Tests', () => {
           headers: {
             'Authorization': `Bearer ${authToken}`
           }
-        }
+        } as any
       );
 
       const receivedEvents: any[] = [];
@@ -174,7 +174,7 @@ describe('REAL SSE Streaming Tests', () => {
             headers: {
               'Authorization': `Bearer ${authToken}`
             }
-          }
+          } as any
         );
 
         const streamIndex = i;
@@ -251,7 +251,7 @@ describe('REAL SSE Streaming Tests', () => {
             headers: {
               'Authorization': `Bearer ${authToken}`
             }
-          }
+          } as any
         );
 
         eventSource.onopen = () => {
@@ -350,7 +350,8 @@ describe('REAL SSE Streaming Tests', () => {
         .eq('task_id', testTaskId)
         .eq('operation', 'UPDATE_STATUS');
 
-      expect(events.length).toBeGreaterThan(0);
+      expect(events).toBeTruthy();
+      expect(events!.length).toBeGreaterThan(0);
     });
   });
 
@@ -448,7 +449,7 @@ describe('REAL SSE Streaming Tests', () => {
           headers: {
             'Authorization': `Bearer ${authToken}`
           }
-        }
+        } as any
       );
 
       eventSource.onerror = (error: any) => {

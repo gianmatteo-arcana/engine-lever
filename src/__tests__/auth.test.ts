@@ -37,8 +37,10 @@ describe('Authentication Middleware', () => {
   describe('extractUserContext', () => {
     it('should extract JWT token from Authorization header', () => {
       const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.signature';
+      const userId = '123e4567-e89b-12d3-a456-426614174000';
       mockRequest.headers = {
-        'authorization': `Bearer ${token}`
+        'authorization': `Bearer ${token}`,
+        'x-user-id': userId
       };
 
       extractUserContext(mockRequest as AuthenticatedRequest, mockResponse as Response, mockNext);
@@ -140,11 +142,11 @@ describe('Authentication Middleware', () => {
       expect(mockResponse.status).not.toHaveBeenCalled();
     });
 
-    it('should reject request without user ID even with token', () => {
+    it('should reject request without user ID even with token', async () => {
       mockRequest.userToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.signature';
       // No userId set
 
-      requireAuth(mockRequest as AuthenticatedRequest, mockResponse as Response, mockNext);
+      await requireAuth(mockRequest as AuthenticatedRequest, mockResponse as Response, mockNext);
 
       expect(mockNext).not.toHaveBeenCalled();
       expect(mockResponse.status).toHaveBeenCalledWith(401);
@@ -155,11 +157,11 @@ describe('Authentication Middleware', () => {
       expect(logger.warn).toHaveBeenCalled();
     });
 
-    it('should reject request with invalid user ID format', () => {
+    it('should reject request with invalid user ID format', async () => {
       mockRequest.userId = 'invalid-user-id';
       mockRequest.userToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.signature';
 
-      requireAuth(mockRequest as AuthenticatedRequest, mockResponse as Response, mockNext);
+      await requireAuth(mockRequest as AuthenticatedRequest, mockResponse as Response, mockNext);
 
       expect(mockNext).not.toHaveBeenCalled();
       expect(mockResponse.status).toHaveBeenCalledWith(401);
