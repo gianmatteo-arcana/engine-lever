@@ -31,7 +31,7 @@ describe('Railway Deployment Integration', () => {
 
       expect(() => {
         OrchestratorAgent.getInstance();
-      }).toThrow('CRITICAL: Supabase configuration missing');
+      }).toThrow('CRITICAL: Supabase configuration invalid');
     });
 
     it('should fail hard when SUPABASE_SERVICE_KEY is missing', async () => {
@@ -47,7 +47,7 @@ describe('Railway Deployment Integration', () => {
 
       expect(() => {
         OrchestratorAgent.getInstance();
-      }).toThrow('CRITICAL: Supabase configuration missing');
+      }).toThrow('CRITICAL: Supabase configuration invalid');
     });
 
     // Skip this test - it requires actual valid Supabase credentials
@@ -86,7 +86,7 @@ describe('Railway Deployment Integration', () => {
           expect.stringContaining('Go to your Railway project dashboard')
         );
         expect(consoleSpy).toHaveBeenCalledWith(
-          expect.stringContaining('SUPABASE_URL=https://raenkewzlvrdqufwxjpl.supabase.co')
+          expect.stringContaining('Example: https://raenkewzlvrdqufwxjpl.supabase.co')
         );
       }
     });

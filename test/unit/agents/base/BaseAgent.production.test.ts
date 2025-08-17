@@ -31,7 +31,7 @@ describe('BaseAgent Production Environment', () => {
       // This test verifies we fail hard as intended!
       expect(() => {
         OrchestratorAgent.getInstance();
-      }).toThrow('CRITICAL: Supabase configuration missing');
+      }).toThrow('CRITICAL: Supabase configuration invalid');
     });
 
     it('should display actionable error message', () => {
@@ -67,7 +67,7 @@ describe('BaseAgent Production Environment', () => {
       // This is the NEW behavior - we want it to fail hard!
       expect(() => {
         OrchestratorAgent.getInstance();
-      }).toThrow('CRITICAL: Supabase configuration missing');
+      }).toThrow('CRITICAL: Supabase configuration invalid');
     });
   });
 });

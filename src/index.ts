@@ -203,31 +203,101 @@ async function startServer() {
   try {
     // STEP 1: ENVIRONMENT VALIDATION
     // Check critical configuration FIRST - fail fast with actionable errors
-    const missingVars = [];
-    const requiredVars = {
-      'SUPABASE_URL': 'https://raenkewzlvrdqufwxjpl.supabase.co',
-      'SUPABASE_SERVICE_KEY': '[Get from Supabase Dashboard > Settings > API > service_role key]',
-      'ANTHROPIC_API_KEY': '[Get from https://console.anthropic.com/settings/keys]',
-      'OPENAI_API_KEY': '[Get from https://platform.openai.com/api-keys]'
-    };
+    const configErrors = [];
     
-    for (const [key, example] of Object.entries(requiredVars)) {
-      if (!process.env[key]) {
-        missingVars.push({ key, example });
+    // Validate Supabase URL
+    const supabaseUrl = process.env.SUPABASE_URL?.trim();
+    if (!supabaseUrl) {
+      configErrors.push({
+        key: 'SUPABASE_URL',
+        issue: 'MISSING',
+        fix: 'https://raenkewzlvrdqufwxjpl.supabase.co'
+      });
+    } else if (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co')) {
+      configErrors.push({
+        key: 'SUPABASE_URL',
+        issue: `INVALID: "${supabaseUrl.substring(0, 40)}..."`,
+        fix: 'Must be https://[project].supabase.co format'
+      });
+    }
+    
+    // Validate Supabase Service Key - can be JWT or API key
+    const supabaseKey = process.env.SUPABASE_SERVICE_KEY?.trim();
+    if (!supabaseKey) {
+      configErrors.push({
+        key: 'SUPABASE_SERVICE_KEY',
+        issue: 'MISSING',
+        fix: 'Get from Supabase Dashboard > Settings > API'
+      });
+    } else if (supabaseKey.includes('[') || supabaseKey.includes('Get from')) {
+      configErrors.push({
+        key: 'SUPABASE_SERVICE_KEY',
+        issue: 'PLACEHOLDER VALUE',
+        fix: 'Replace with actual key from Supabase'
+      });
+    } else if (supabaseKey.length < 30) {
+      configErrors.push({
+        key: 'SUPABASE_SERVICE_KEY',
+        issue: 'TOO SHORT (likely invalid)',
+        fix: 'Use service_role or anon key from Supabase'
+      });
+    } else {
+      // Validate key format
+      const isJWT = supabaseKey.startsWith('eyJ') && supabaseKey.includes('.');
+      const isNewAPIKey = supabaseKey.startsWith('sbp_');
+      const isLegacyAPIKey = supabaseKey.length === 40 && !isJWT && !isNewAPIKey;
+      
+      if (!isJWT && !isNewAPIKey && !isLegacyAPIKey) {
+        configErrors.push({
+          key: 'SUPABASE_SERVICE_KEY',
+          issue: 'INVALID FORMAT',
+          fix: 'Use JWT (eyJ...), API key (sbp_...), or legacy key'
+        });
       }
     }
     
-    if (missingVars.length > 0) {
+    // Validate API Keys (less strict, just check they exist and aren't placeholders)
+    const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
+    if (!anthropicKey) {
+      configErrors.push({
+        key: 'ANTHROPIC_API_KEY',
+        issue: 'MISSING',
+        fix: 'Get from https://console.anthropic.com/settings/keys'
+      });
+    } else if (anthropicKey.includes('[') || anthropicKey.length < 10) {
+      configErrors.push({
+        key: 'ANTHROPIC_API_KEY',
+        issue: 'INVALID (placeholder or too short)',
+        fix: 'Use actual API key from Anthropic console'
+      });
+    }
+    
+    const openaiKey = process.env.OPENAI_API_KEY?.trim();
+    if (!openaiKey) {
+      configErrors.push({
+        key: 'OPENAI_API_KEY',
+        issue: 'MISSING', 
+        fix: 'Get from https://platform.openai.com/api-keys'
+      });
+    } else if (openaiKey.includes('[') || openaiKey.length < 10) {
+      configErrors.push({
+        key: 'OPENAI_API_KEY',
+        issue: 'INVALID (placeholder or too short)',
+        fix: 'Use actual API key from OpenAI platform'
+      });
+    }
+    
+    if (configErrors.length > 0) {
       console.error(`
 ╔══════════════════════════════════════════════════════════════════════╗
 ║                  🚨 RAILWAY DEPLOYMENT FAILED 🚨                      ║
 ╠══════════════════════════════════════════════════════════════════════╣
 ║                                                                        ║
-║  Missing ${missingVars.length} required environment variable(s):                           ║
+║  Configuration problems detected:                                     ║
 ║                                                                        ║`);
       
-      missingVars.forEach(({ key, example }) => {
-        console.error(`║  ❌ ${key.padEnd(25)} │ ${example.substring(0, 40)}...`);
+      configErrors.forEach(({ key, issue }) => {
+        console.error(`║  ❌ ${key.padEnd(25)} │ ${issue.padEnd(40)}║`);
       });
       
       console.error(`║                                                                        ║
@@ -239,21 +309,20 @@ async function startServer() {
 ║  2. Click on your project: "secure-insight"                           ║
 ║  3. Click on service: "biz-buddy-backend"                            ║
 ║  4. Go to "Variables" tab                                            ║
-║  5. Click "RAW Editor" button                                        ║
-║  6. Add these lines:                                                 ║
+║  5. Fix these variables:                                             ║
 ║                                                                        ║`);
       
-      missingVars.forEach(({ key, example }) => {
-        console.error(`║     ${key}=${example.padEnd(50)}`);
+      configErrors.forEach(({ key, fix }, index) => {
+        console.error(`║  ${index + 1}. ${key}:`);
+        console.error(`║     ${fix.padEnd(65)}║`);
       });
       
       console.error(`║                                                                        ║
-║  7. Click "Update Variables"                                         ║
-║  8. Railway will automatically redeploy                              ║
+║  6. Click "Deploy" to apply changes                                  ║
 ║                                                                        ║
 ╠══════════════════════════════════════════════════════════════════════╣
 ║  📚 Documentation:                                                     ║
-║  - Supabase Keys: https://supabase.com/dashboard/project/raenkewzlvrdqufwxjpl/settings/api
+║  - Supabase: https://supabase.com/dashboard/project/raenkewzlvrdqufwxjpl/settings/api
 ║  - Anthropic: https://console.anthropic.com                          ║
 ║  - OpenAI: https://platform.openai.com                               ║
 ╚══════════════════════════════════════════════════════════════════════╝

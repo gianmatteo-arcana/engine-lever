@@ -151,25 +151,74 @@ export abstract class BaseAgent implements AgentExecutor {
       // Use getInstance for LLMProvider (singleton pattern)
       this.llmProvider = LLMProviderImpl.getInstance();
       
-      // ToolChain requires Supabase - FAIL HARD if not configured
-      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+      // ToolChain requires Supabase - FAIL HARD if not configured properly
+      const supabaseUrl = process.env.SUPABASE_URL?.trim();
+      const supabaseKey = process.env.SUPABASE_SERVICE_KEY?.trim();
+      
+      // Validate Supabase configuration
+      const errors = [];
+      
+      // Check URL
+      if (!supabaseUrl) {
+        errors.push('SUPABASE_URL: ❌ MISSING');
+      } else if (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co')) {
+        errors.push(`SUPABASE_URL: ❌ INVALID (got: "${supabaseUrl.substring(0, 50)}...")`);
+      }
+      
+      // Check Service Key - Supabase accepts both JWT and API keys
+      if (!supabaseKey) {
+        errors.push('SUPABASE_SERVICE_KEY: ❌ MISSING');
+      } else if (supabaseKey.startsWith('[') || supabaseKey.includes('Get from')) {
+        errors.push('SUPABASE_SERVICE_KEY: ❌ PLACEHOLDER VALUE (not actual key)');
+      } else if (supabaseKey.length < 30) {
+        errors.push('SUPABASE_SERVICE_KEY: ❌ TOO SHORT (likely invalid)');
+      } else {
+        // Check for valid key formats
+        const isJWT = supabaseKey.startsWith('eyJ') && supabaseKey.includes('.');
+        const isAPIKey = supabaseKey.startsWith('sbp_') || supabaseKey.length === 40; // Legacy API keys are 40 chars
+        
+        if (!isJWT && !isAPIKey) {
+          errors.push('SUPABASE_SERVICE_KEY: ❌ INVALID FORMAT (not a JWT or API key)');
+        }
+      }
+      
+      if (errors.length > 0) {
         const errorMsg = `
 ========================================
 🚨 CRITICAL CONFIGURATION ERROR 🚨
 ========================================
-Supabase environment variables are REQUIRED but not set!
+Supabase environment variables are INVALID or MISSING!
 
-Missing variables:
-  SUPABASE_URL: ${process.env.SUPABASE_URL ? '✅ Set' : '❌ MISSING'}
-  SUPABASE_SERVICE_KEY: ${process.env.SUPABASE_SERVICE_KEY ? '✅ Set' : '❌ MISSING'}
+Problems found:
+${errors.map(e => `  ${e}`).join('\n')}
 
 To fix this in Railway:
 1. Go to your Railway project dashboard
 2. Click on the biz-buddy-backend service
 3. Go to the Variables tab
-4. Add these variables:
-   SUPABASE_URL=https://raenkewzlvrdqufwxjpl.supabase.co
-   SUPABASE_SERVICE_KEY=[Get from Supabase Dashboard > Settings > API]
+4. Check/Update these variables:
+   
+   SUPABASE_URL must:
+   - Start with https://
+   - End with .supabase.co
+   - Example: https://raenkewzlvrdqufwxjpl.supabase.co
+   
+   SUPABASE_SERVICE_KEY must be the SERVICE_ROLE key:
+   - This is a long-lived secret for backend services
+   - Starts with "eyJ" (JWT format but doesn't expire)
+   - Found in: Supabase Dashboard > Settings > API > service_role
+   
+   DO NOT USE:
+   - anon/public key (for frontend only, has RLS restrictions)
+   - Temporary JWT tokens (expire after 3600s by default)
+   - API keys (sbp_...) unless specifically configured
+   
+   The service_role key:
+   - Has full database access (bypasses RLS)
+   - Never expires (perfect for backend services)
+   - Should NEVER be exposed to frontend
+   
+   NOT a placeholder like "[Get from...]"
 
 These are REQUIRED for:
 - Database connections
@@ -177,11 +226,11 @@ These are REQUIRED for:
 - Credential storage
 - Task management
 
-The application CANNOT run without these configured.
+The application CANNOT run without valid configuration.
 ========================================
 `;
         console.error(errorMsg);
-        throw new Error('CRITICAL: Supabase configuration missing. See logs for details.');
+        throw new Error('CRITICAL: Supabase configuration invalid. See logs for details.');
       }
       
       const { ToolChain: ToolChainImpl } = require('../../services/tool-chain');
