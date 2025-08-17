@@ -19,24 +19,24 @@ router.get('/:taskId', requireAuth, async (req: AuthenticatedRequest, res) => {
     
     const dbService = DatabaseService.getInstance();
     
-    // Verify user owns this task
-    const task = await dbService.getTask(userToken, taskId);
+    // Get task events through the database service method
+    // This validates user ownership and returns events
+    let task;
+    let events;
     
-    if (!task) {
-      logger.warn('Task not found or unauthorized', { taskId, userId });
-      return res.status(404).json({ error: 'Task not found' });
-    }
-    
-    // Get events using the database service's service client
-    const client = dbService.getServiceClient();
-    const { data: events, error: eventsError } = await client
-      .from('task_context_events')
-      .select('*')
-      .eq('task_id', taskId)
-      .order('sequence_number', { ascending: true });
+    try {
+      // First get the task to have its metadata
+      task = await dbService.getTask(userToken, taskId);
+      if (!task) {
+        logger.warn('Task not found or unauthorized', { taskId, userId });
+        return res.status(404).json({ error: 'Task not found' });
+      }
       
-    if (eventsError) {
-      logger.error('Failed to fetch task events', eventsError);
+      // Now get the events
+      events = await dbService.getTaskEvents(userToken, taskId);
+    } catch (error: any) {
+      logger.error('Failed to fetch task events', error);
+      // Let the error propagate naturally - could be auth error
       return res.status(500).json({ error: 'Failed to fetch events' });
     }
     

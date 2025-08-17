@@ -230,7 +230,7 @@ export class DatabaseService {
    * Initialize the service role client for system operations
    * This should only be used for operations that don't involve user data
    */
-  public getServiceClient(): SupabaseClient {
+  private getServiceClient(): SupabaseClient {
     if (!this.serviceClient) {
       const supabaseUrl = process.env.SUPABASE_URL;
       const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -913,11 +913,21 @@ export class DatabaseService {
 
   /**
    * Get a task by ID - queries the actual tasks table
+   * Note: userToken is passed but validation happens at API layer
    */
   async getTask(userToken: string, taskId: string): Promise<TaskRecord | null> {
-    // Extract user ID from token for validation
-    const { data: { user } } = await this.getServiceClient().auth.getUser(userToken);
-    if (!user) throw new Error('Invalid user token');
+    // Get user ID from token to filter tasks
+    const { data: { user }, error: authError } = await this.getServiceClient().auth.getUser(userToken);
+    
+    // Let auth errors propagate naturally - don't pre-validate
+    if (authError) {
+      throw authError;
+    }
+    
+    if (!user) {
+      // This shouldn't happen with valid middleware auth
+      return null;
+    }
     
     // Use service client to query tasks table directly
     const client = this.getServiceClient();
@@ -968,8 +978,16 @@ export class DatabaseService {
     limit?: number;
   }): Promise<TaskRecord[]> {
     // Extract user ID from token
-    const { data: { user } } = await this.getServiceClient().auth.getUser(userToken);
-    if (!user) throw new Error('Invalid user token');
+    const { data: { user }, error: authError } = await this.getServiceClient().auth.getUser(userToken);
+    
+    // Let auth errors propagate naturally
+    if (authError) {
+      throw authError;
+    }
+    
+    if (!user) {
+      return [];
+    }
     
     // Query tasks table directly with service client
     const client = this.getServiceClient();
@@ -1312,6 +1330,82 @@ export class DatabaseService {
       logger.error('Error setting up task update listener', { taskId, error });
       return () => {}; // Return empty cleanup function
     }
+  }
+
+  /**
+   * Get task events from task_context_events table
+   * Validates user ownership before returning events
+   */
+  async getTaskEvents(userToken: string, taskId: string): Promise<any[]> {
+    // First verify the user owns this task
+    const task = await this.getTask(userToken, taskId);
+    if (!task) {
+      // Return empty array if task not found or user doesn't own it
+      return [];
+    }
+    
+    // Now get the events using service client
+    const client = this.getServiceClient();
+    const { data: events, error } = await client
+      .from('task_context_events')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('sequence_number', { ascending: true });
+    
+    if (error) {
+      logger.error('Failed to fetch task events', error);
+      throw error;
+    }
+    
+    return events || [];
+  }
+
+  /**
+   * Create a task context event
+   * Validates user ownership before creating event
+   */
+  async createTaskContextEvent(userToken: string, taskId: string, eventData: {
+    contextId?: string;
+    actorType: string;
+    actorId: string;
+    operation: string;
+    data: any;
+    reasoning: string;
+    trigger?: any;
+  }): Promise<any> {
+    // First verify the user owns this task
+    const task = await this.getTask(userToken, taskId);
+    if (!task) {
+      throw new Error('Task not found or unauthorized');
+    }
+    
+    const eventId = `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const contextId = eventData.contextId || taskId;
+    
+    // Insert event using service client
+    const client = this.getServiceClient();
+    const { data: insertedEvent, error } = await client
+      .from('task_context_events')
+      .insert({
+        id: eventId,
+        context_id: contextId,
+        task_id: taskId,
+        actor_type: eventData.actorType,
+        actor_id: eventData.actorId,
+        operation: eventData.operation,
+        data: eventData.data || {},
+        reasoning: eventData.reasoning || 'Context event added',
+        trigger: eventData.trigger || { source: 'api', timestamp: new Date().toISOString() }
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      logger.error('Failed to insert context event', { error, taskId });
+      throw error;
+    }
+    
+    return insertedEvent;
   }
 
   /**

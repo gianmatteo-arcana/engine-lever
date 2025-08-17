@@ -4,7 +4,6 @@ import { AgentManager } from '../agents';
 import { TemplateExecutor } from '../templates/executor';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import tasksRoutes from './tasks';
-import demoRoutes from './a2a-demo';
 import { taskEventsRoutes } from './task-events';
 
 const router = Router();
@@ -156,8 +155,5 @@ router.use('/tasks', tasksRoutes);
 
 // Task events endpoints for task_context_events table
 router.use('/task-events', taskEventsRoutes);
-
-// Demo endpoints for A2A Event Bus production demo
-router.use('/a2a-demo', demoRoutes);
 
 export { router as apiRoutes };

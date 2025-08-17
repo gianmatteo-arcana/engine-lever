@@ -1,12 +1,12 @@
 /**
- * User Onboarding Listener Service
+ * Generic Event Listener Service
  * 
- * Listens for USER_REGISTERED events from PostgreSQL NOTIFY
- * and initiates the onboarding workflow via OrchestratorAgent
+ * Listens for various system events from PostgreSQL NOTIFY
+ * and initiates appropriate workflows
  * 
  * ARCHITECTURAL INTEGRATION:
- * - Subscribes to PostgreSQL NOTIFY channel 'new_user_events'
- * - Creates onboarding task when new users register
+ * - Subscribes to PostgreSQL NOTIFY channels
+ * - Handles different event types (USER_REGISTERED, etc.)
  * - Leverages UnifiedEventBus for event propagation
  * - Works with OrchestratorAgent for task orchestration
  */
@@ -18,21 +18,22 @@ import { logger } from '../utils/logger';
 import { UnifiedEventBus } from './event-bus/UnifiedEventBus';
 import { Task } from '../types/a2a-types';
 
-export interface NewUserEvent {
-  eventType: 'USER_REGISTERED';
+export interface SystemEvent {
+  eventType: string;
   contextId: string;
-  userId: string;
-  email: string;
+  userId?: string;
+  email?: string;
   firstName?: string;
   lastName?: string;
+  [key: string]: any;
 }
 
 /**
- * Service that listens for new user registration events
- * and initiates onboarding workflows
+ * Service that listens for system events
+ * and initiates appropriate workflows
  */
-export class UserOnboardingListener {
-  private static instance: UserOnboardingListener;
+export class EventListener {
+  private static instance: EventListener;
   private dbService: DatabaseService;
   private taskService: TaskService;
   private orchestrator: OrchestratorAgent;
@@ -45,32 +46,32 @@ export class UserOnboardingListener {
     this.orchestrator = OrchestratorAgent.getInstance();
   }
 
-  public static getInstance(): UserOnboardingListener {
-    if (!UserOnboardingListener.instance) {
-      UserOnboardingListener.instance = new UserOnboardingListener();
+  public static getInstance(): EventListener {
+    if (!EventListener.instance) {
+      EventListener.instance = new EventListener();
     }
-    return UserOnboardingListener.instance;
+    return EventListener.instance;
   }
 
   /**
-   * Start listening for new user events
+   * Start listening for system events
    */
   public async startListening(): Promise<void> {
     if (this.isListening) {
-      logger.info('User onboarding listener already active');
+      logger.info('Event listener already active');
       return;
     }
 
     try {
-      logger.info('Starting user onboarding listener...');
+      logger.info('Starting event listener...');
       
-      // Set up PostgreSQL LISTEN for new_user_events channel
+      // Set up PostgreSQL LISTEN for various channels
       await this.setupPostgreSQLListener();
       
       this.isListening = true;
-      logger.info('User onboarding listener started successfully');
+      logger.info('Event listener started successfully');
     } catch (error) {
-      logger.error('Failed to start user onboarding listener', error);
+      logger.error('Failed to start event listener', error);
       throw error;
     }
   }
@@ -90,9 +91,9 @@ export class UserOnboardingListener {
       }
       
       this.isListening = false;
-      logger.info('User onboarding listener stopped');
+      logger.info('Event listener stopped');
     } catch (error) {
-      logger.error('Error stopping user onboarding listener', error);
+      logger.error('Error stopping event listener', error);
     }
   }
 
@@ -104,8 +105,8 @@ export class UserOnboardingListener {
       // Use database service to listen to the channel
       await this.dbService.listenToChannel('new_user_events', async (payload: string) => {
         try {
-          const event: NewUserEvent = JSON.parse(payload);
-          await this.handleNewUserEvent(event);
+          const event: SystemEvent = JSON.parse(payload);
+          await this.handleSystemEvent(event);
         } catch (error) {
           logger.error('Failed to process new user event', { error, payload });
         }
@@ -117,9 +118,22 @@ export class UserOnboardingListener {
   }
 
   /**
-   * Handle a new user registration event
+   * Handle system events and route to appropriate handlers
    */
-  private async handleNewUserEvent(event: NewUserEvent): Promise<void> {
+  private async handleSystemEvent(event: SystemEvent): Promise<void> {
+    switch (event.eventType) {
+      case 'USER_REGISTERED':
+        await this.handleUserRegisteredEvent(event);
+        break;
+      default:
+        logger.warn('Unknown event type received', { eventType: event.eventType });
+    }
+  }
+
+  /**
+   * Handle USER_REGISTERED event specifically
+   */
+  private async handleUserRegisteredEvent(event: SystemEvent): Promise<void> {
     logger.info('Received new user event', {
       contextId: event.contextId,
       userId: event.userId,
@@ -130,11 +144,11 @@ export class UserOnboardingListener {
       // Create onboarding task using TaskService
       const context = await this.taskService.create({
         templateId: 'user_onboarding',
-        tenantId: event.userId,
+        tenantId: event.userId || 'system',
         userToken: '', // Service role will be used
         initialData: {
-          userId: event.userId,
-          email: event.email,
+          userId: event.userId || '',
+          email: event.email || '',
           firstName: event.firstName || '',
           lastName: event.lastName || '',
           contextId: event.contextId,
@@ -189,7 +203,7 @@ export class UserOnboardingListener {
    * Manually trigger onboarding for a user (useful for testing)
    */
   public async triggerOnboardingForUser(userId: string, email: string, firstName?: string, lastName?: string): Promise<void> {
-    const event: NewUserEvent = {
+    const event: SystemEvent = {
       eventType: 'USER_REGISTERED',
       contextId: `manual-${Date.now()}`,
       userId,
@@ -198,9 +212,9 @@ export class UserOnboardingListener {
       lastName
     };
 
-    await this.handleNewUserEvent(event);
+    await this.handleSystemEvent(event);
   }
 }
 
 // Export singleton instance getter
-export const getUserOnboardingListener = () => UserOnboardingListener.getInstance();
+export const getEventListener = () => EventListener.getInstance();

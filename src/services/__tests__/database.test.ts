@@ -346,8 +346,10 @@ describe('DatabaseService - New Schema', () => {
       mockSupabaseClient.single.mockResolvedValueOnce({
         data: {
           id: 'ctx-123',
+          user_id: 'test-user-123',
           business_id: 'biz-123',
           template_id: 'onboarding',
+          status: 'in_progress',
           current_state: { status: 'active', phase: 'processing', completeness: 50, data: {} },
           metadata: { title: 'Test Task' },
           created_at: new Date().toISOString(),

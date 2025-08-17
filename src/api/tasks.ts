@@ -516,36 +516,16 @@ router.post('/:taskId/context/events', requireAuth, async (req: AuthenticatedReq
     const actorType = req.body.agentId ? 'agent' : 'user';
     const actorId = req.body.agentId || userId;
     
-    // Create context event with proper structure for task_context_events table
-    const eventId = `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const contextId = req.body.contextId || taskId; // Use taskId as contextId if not provided
-    
-    // Get Supabase client for direct insertion
-    const supabase = dbService.getServiceClient();
-    
-    // Insert into task_context_events table
-    const { data: insertedEvent, error: insertError } = await supabase
-      .from('task_context_events')
-      .insert({
-        id: eventId,
-        context_id: contextId,
-        task_id: taskId,
-        actor_type: actorType,
-        actor_id: actorId,
-        operation: operation || req.body.operation,
-        data: data || req.body.data || {},
-        reasoning: reasoning || req.body.reasoning || 'Context event added',
-        trigger: { source: 'api', timestamp: new Date().toISOString() }
-      })
-      .select()
-      .single();
-    
-    if (insertError) {
-      logger.error('Failed to insert context event', { error: insertError, taskId });
-      throw new Error('Failed to insert context event');
-    }
-    
-    const event = insertedEvent;
+    // Create context event using database service method
+    const event = await dbService.createTaskContextEvent(userToken, taskId, {
+      contextId: req.body.contextId,
+      actorType,
+      actorId,
+      operation: operation || req.body.operation,
+      data: data || req.body.data || {},
+      reasoning: reasoning || req.body.reasoning || 'Context event added',
+      trigger: { source: 'api', timestamp: new Date().toISOString() }
+    });
     
     // Also emit the task event for compatibility
     await emitTaskEvent('context_event_added', {
