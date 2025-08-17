@@ -83,9 +83,10 @@ describe('CredentialVault - Secure Credential Management', () => {
     (crypto.createCipheriv as jest.Mock).mockReturnValue(mockCipher);
     (crypto.createDecipheriv as jest.Mock).mockReturnValue(mockDecipher);
     
-    // Set environment variables
+    // Set environment variables with valid-looking values
     process.env.SUPABASE_URL = 'https://test.supabase.co';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-key';
+    // Use a valid JWT-like format for the service key (must be 30+ chars)
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.service-key-for-testing-only';
     process.env.ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
     
     vault = new CredentialVault();

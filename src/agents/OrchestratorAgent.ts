@@ -143,10 +143,29 @@ export class OrchestratorAgent extends BaseAgent {
   }
   
   /**
-   * Singleton pattern for single orchestrator
+   * 🔑 SINGLETON PATTERN - Critical for system initialization
+   * 
+   * This is THE entry point where OrchestratorAgent is created.
+   * Called by AgentManager.initialize() during server startup.
+   * 
+   * INITIALIZATION FLOW:
+   * 1. First call creates the instance
+   * 2. Constructor calls BaseAgent constructor
+   * 3. BaseAgent loads YAML configs
+   * 4. BaseAgent creates ToolChain → CredentialVault
+   * 5. CredentialVault REQUIRES Supabase env vars
+   * 
+   * COMMON FAILURES:
+   * - Missing SUPABASE_URL/KEY → CredentialVault throws
+   * - Missing orchestrator.yaml → BaseAgent throws
+   * - Missing base_agent.yaml → BaseAgent throws
+   * 
+   * @returns The single OrchestratorAgent instance
+   * @throws Error if initialization fails (missing config, etc)
    */
   public static getInstance(): OrchestratorAgent {
     if (!OrchestratorAgent.instance) {
+      console.log('Creating first OrchestratorAgent instance (singleton)');
       OrchestratorAgent.instance = new OrchestratorAgent();
     }
     return OrchestratorAgent.instance;

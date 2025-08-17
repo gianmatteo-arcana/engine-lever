@@ -147,11 +147,32 @@ export abstract class BaseAgent implements AgentExecutor {
     } else {
       // Import the actual implementations
       const { LLMProvider: LLMProviderImpl } = require('../../services/llm-provider');
-      const { ToolChain: ToolChainImpl } = require('../../services/tool-chain');
       
       // Use getInstance for LLMProvider (singleton pattern)
       this.llmProvider = LLMProviderImpl.getInstance();
-      this.toolChain = new ToolChainImpl();
+      
+      // ToolChain requires Supabase - let CredentialVault handle validation
+      // The validation happens at the actual point of connection
+      const { ToolChain: ToolChainImpl } = require('../../services/tool-chain');
+      
+      try {
+        this.toolChain = new ToolChainImpl();
+      } catch (error: any) {
+        // If CredentialVault fails, add context about where it failed
+        console.error(`
+========================================
+🚨 AGENT INITIALIZATION FAILED 🚨
+========================================
+Failed to initialize ToolChain/CredentialVault during agent startup.
+This typically means Supabase configuration is missing or invalid.
+
+Error: ${error.message}
+
+Check the error message above for specific configuration issues.
+========================================
+`);
+        throw error;
+      }
     }
   }
   

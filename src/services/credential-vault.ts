@@ -36,11 +36,114 @@ export class CredentialVault {
   // private metricsCollector: MetricsCollector;
   
   constructor() {
-    // Initialize Supabase client
-    const supabaseUrl = process.env.SUPABASE_URL || 'https://raenkewzlvrdqufwxjpl.supabase.co';
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+    // DEBUG: Log what we're actually receiving
+    console.log('🔍 CREDENTIAL VAULT ENV DEBUG:');
+    console.log('  SUPABASE_URL raw:', process.env.SUPABASE_URL);
+    console.log('  SUPABASE_SERVICE_KEY raw:', process.env.SUPABASE_SERVICE_KEY);
+    console.log('  SUPABASE_SERVICE_ROLE_KEY raw:', process.env.SUPABASE_SERVICE_ROLE_KEY);
     
-    this.supabase = createClient(supabaseUrl, supabaseKey);
+    // Validate and get Supabase configuration
+    const supabaseUrl = process.env.SUPABASE_URL?.trim();
+    // DEBUG: Check each option separately
+    console.log('  Checking SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'EXISTS' : 'NOT SET');
+    console.log('  Checking SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? 'EXISTS' : 'NOT SET');
+    console.log('  Checking SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? 'EXISTS' : 'NOT SET');
+    
+    const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY)?.trim();
+    
+    // Validate configuration RIGHT WHERE IT'S USED
+    const errors = [];
+    
+    // Check URL
+    if (!supabaseUrl) {
+      errors.push('SUPABASE_URL is not set');
+    } else if (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co')) {
+      errors.push(`SUPABASE_URL is invalid: "${supabaseUrl}"`);
+    }
+    
+    // Check Key - must be valid
+    if (!supabaseKey) {
+      errors.push('SUPABASE_SERVICE_KEY/SUPABASE_SERVICE_ROLE_KEY is not set');
+    } else if (supabaseKey.length < 30) {
+      // DEBUG: Show first few chars to diagnose truncation
+      const preview = supabaseKey.substring(0, 10);
+      errors.push(`SUPABASE_SERVICE_KEY is too short (${supabaseKey.length} chars, starts with "${preview}") - likely empty or invalid`);
+    } else if (supabaseKey.includes('[') || supabaseKey.includes('Get from')) {
+      errors.push('SUPABASE_SERVICE_KEY contains placeholder text - not a real key');
+    } else {
+      // Check for valid formats
+      const isJWT = supabaseKey.startsWith('eyJ') && supabaseKey.includes('.');
+      const isAPIKey = supabaseKey.startsWith('sbp_') || supabaseKey.length === 40;
+      
+      if (!isJWT && !isAPIKey) {
+        errors.push(`SUPABASE_SERVICE_KEY has invalid format (not JWT or API key)`);
+      }
+    }
+    
+    if (errors.length > 0) {
+      // Fail with clear, actionable error AT THE POINT OF FAILURE
+      console.error(`
+========================================
+🚨 CREDENTIAL VAULT INITIALIZATION FAILED 🚨
+========================================
+Cannot connect to Supabase. Configuration problems:
+
+${errors.map(e => `  ❌ ${e}`).join('\n')}
+
+To fix this in Railway:
+1. Go to your Railway project dashboard
+2. Click on the biz-buddy-backend service
+3. Go to the Variables tab
+4. Add/fix these variables:
+
+   SUPABASE_URL=https://raenkewzlvrdqufwxjpl.supabase.co
+   SUPABASE_SERVICE_KEY=[Get from Supabase Dashboard > Settings > API > service_role]
+
+The service_role key:
+- Starts with "eyJ" (JWT format)
+- Is a long string (200+ characters)
+- Never expires (perfect for backend services)
+- Has full database access
+
+DO NOT use the anon/public key - it has RLS restrictions.
+
+This is required for:
+- Storing encrypted credentials
+- Managing tenant secrets
+- Database connections
+========================================
+`);
+      throw new Error(`CredentialVault initialization failed: ${errors.join(', ')}`);
+    }
+    
+    // If we get here, configuration is valid - TypeScript needs explicit type assertion
+    // DEBUG: Log exactly what we're passing to createClient
+    console.log('🔍 CREATING SUPABASE CLIENT WITH:');
+    console.log('  URL type:', typeof supabaseUrl, 'value:', supabaseUrl);
+    console.log('  Key type:', typeof supabaseKey, 'length:', supabaseKey?.length, 'starts with:', supabaseKey?.substring(0, 10));
+    
+    // Extra safety check before calling createClient
+    if (!supabaseKey || supabaseKey === '') {
+      console.error('CRITICAL: About to call createClient with:');
+      console.error('  URL:', supabaseUrl);
+      console.error('  Key:', supabaseKey);
+      throw new Error('CRITICAL: supabaseKey is empty or undefined even after validation!');
+    }
+    
+    // Final check - make absolutely sure both values exist
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error(`CRITICAL: Missing required values - URL: ${!!supabaseUrl}, Key: ${!!supabaseKey}`);
+    }
+    
+    try {
+      this.supabase = createClient(supabaseUrl, supabaseKey);
+    } catch (error: any) {
+      console.error('CRITICAL: createClient failed with:');
+      console.error('  URL provided:', supabaseUrl);
+      console.error('  Key provided (length):', supabaseKey?.length);
+      console.error('  Error:', error.message);
+      throw error;
+    }
     this.encryptionKey = process.env.ENCRYPTION_KEY || 'default-encryption-key-for-dev';
     
     // Validate encryption key format (must be 32 bytes / 64 hex chars for AES-256)

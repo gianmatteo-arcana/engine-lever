@@ -178,43 +178,138 @@ const gracefulShutdown = async () => {
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
-// Start server
+/**
+ * 🚀 SERVER STARTUP SEQUENCE
+ * 
+ * This is the main entry point for the Biz Buddy Backend service.
+ * The startup sequence is CRITICAL and order-dependent:
+ * 
+ * 1. Environment Validation - Check all required env vars
+ * 2. Core Services - Initialize DI, events, queues, MCP
+ * 3. Agent System - Create OrchestratorAgent (requires Supabase!)
+ * 4. HTTP Server - Start Express server
+ * 
+ * COMMON FAILURES:
+ * - Missing SUPABASE_* vars → CredentialVault fails
+ * - Missing API keys → LLMProvider warns but continues
+ * - Config files missing → BaseAgent fails to load
+ * 
+ * See STARTUP_SEQUENCE.md for complete documentation
+ * 
+ * NOTE: The punycode deprecation warning is from ESLint dependencies
+ * and can be safely ignored. It will be fixed when ESLint updates.
+ */
 async function startServer() {
   try {
-    // DIAGNOSTIC: Check environment first
-    console.log('========== RAILWAY DIAGNOSTIC ==========');
-    console.log('1. ENVIRONMENT VARIABLES:');
-    console.log('   NODE_ENV:', process.env.NODE_ENV);
-    console.log('   PORT:', process.env.PORT);
-    console.log('   ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY ? '✅ SET' : '❌ MISSING');
-    console.log('   OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? '✅ SET' : '❌ MISSING');
-    console.log('   SUPABASE_URL:', process.env.SUPABASE_URL ? '✅ SET' : '❌ MISSING');
-    console.log('   SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? '✅ SET' : '❌ MISSING');
+    // DEBUG: Log what environment variables Railway is actually providing
+    console.log('🔍 RAILWAY ENV DEBUG:');
+    console.log('  TEST_VAR:', process.env.TEST_VAR || 'NOT SET');
+    console.log('  SUPABASE_URL:', process.env.SUPABASE_URL ? '✅ SET' : '❌ NOT SET');
+    console.log('  SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? '✅ SET' : '❌ NOT SET');
+    console.log('  SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ SET' : '❌ NOT SET');
+    console.log('  SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✅ SET' : '❌ NOT SET');
+    console.log('  PORT:', process.env.PORT || 'NOT SET');
+    console.log('  NODE_ENV:', process.env.NODE_ENV || 'NOT SET');
+    console.log('  Total env vars:', Object.keys(process.env).length);
     
-    console.log('2. FILE SYSTEM:');
-    console.log('   CWD:', process.cwd());
-    console.log('   __dirname:', __dirname);
-    
-    // Check if config files exist
-    const fs = require('fs');
-    const path = require('path');
-    const configPaths = [
-      path.join(process.cwd(), 'config/agents/orchestrator.yaml'),
-      path.join(process.cwd(), 'config/agents/base_agent.yaml'),
-      path.join('/app/config/agents/orchestrator.yaml'),
-      path.join('/app/config/agents/base_agent.yaml')
-    ];
-    
-    console.log('3. CONFIG FILES:');
-    for (const configPath of configPaths) {
-      try {
-        fs.accessSync(configPath, fs.constants.R_OK);
-        console.log(`   ${configPath}: ✅ EXISTS`);
-      } catch {
-        console.log(`   ${configPath}: ❌ NOT FOUND`);
+    // List ALL env vars that contain SUPABASE
+    console.log('  All SUPABASE vars:');
+    Object.keys(process.env).forEach(key => {
+      if (key.includes('SUPABASE')) {
+        console.log(`    ${key}: ${process.env[key] ? 'SET' : 'NOT SET'}`);
       }
+    });
+    
+    // STEP 1: ENVIRONMENT VALIDATION
+    // Basic check for critical configuration - detailed validation happens in CredentialVault
+    const configErrors = [];
+    
+    // Check if Supabase URL exists (detailed validation in CredentialVault)
+    const supabaseUrl = process.env.SUPABASE_URL?.trim();
+    if (!supabaseUrl) {
+      configErrors.push({
+        key: 'SUPABASE_URL',
+        issue: 'MISSING',
+        fix: 'https://raenkewzlvrdqufwxjpl.supabase.co'
+      });
     }
-    console.log('========================================');
+    
+    // Check if Supabase Service Key exists (detailed validation in CredentialVault)
+    const supabaseKey = (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)?.trim();
+    if (!supabaseKey) {
+      configErrors.push({
+        key: 'SUPABASE_SERVICE_KEY',
+        issue: 'MISSING',
+        fix: 'Get from Supabase Dashboard > Settings > API > service_role'
+      });
+    }
+    
+    // Validate API Keys (basic existence check)
+    const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
+    if (!anthropicKey) {
+      configErrors.push({
+        key: 'ANTHROPIC_API_KEY',
+        issue: 'MISSING',
+        fix: 'Get from https://console.anthropic.com/settings/keys'
+      });
+    }
+    
+    const openaiKey = process.env.OPENAI_API_KEY?.trim();
+    if (!openaiKey) {
+      configErrors.push({
+        key: 'OPENAI_API_KEY',
+        issue: 'MISSING', 
+        fix: 'Get from https://platform.openai.com/api-keys'
+      });
+    }
+    
+    if (configErrors.length > 0) {
+      console.error(`
+╔══════════════════════════════════════════════════════════════════════╗
+║                  🚨 RAILWAY DEPLOYMENT FAILED 🚨                      ║
+╠══════════════════════════════════════════════════════════════════════╣
+║                                                                        ║
+║  Configuration problems detected:                                     ║
+║                                                                        ║`);
+      
+      configErrors.forEach(({ key, issue }) => {
+        console.error(`║  ❌ ${key.padEnd(25)} │ ${issue.padEnd(40)}║`);
+      });
+      
+      console.error(`║                                                                        ║
+╠══════════════════════════════════════════════════════════════════════╣
+║                    📋 HOW TO FIX IN RAILWAY:                          ║
+╠══════════════════════════════════════════════════════════════════════╣
+║                                                                        ║
+║  1. Open Railway Dashboard: https://railway.app/dashboard             ║
+║  2. Click on your project: "secure-insight"                           ║
+║  3. Click on service: "biz-buddy-backend"                            ║
+║  4. Go to "Variables" tab                                            ║
+║  5. Fix these variables:                                             ║
+║                                                                        ║`);
+      
+      configErrors.forEach(({ key, fix }, index) => {
+        console.error(`║  ${index + 1}. ${key}:`);
+        console.error(`║     ${fix.padEnd(65)}║`);
+      });
+      
+      console.error(`║                                                                        ║
+║  6. Click "Deploy" to apply changes                                  ║
+║                                                                        ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  📚 Documentation:                                                     ║
+║  - Supabase: https://supabase.com/dashboard/project/raenkewzlvrdqufwxjpl/settings/api
+║  - Anthropic: https://console.anthropic.com                          ║
+║  - OpenAI: https://platform.openai.com                               ║
+╚══════════════════════════════════════════════════════════════════════╝
+`);
+      
+      // Exit with clear error
+      process.exit(1);
+    }
+    
+    // If we get here, all required vars are set
+    console.log('✅ All required environment variables are configured');
     
     logger.info('🚀 Starting Biz Buddy Backend Services (v1.0.2 with enhanced logging)...');
     

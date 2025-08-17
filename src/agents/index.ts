@@ -19,6 +19,27 @@ class AgentManagerClass {
   private agents: Map<AgentRole, any> = new Map();
   private isInitialized = false;
 
+  /**
+   * 🎯 AGENT SYSTEM INITIALIZATION
+   * 
+   * This is where all agents are created and registered.
+   * 
+   * INITIALIZATION CHAIN:
+   * AgentManager.initialize() 
+   *   → OrchestratorAgent.getInstance() [Singleton pattern]
+   *     → new OrchestratorAgent() [First time only]
+   *       → BaseAgent('orchestrator.yaml') [Parent constructor]
+   *         → LLMProvider.getInstance() [Needs API keys]
+   *         → new ToolChain() [Creates CredentialVault]
+   *           → new CredentialVault() [REQUIRES SUPABASE!]
+   * 
+   * FAILURE POINTS:
+   * - No Supabase config → CredentialVault throws
+   * - No API keys → LLMProvider warns but continues
+   * - Missing YAML → BaseAgent throws
+   * 
+   * @throws Error if required services cannot initialize
+   */
   async initialize(): Promise<void> {
     if (this.isInitialized) {
       logger.warn('AgentManager already initialized');
@@ -32,7 +53,8 @@ class AgentManagerClass {
       // Initialize agents using dynamic registry
       // Registry automatically discovers YAML files - no hardcoding
       
-      // OrchestratorAgent is a special case with its own class
+      // CRITICAL: OrchestratorAgent MUST be created first
+      // It's a singleton that coordinates all other agents
       console.log('DEBUG: About to get OrchestratorAgent instance...');
       const orchestrator = OrchestratorAgent.getInstance();
       console.log('DEBUG: OrchestratorAgent instance obtained');
