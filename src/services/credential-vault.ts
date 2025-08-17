@@ -4,17 +4,25 @@
  * 
  * Secure storage for tenant credentials
  * 
- * TODO: Implement the following improvements:
- * - [ ] Add key rotation mechanism for periodic encryption key updates
- * - [ ] Implement credential versioning for rollback capability
- * - [ ] Add support for different encryption algorithms
- * - [ ] Implement credential sharing between tenants (with permissions)
- * - [ ] Add support for temporary credentials with expiration
- * - [ ] Implement bulk operations for performance
- * - [ ] Add support for credential templates
- * - [ ] Implement automatic credential rotation for supported services
- * - [ ] Add monitoring and alerting for failed access attempts
- * - [ ] Implement rate limiting for credential access
+ * MVP IMPLEMENTATION:
+ * - Single server-side encryption key for simplicity
+ * - Works consistently in dev/test/production
+ * - No external dependencies (KMS, HSM, etc.)
+ * 
+ * TODO: POST-MVP SECURITY IMPROVEMENTS:
+ * - [ ] CRITICAL: Implement per-tenant encryption keys (derived from master)
+ * - [ ] CRITICAL: Add AWS KMS or similar for key management
+ * - [ ] IMPORTANT: Add key rotation mechanism
+ * - [ ] IMPORTANT: Implement envelope encryption pattern
+ * - [ ] NICE: Add support for Hardware Security Modules (HSM)
+ * - [ ] NICE: Implement credential versioning for rollback
+ * - [ ] NICE: Add support for temporary credentials with expiration
+ * 
+ * SECURITY CONSIDERATIONS:
+ * - Current implementation uses one key for all tenants (acceptable for MVP)
+ * - Production should migrate to per-tenant keys or KMS
+ * - Encryption key should be rotated periodically
+ * - Consider using database-native encryption (pgcrypto) as alternative
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -36,19 +44,6 @@ export class CredentialVault {
   // private metricsCollector: MetricsCollector;
   
   constructor() {
-    // DEBUG: Log what we're actually receiving
-    console.log('🔍 CREDENTIAL VAULT ENV DEBUG:');
-    console.log('  SUPABASE_URL raw:', process.env.SUPABASE_URL);
-    console.log('  SUPABASE_SERVICE_KEY raw:', process.env.SUPABASE_SERVICE_KEY);
-    console.log('  SUPABASE_SERVICE_ROLE_KEY raw:', process.env.SUPABASE_SERVICE_ROLE_KEY);
-    
-    // Check ALL possible env var names Railway might use
-    console.log('  Checking SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'EXISTS' : 'NOT SET');
-    console.log('  Checking SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? 'EXISTS' : 'NOT SET');  
-    console.log('  Checking SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? 'EXISTS' : 'NOT SET');
-    console.log('  Checking NEXT_PUBLIC_SUPABASE_ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'EXISTS' : 'NOT SET');
-    console.log('  Checking REACT_APP_SUPABASE_ANON_KEY:', process.env.REACT_APP_SUPABASE_ANON_KEY ? 'EXISTS' : 'NOT SET');
-    
     // Get configuration - check multiple possible env var names
     const supabaseUrl = process.env.SUPABASE_URL?.trim() || 
                        process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || 
@@ -72,21 +67,11 @@ export class CredentialVault {
     
     // Check Key - MUST be valid
     if (!supabaseKey) {
-      errors.push('No Supabase key found (checked: SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY, NEXT_PUBLIC_SUPABASE_ANON_KEY, REACT_APP_SUPABASE_ANON_KEY)');
+      errors.push('No Supabase key found (checked: SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SERVICE_KEY)');
     } else if (supabaseKey.length < 30) {
-      // DEBUG: Show first few chars to diagnose truncation
-      const preview = supabaseKey.substring(0, 10);
-      errors.push(`SUPABASE_SERVICE_KEY is too short (${supabaseKey.length} chars, starts with "${preview}") - likely empty or invalid`);
+      errors.push(`SUPABASE_SERVICE_KEY is too short (${supabaseKey.length} chars) - likely invalid`);
     } else if (supabaseKey.includes('[') || supabaseKey.includes('Get from')) {
       errors.push('SUPABASE_SERVICE_KEY contains placeholder text - not a real key');
-    } else {
-      // Check for valid formats
-      const isJWT = supabaseKey.startsWith('eyJ') && supabaseKey.includes('.');
-      const isAPIKey = supabaseKey.startsWith('sbp_') || supabaseKey.length === 40;
-      
-      if (!isJWT && !isAPIKey) {
-        errors.push(`SUPABASE_SERVICE_KEY has invalid format (not JWT or API key)`);
-      }
     }
     
     if (errors.length > 0) {
@@ -125,64 +110,78 @@ This is required for:
       throw new Error(`CredentialVault initialization failed: ${errors.join(', ')}`);
     }
     
-    // If we get here, configuration is valid - TypeScript needs explicit type assertion
-    // DEBUG: Log exactly what we're passing to createClient
-    console.log('🔍 CREATING SUPABASE CLIENT WITH:');
-    console.log('  URL type:', typeof supabaseUrl, 'value:', supabaseUrl);
-    console.log('  Key type:', typeof supabaseKey, 'length:', supabaseKey?.length, 'starts with:', supabaseKey?.substring(0, 10));
+    // Create Supabase client
+    this.supabase = createClient(supabaseUrl!, supabaseKey!);
+    // MVP Approach: Simple, predictable encryption key handling
+    // TODO: Migrate to per-tenant keys or KMS post-MVP
     
-    // Extra safety check before calling createClient
-    if (!supabaseKey || supabaseKey === '') {
-      console.error('CRITICAL: About to call createClient with:');
-      console.error('  URL:', supabaseUrl);
-      console.error('  Key:', supabaseKey);
-      throw new Error('CRITICAL: supabaseKey is empty or undefined even after validation!');
-    }
+    // Get encryption key from environment or use defaults
+    const envKey = process.env.ENCRYPTION_KEY;
     
-    // Final check - make absolutely sure both values exist
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error(`CRITICAL: Missing required values - URL: ${!!supabaseUrl}, Key: ${!!supabaseKey}`);
-    }
-    
-    try {
-      this.supabase = createClient(supabaseUrl, supabaseKey);
-    } catch (error: any) {
-      console.error('CRITICAL: createClient failed with:');
-      console.error('  URL provided:', supabaseUrl);
-      console.error('  Key provided (length):', supabaseKey?.length);
-      console.error('  Error:', error.message);
-      throw error;
-    }
-    // Use a development key if not set, but warn in production
-    this.encryptionKey = process.env.ENCRYPTION_KEY || 'default-encryption-key-for-dev';
-    
-    // Validate encryption key format (must be 32 bytes / 64 hex chars for AES-256)
-    if (this.encryptionKey.length < 32) {
-      // Always pad the key if too short - credential storage is optional feature
-      this.encryptionKey = this.encryptionKey.padEnd(64, '0');
-      
-      // Warn in production but don't fail
-      if (process.env.NODE_ENV === 'production' && !process.env.ENCRYPTION_KEY) {
+    if (!envKey) {
+      // No key provided - use environment-appropriate defaults
+      if (process.env.NODE_ENV === 'production') {
+        // Production without key: Generate deterministic key from Supabase URL
+        // This ensures consistency across deployments but is NOT secure long-term
+        // TODO: REQUIRE explicit ENCRYPTION_KEY in production post-MVP
+        const deterministicSeed = supabaseUrl + ':credential-vault';
+        this.encryptionKey = crypto
+          .createHash('sha256')
+          .update(deterministicSeed)
+          .digest('hex');
+        
         console.warn(`
 ========================================
-⚠️  ENCRYPTION KEY WARNING ⚠️
+⚠️  ENCRYPTION KEY WARNING - MVP MODE ⚠️
 ========================================
-Using default encryption key in production!
-This is acceptable for MVP but should be fixed before storing sensitive credentials.
+No ENCRYPTION_KEY provided. Using deterministic key derived from SUPABASE_URL.
 
-The CredentialVault is used for storing third-party API keys (QuickBooks, Stripe, etc.).
-If you're not using this feature yet, you can ignore this warning.
+This is ACCEPTABLE for MVP but MUST be fixed before production launch:
 
-When you need to store credentials, set ENCRYPTION_KEY in Railway:
-1. Generate a 64-character hex key:
+1. Generate a secure 64-character hex key:
    openssl rand -hex 32
-   
+
 2. Add to Railway environment variables:
    ENCRYPTION_KEY=[your-64-char-hex-key]
+
+3. This warning will disappear once set.
+
+NOTE: The CredentialVault stores third-party API keys (QuickBooks, Stripe, etc).
+If you're not using this feature yet, this warning is not critical.
+
+TODO: Post-MVP, implement per-tenant encryption keys for better security.
 ========================================
 `);
+      } else {
+        // Development/test: Use consistent default for predictability
+        this.encryptionKey = 'development-key-do-not-use-in-prod'.padEnd(64, '0');
+        console.log('📝 Using development encryption key (not for production)');
+      }
+    } else {
+      // Key provided - validate and use it
+      if (envKey.length === 64 && /^[0-9a-f]+$/i.test(envKey)) {
+        // Valid 64-char hex key
+        this.encryptionKey = envKey;
+        console.log('✅ Using provided ENCRYPTION_KEY');
+      } else if (envKey.length >= 32) {
+        // Key is long enough but not hex - hash it to get valid hex
+        this.encryptionKey = crypto
+          .createHash('sha256')
+          .update(envKey)
+          .digest('hex');
+        console.warn('⚠️ ENCRYPTION_KEY was not hex format - hashed to create valid key');
+      } else {
+        // Key too short - pad it (MVP compatibility)
+        this.encryptionKey = envKey.padEnd(64, '0');
+        console.warn(`⚠️ ENCRYPTION_KEY too short (${envKey.length} chars) - padded to 64`);
       }
     }
+    
+    // TODO: Post-MVP improvements:
+    // 1. Derive per-tenant keys: pbkdf2(masterKey, `tenant:${tenantId}`, 100000, 32, 'sha256')
+    // 2. Store key version with encrypted data for rotation support
+    // 3. Implement key rotation mechanism
+    // 4. Consider AWS KMS or similar for key management
   }
   
   /**

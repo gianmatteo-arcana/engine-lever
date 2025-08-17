@@ -247,17 +247,8 @@ Check the error message above for specific configuration issues.
       // Check if agent extends base_agent (inheritance pattern)
       if (config.agent?.extends === 'base_agent') {
         // Agent explicitly inherits from base template
-        console.log(`Agent ${config.agent.id} inheriting from base_agent template`);
-        console.log(`DEBUG: About to call logger.info...`);
-        try {
-          logger.info(`✅ Successfully loaded specialized config for ${config.agent.id}`);
-          console.log(`DEBUG: logger.info call succeeded`);
-        } catch (logError) {
-          console.error(`ERROR: logger.info failed:`, logError);
-        }
+        logger.info(`✅ Successfully loaded specialized config for ${config.agent.id}`);
       }
-      
-      console.log(`DEBUG: Returning config for ${configPath}`);
       return config;
     } catch (error) {
       throw new Error(`Failed to load specialized config ${configPath}: ${error instanceof Error ? error.message : String(error)}`);
@@ -269,72 +260,41 @@ Check the error message above for specific configuration issues.
    * Ensures naming conventions and required fields
    */
   private validateInheritance(): void {
-    console.log('DEBUG: validateInheritance() called');
+    const agent = this.specializedTemplate.agent;
     
-    try {
-      const agent = this.specializedTemplate.agent;
-      
-      console.log('DEBUG: Checking if agent object exists...');
-      if (!agent) {
-        console.error('ERROR: Specialized config missing agent section');
-        throw new Error('Specialized config missing agent section');
-      }
-      console.log('DEBUG: Agent object exists');
-      
-      // Validate required fields follow naming conventions
-      console.log('DEBUG: Checking agent.id...');
-      if (!agent.id) {
-        console.error('ERROR: Agent missing id field');
-        throw new Error('Agent missing id field');
-      }
-      console.log(`DEBUG: agent.id = "${agent.id}"`);
-      
-      if (!agent.id.endsWith('_agent')) {
-        console.warn(`Agent ID '${agent.id}' should end with '_agent' for consistency`);
-      }
-      
-      console.log('DEBUG: Checking agent.role...');
-      if (!agent.role) {
-        console.error('ERROR: Agent missing role field');
-        throw new Error('Agent missing role field');
-      }
-      console.log(`DEBUG: agent.role = "${agent.role}"`);
-      
-      if (!agent.role.endsWith('_specialist')) {
-        console.warn(`Agent role '${agent.role}' should end with '_specialist' for consistency`);
-      }
-      
-      // Validate required schemas exist
-      console.log('DEBUG: Checking schemas...');
-      if (!this.specializedTemplate.schemas) {
-        console.error('ERROR: Specialized config missing schemas section');
-        throw new Error('Specialized config missing schemas section');
-      }
-      console.log('DEBUG: schemas section exists');
-      
-      if (!this.specializedTemplate.schemas.output) {
-        console.error(`ERROR: Agent ${agent.id} missing required output schema`);
-        throw new Error(`Agent ${agent.id} missing required output schema`);
-      }
-      console.log('DEBUG: output schema exists');
-      
-      // Validate mission exists
-      console.log('DEBUG: Checking mission...');
-      if (!agent.mission) {
-        console.error(`ERROR: Agent ${agent.id} missing mission field`);
-        throw new Error(`Agent ${agent.id} missing required mission statement`);
-      }
-      
-      if (agent.mission.trim() === '') {
-        console.error(`ERROR: Agent ${agent.id} has empty mission statement`);
-        throw new Error(`Agent ${agent.id} missing required mission statement`);
-      }
-      console.log('DEBUG: mission exists and is not empty');
-      
-      console.log('DEBUG: validateInheritance() completed successfully');
-    } catch (error) {
-      console.error('ERROR: validateInheritance() failed:', error);
-      throw error;
+    if (!agent) {
+      throw new Error('Specialized config missing agent section');
+    }
+    
+    // Validate required fields follow naming conventions
+    if (!agent.id) {
+      throw new Error('Agent missing id field');
+    }
+    
+    if (!agent.id.endsWith('_agent')) {
+      console.warn(`Agent ID '${agent.id}' should end with '_agent' for consistency`);
+    }
+    
+    if (!agent.role) {
+      throw new Error('Agent missing role field');
+    }
+    
+    if (!agent.role.endsWith('_specialist')) {
+      console.warn(`Agent role '${agent.role}' should end with '_specialist' for consistency`);
+    }
+    
+    // Validate required schemas exist
+    if (!this.specializedTemplate.schemas) {
+      throw new Error('Specialized config missing schemas section');
+    }
+    
+    if (!this.specializedTemplate.schemas.output) {
+      throw new Error(`Agent ${agent.id} missing required output schema`);
+    }
+    
+    // Validate mission exists
+    if (!agent.mission || agent.mission.trim() === '') {
+      throw new Error(`Agent ${agent.id} missing required mission statement`);
     }
   }
   
