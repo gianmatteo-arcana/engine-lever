@@ -20,7 +20,7 @@ export const extractUserContext = (req: AuthenticatedRequest, res: Response, nex
     req.userToken = authHeader.substring(7); // Remove 'Bearer ' prefix
   }
 
-  // Extract user context from headers (set by backend-proxy edge function)
+  // Extract user context from headers (set by backend-proxy edge function OR direct calls)
   const userId = req.headers['x-user-id'] as string;
   const userEmail = req.headers['x-user-email'] as string;
   const userRole = req.headers['x-user-role'] as string;

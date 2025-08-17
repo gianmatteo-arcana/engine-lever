@@ -19,6 +19,47 @@ import { emitTaskEvent } from '../services/task-events';
 
 const router = Router();
 
+/**
+ * GET /api/tasks
+ * 
+ * List tasks for authenticated user
+ * Backend-centric architecture: service role + user validation
+ */
+router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.userId!;
+    
+    logger.info('Fetching tasks for user', { userId });
+    
+    // Use DatabaseService with service role
+    const dbService = DatabaseService.getInstance();
+    
+    // Get tasks for this user using existing method
+    const tasks = await dbService.getUserTasks(userId);
+    
+    logger.info('Tasks fetched successfully', { 
+      userId, 
+      taskCount: tasks.length 
+    });
+    
+    res.json({
+      tasks: tasks,
+      count: tasks.length
+    });
+    
+  } catch (error) {
+    logger.error('Failed to fetch tasks', { 
+      userId: req.userId,
+      error: (error as Error).message 
+    });
+    
+    res.status(500).json({
+      error: 'Failed to list tasks',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Schema for universal task creation
 const CreateTaskSchema = z.object({
   templateId: z.string().min(1),
