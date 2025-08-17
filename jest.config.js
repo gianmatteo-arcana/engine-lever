@@ -1,9 +1,8 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/src'],
+  roots: ['<rootDir>/test'],
   testMatch: [
-    '**/__tests__/**/*.ts',
     '**/?(*.)+(spec|test).ts'
   ],
   transform: {
@@ -30,8 +29,8 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
     // Temporarily exclude slow E2E tests from default run
-    'api-e2e-real.test.ts',
-    'sse-streaming-real.test.ts'
+    'test/e2e/api-e2e-real.test.ts',
+    'test/unit/sse-streaming-real.test.ts'
   ],
   // Clear mocks automatically
   clearMocks: true,
