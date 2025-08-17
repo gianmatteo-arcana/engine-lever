@@ -68,7 +68,7 @@ import * as fs from 'fs';
 import * as yaml from 'yaml';
 import * as path from 'path';
 import { LLMProvider } from '../../services/llm-provider-interface';
-import { ToolChain } from '../../services/tool-chain';
+import type { ToolChain } from '../../services/tool-chain';
 import { 
   BaseAgentTemplate,
   SpecializedAgentConfig,
@@ -145,8 +145,13 @@ export abstract class BaseAgent implements AgentExecutor {
         getAvailableTools: jest.fn().mockReturnValue('mock tools')
       } as any;
     } else {
-      this.llmProvider = new LLMProvider();
-      this.toolChain = new ToolChain();
+      // Import the actual implementations
+      const { LLMProvider: LLMProviderImpl } = require('../../services/llm-provider');
+      const { ToolChain: ToolChainImpl } = require('../../services/tool-chain');
+      
+      // Use getInstance for LLMProvider (singleton pattern)
+      this.llmProvider = LLMProviderImpl.getInstance();
+      this.toolChain = new ToolChainImpl();
     }
   }
   
