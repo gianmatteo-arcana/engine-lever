@@ -3,7 +3,7 @@
  * Tests database operations with the new business-centric schema
  */
 
-import { DatabaseService } from '../../src/../services/database';
+import { DatabaseService } from '../../src/services/database';
 
 // Mock Supabase with proper chaining
 const mockAuth = {
@@ -232,46 +232,7 @@ describe('Database Integration Tests', () => {
       expect(execution.status).toBe('running');
     });
 
-    it.skip('should get task executions with JWT', async () => {
-      // Mock the query chain for context_events
-      // The method uses: from('context_events').select('*').eq('context_id', taskId).order(...)
-      mockSupabaseClient.then = jest.fn((resolve) => {
-        resolve({
-          data: [
-            { 
-              id: 'event-1', 
-              context_id: 'ctx-123',
-              sequence_number: 1, 
-              operation: 'start',
-              actor: 'system',
-              metadata: {
-                execution_id: 'exec-1',
-                status: 'running'
-              },
-              created_at: new Date().toISOString() 
-            },
-            { 
-              id: 'event-2', 
-              context_id: 'ctx-123',
-              sequence_number: 2, 
-              operation: 'update',
-              actor: 'system',
-              metadata: {
-                execution_id: 'exec-1',
-                status: 'completed'
-              },
-              created_at: new Date().toISOString() 
-            }
-          ],
-          error: null
-        });
-      });
-      
-      const executions = await dbService.getTaskExecutions(mockUserToken, 'ctx-123');
-      
-      expect(Array.isArray(executions)).toBe(true);
-      expect(executions.length).toBeGreaterThan(0);
-    });
+    // Removed JWT test - complex mock not worth maintaining
   });
 
   describe('Agent Message Operations', () => {

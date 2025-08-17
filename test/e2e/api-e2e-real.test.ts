@@ -527,22 +527,7 @@ describe('REAL E2E API Tests - Complete Flow', () => {
         .expect(400);
     });
 
-    // Rate limiting would need to be implemented first
-    it.skip('should enforce rate limits', async () => {
-      // Make many requests quickly
-      const promises = [];
-      for (let i = 0; i < 100; i++) {
-        promises.push(
-          request(app)
-            .get('/api/tasks')
-            .set('Authorization', authToken)
-        );
-      }
-
-      const responses = await Promise.all(promises);
-      const rateLimited = responses.some(r => r.status === 429);
-      expect(rateLimited).toBe(true);
-    });
+    // Rate limiting test removed - feature not implemented
   });
 
   describe('PATCH /api/tasks/:id - Partial Update', () => {

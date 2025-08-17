@@ -5,7 +5,7 @@
  * Ensures compliance with Engine PRD Lines 1334-1385
  */
 
-import { CredentialVault } from '../../../src/../../src/services/credential-vault';
+import { CredentialVault } from '../../../src/services/credential-vault';
 import { createClient } from '@supabase/supabase-js';
 import * as crypto from 'crypto';
 
@@ -22,7 +22,7 @@ jest.mock('crypto', () => ({
   createDecipheriv: jest.fn()
 }));
 
-jest.mock('../../../src/../utils/logger');
+jest.mock('../../../src/utils/logger');
 
 describe('CredentialVault - Secure Credential Management', () => {
   let vault: CredentialVault;

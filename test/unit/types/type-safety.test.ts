@@ -19,7 +19,7 @@ import {
   BusinessEntity,
   UserProfile,
   ComplianceRequirement
-} from '../../../src/../../src/types/engine-types';
+} from '../../../src/types/engine-types';
 
 describe('Type Safety Tests', () => {
   describe('TaskContext Type Safety', () => {

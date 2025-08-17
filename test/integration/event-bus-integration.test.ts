@@ -6,21 +6,21 @@
  * and PostgreSQL persistence through UnifiedEventBus
  */
 
-import { BaseAgent } from '../../src/../agents/base/BaseAgent';
-import { UnifiedEventBus } from '../../src/../services/event-bus';
-import { DatabaseService } from '../../src/../services/database';
+import { BaseAgent } from '../../src/agents/base/BaseAgent';
+import { UnifiedEventBus } from '../../src/services/event-bus';
+import { DatabaseService } from '../../src/services/database';
 import {
   RequestContext,
   AgentExecutionEvent,
   TaskStatusUpdateEvent
-} from '../../src/../types/a2a-types';
-import { BaseAgentRequest, BaseAgentResponse } from '../../src/../types/base-agent-types';
+} from '../../src/types/a2a-types';
+import { BaseAgentRequest, BaseAgentResponse } from '../../src/types/base-agent-types';
 
 // Mock database service for integration test
-jest.mock('../../src/../services/database');
+jest.mock('../../src/services/database');
 
 // Mock the task events service  
-jest.mock('../../src/../services/task-events', () => ({
+jest.mock('../../src/services/task-events', () => ({
   emitTaskEvent: jest.fn().mockResolvedValue(undefined)
 }));
 

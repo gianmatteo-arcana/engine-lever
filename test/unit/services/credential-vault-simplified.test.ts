@@ -3,7 +3,7 @@
  * Tests core functionality with actual service structure
  */
 
-import { CredentialVault } from '../../../src/credential-vault';
+import { CredentialVault } from '../../../src/services/credential-vault';
 import { createClient } from '@supabase/supabase-js';
 
 // Mock Supabase

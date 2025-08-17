@@ -3,7 +3,7 @@
  * Tests core functionality with actual service structure
  */
 
-import { DatabaseService } from '../../../src/database';
+import { DatabaseService } from '../../../src/services/database';
 
 // Mock Supabase
 jest.mock('@supabase/supabase-js', () => ({

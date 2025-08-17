@@ -5,21 +5,21 @@
  * Verifies event publishing, persistence, and reconstruction functionality
  */
 
-import { UnifiedEventBus } from '../../../src/UnifiedEventBus';
-import { DatabaseService } from '../../../src/../database';
+import { UnifiedEventBus } from '../../../src/services/event-bus/UnifiedEventBus';
+import { DatabaseService } from '../../../src/services/database';
 import { 
   Message,
   Task,
   TaskStatusUpdateEvent,
   TaskArtifactUpdateEvent,
   AgentExecutionEvent
-} from '../../../src/../../types/a2a-types';
+} from '../../../src/types/a2a-types';
 
 // Mock the database service
-jest.mock('../../../src/../database');
+jest.mock('../../../src/services/database');
 
 // Mock the task events service  
-jest.mock('../../../src/../task-events', () => ({
+jest.mock('../../../src/services/task-events', () => ({
   emitTaskEvent: jest.fn().mockResolvedValue(undefined)
 }));
 
@@ -359,14 +359,14 @@ describe('UnifiedEventBus', () => {
 
   describe('Factory Function', () => {
     it('should create UnifiedEventBus instances', () => {
-      const { createUnifiedEventBus } = require('../UnifiedEventBus');
+      const { createUnifiedEventBus } = require('../../../src/services/event-bus/UnifiedEventBus');
       const bus = createUnifiedEventBus('context-789', 'task-012', 'user-token');
       
       expect(bus).toBeInstanceOf(UnifiedEventBus);
     });
     
     it('should create UnifiedEventBus instances without userToken', () => {
-      const { createUnifiedEventBus } = require('../UnifiedEventBus');
+      const { createUnifiedEventBus } = require('../../../src/services/event-bus/UnifiedEventBus');
       const bus = createUnifiedEventBus('context-789', 'task-012');
       
       expect(bus).toBeInstanceOf(UnifiedEventBus);

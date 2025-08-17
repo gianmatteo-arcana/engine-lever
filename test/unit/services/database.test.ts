@@ -8,7 +8,7 @@ import {
   BusinessRecord,
   ContextRecord,
   ContextEventRecord
-} from '../../../src/database';
+} from '../../../src/services/database';
 
 // Mock Supabase
 const mockSupabaseClient = {

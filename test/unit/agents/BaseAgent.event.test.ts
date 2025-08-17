@@ -6,20 +6,20 @@
  * and emits events through the UnifiedEventBus
  */
 
-import { BaseAgent } from '../../../src/BaseAgent';
-import { UnifiedEventBus } from '../../../src/../../services/event-bus';
+import { BaseAgent } from '../../../src/agents/base/BaseAgent';
+import { UnifiedEventBus } from '../../../src/services/event-bus/UnifiedEventBus';
 import { 
   RequestContext,
   ExecutionEventBus,
   Message,
   TaskStatusUpdateEvent,
   TaskArtifactUpdateEvent
-} from '../../../src/../../types/a2a-types';
-import { logger } from '../../../src/../../utils/logger';
+} from '../../../src/types/a2a-types';
+import { logger } from '../../../src/utils/logger';
 
 // Mock dependencies
-jest.mock('../../../src/../../services/event-bus');
-jest.mock('../../../src/../../utils/logger');
+jest.mock('../../../src/services/event-bus/UnifiedEventBus');
+jest.mock('../../../src/utils/logger');
 
 // Create a concrete test implementation of BaseAgent
 class TestAgent extends BaseAgent {

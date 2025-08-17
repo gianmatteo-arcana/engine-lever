@@ -1,9 +1,9 @@
 import { Response, NextFunction } from 'express';
-import { extractUserContext, requireAuth, AuthenticatedRequest } from '../../../../src/middleware/auth';
-import { logger } from '../../../../src/utils/logger';
+import { extractUserContext, requireAuth, AuthenticatedRequest } from '../../src/middleware/auth';
+import { logger } from '../../src/utils/logger';
 
 // Mock logger
-jest.mock('../../../../src/utils/logger', () => ({
+jest.mock('../../src/utils/logger', () => ({
   logger: {
     info: jest.fn(),
     warn: jest.fn(),

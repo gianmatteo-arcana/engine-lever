@@ -8,13 +8,13 @@
  * 4. Universal pattern works for trigger-initiated tasks
  */
 
-import { TaskService } from '../../../src/task-service';
-import { OrchestratorAgent } from '../../../src/../agents/OrchestratorAgent';
-import { DatabaseService } from '../../../src/database';
+import { TaskService } from '../../../src/services/task-service';
+import { OrchestratorAgent } from '../../../src/agents/OrchestratorAgent';
+import { DatabaseService } from '../../../src/services/database';
 
 // Mock dependencies
-jest.mock('../../../src/database');
-jest.mock('../../../src/../utils/logger');
+jest.mock('../../../src/services/database');
+jest.mock('../../../src/utils/logger');
 
 describe('Trigger-Based Task Orchestration', () => {
   let taskService: TaskService;

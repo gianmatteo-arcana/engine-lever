@@ -2,7 +2,7 @@
  * Tests for LLM Provider Service
  */
 
-import { LLMProvider, LLMRequest, LLMResponse } from '../../../src/llm-provider';
+import { LLMProvider, LLMRequest, LLMResponse } from '../../../src/services/llm-provider';
 
 // Mock the complete method to avoid actual API calls
 const mockComplete = jest.fn();

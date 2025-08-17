@@ -2,8 +2,8 @@
  * Tests for UI Strategy Engine
  */
 
-import { UIStrategyEngine, UIStrategyContext } from '../../../src/ui-strategy-engine';
-import { UIRequest } from '../../../src/../types/engine-types';
+import { UIStrategyEngine, UIStrategyContext } from '../../../src/services/ui-strategy-engine';
+import { UIRequest } from '../../../src/types/engine-types';
 
 describe('UIStrategyEngine', () => {
   let engine: UIStrategyEngine;

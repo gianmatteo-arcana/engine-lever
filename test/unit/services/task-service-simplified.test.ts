@@ -3,7 +3,7 @@
  * Tests core functionality with actual service structure
  */
 
-import { TaskService } from '../../../src/task-service';
+import { TaskService } from '../../../src/services/task-service';
 
 describe('TaskService - Core Functionality', () => {
   let taskService: TaskService;
