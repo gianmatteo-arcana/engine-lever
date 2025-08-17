@@ -6,6 +6,17 @@
 
 echo "🚀 Running SmallBizAlly pre-commit checks..."
 
+# CRITICAL: Check package-lock.json sync FIRST (prevents deployment failures)
+echo "🔒 Checking package-lock.json sync with package.json..."
+npm ci --dry-run > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "❌ package-lock.json is out of sync with package.json!"
+  echo "🔧 Run 'npm install' to update package-lock.json"
+  echo "📦 Then commit both package.json and package-lock.json"
+  echo "⚠️  This WILL break Railway deployment if not fixed!"
+  exit 1
+fi
+
 # 1. Run linter
 echo "📝 Running linter..."
 npm run lint
