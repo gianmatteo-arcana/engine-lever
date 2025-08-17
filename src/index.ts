@@ -181,23 +181,63 @@ process.on('SIGINT', gracefulShutdown);
 // Start server
 async function startServer() {
   try {
+    // DIAGNOSTIC: Check environment first
+    console.log('========== RAILWAY DIAGNOSTIC ==========');
+    console.log('1. ENVIRONMENT VARIABLES:');
+    console.log('   NODE_ENV:', process.env.NODE_ENV);
+    console.log('   PORT:', process.env.PORT);
+    console.log('   ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY ? '✅ SET' : '❌ MISSING');
+    console.log('   OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? '✅ SET' : '❌ MISSING');
+    console.log('   SUPABASE_URL:', process.env.SUPABASE_URL ? '✅ SET' : '❌ MISSING');
+    console.log('   SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? '✅ SET' : '❌ MISSING');
+    
+    console.log('2. FILE SYSTEM:');
+    console.log('   CWD:', process.cwd());
+    console.log('   __dirname:', __dirname);
+    
+    // Check if config files exist
+    const fs = require('fs');
+    const path = require('path');
+    const configPaths = [
+      path.join(process.cwd(), 'config/agents/orchestrator.yaml'),
+      path.join(process.cwd(), 'config/agents/base_agent.yaml'),
+      path.join('/app/config/agents/orchestrator.yaml'),
+      path.join('/app/config/agents/base_agent.yaml')
+    ];
+    
+    console.log('3. CONFIG FILES:');
+    for (const configPath of configPaths) {
+      try {
+        fs.accessSync(configPath, fs.constants.R_OK);
+        console.log(`   ${configPath}: ✅ EXISTS`);
+      } catch {
+        console.log(`   ${configPath}: ❌ NOT FOUND`);
+      }
+    }
+    console.log('========================================');
+    
     logger.info('🚀 Starting Biz Buddy Backend Services (v1.0.2 with enhanced logging)...');
     
     // Initialize dependency injection container
+    console.log('DEBUG: Initializing services...');
     initializeServices();
     logger.info('✅ Dependency injection container initialized');
     
     // Initialize task events service
+    console.log('DEBUG: Initializing task events...');
     initializeTaskEvents();
     logger.info('✅ Task Events service initialized');
     
     // Initialize core services
+    console.log('DEBUG: Initializing QueueManager...');
     await QueueManager.initialize();
     logger.info('✅ Queue Manager initialized');
     
+    console.log('DEBUG: Initializing MCPServer...');
     await MCPServer.initialize();
     logger.info('✅ MCP Server initialized');
     
+    console.log('DEBUG: About to initialize AgentManager...');
     logger.info('🤖 Starting Agent Manager initialization...');
     await AgentManager.initialize();
     logger.info('✅ Agent Manager initialized successfully');
