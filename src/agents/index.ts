@@ -46,7 +46,6 @@ class AgentManagerClass {
       return;
     }
 
-    console.log('DEBUG: AgentManager.initialize() called');
     logger.info('Initializing Agent Manager');
 
     try {
@@ -55,11 +54,8 @@ class AgentManagerClass {
       
       // CRITICAL: OrchestratorAgent MUST be created first
       // It's a singleton that coordinates all other agents
-      console.log('DEBUG: About to get OrchestratorAgent instance...');
       const orchestrator = OrchestratorAgent.getInstance();
-      console.log('DEBUG: OrchestratorAgent instance obtained');
       this.agents.set(AgentRole.ORCHESTRATOR, orchestrator);
-      console.log('DEBUG: OrchestratorAgent added to agents map');
       
       // Map AgentRoles to discovered YAML configurations
       // The registry will find the appropriate YAML file
