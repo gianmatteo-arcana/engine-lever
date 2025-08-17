@@ -94,7 +94,9 @@ export class OrchestratorAgent extends BaseAgent {
       // Call BaseAgent constructor with orchestrator config
       // Using 'system' as businessId since orchestrator works across all businesses
       logger.info('📄 Loading BaseAgent with orchestrator.yaml...');
+      console.log('DEBUG: About to call super() in OrchestratorAgent');
       super('orchestrator.yaml', 'system', 'system');
+      console.log('DEBUG: super() call completed successfully');
       logger.info('✅ BaseAgent constructor completed successfully');
       
       logger.info('⚙️ Loading orchestrator config...');

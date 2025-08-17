@@ -227,9 +227,16 @@ export abstract class BaseAgent implements AgentExecutor {
       if (config.agent?.extends === 'base_agent') {
         // Agent explicitly inherits from base template
         console.log(`Agent ${config.agent.id} inheriting from base_agent template`);
-        logger.info(`✅ Successfully loaded specialized config for ${config.agent.id}`);
+        console.log(`DEBUG: About to call logger.info...`);
+        try {
+          logger.info(`✅ Successfully loaded specialized config for ${config.agent.id}`);
+          console.log(`DEBUG: logger.info call succeeded`);
+        } catch (logError) {
+          console.error(`ERROR: logger.info failed:`, logError);
+        }
       }
       
+      console.log(`DEBUG: Returning config for ${configPath}`);
       return config;
     } catch (error) {
       throw new Error(`Failed to load specialized config ${configPath}: ${error instanceof Error ? error.message : String(error)}`);
