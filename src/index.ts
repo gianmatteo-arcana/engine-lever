@@ -201,6 +201,16 @@ process.on('SIGINT', gracefulShutdown);
  */
 async function startServer() {
   try {
+    // DEBUG: Log what environment variables Railway is actually providing
+    console.log('🔍 RAILWAY ENV DEBUG:');
+    console.log('  TEST_VAR:', process.env.TEST_VAR || 'NOT SET');
+    console.log('  SUPABASE_URL:', process.env.SUPABASE_URL ? '✅ SET' : '❌ NOT SET');
+    console.log('  SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? '✅ SET' : '❌ NOT SET');
+    console.log('  SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ SET' : '❌ NOT SET');
+    console.log('  PORT:', process.env.PORT || 'NOT SET');
+    console.log('  NODE_ENV:', process.env.NODE_ENV || 'NOT SET');
+    console.log('  Total env vars:', Object.keys(process.env).length);
+    
     // STEP 1: ENVIRONMENT VALIDATION
     // Basic check for critical configuration - detailed validation happens in CredentialVault
     const configErrors = [];

@@ -36,6 +36,12 @@ export class CredentialVault {
   // private metricsCollector: MetricsCollector;
   
   constructor() {
+    // DEBUG: Log what we're actually receiving
+    console.log('🔍 CREDENTIAL VAULT ENV DEBUG:');
+    console.log('  SUPABASE_URL raw:', process.env.SUPABASE_URL);
+    console.log('  SUPABASE_SERVICE_KEY raw:', process.env.SUPABASE_SERVICE_KEY);
+    console.log('  SUPABASE_SERVICE_ROLE_KEY raw:', process.env.SUPABASE_SERVICE_ROLE_KEY);
+    
     // Validate and get Supabase configuration
     const supabaseUrl = process.env.SUPABASE_URL?.trim();
     const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY)?.trim();
@@ -54,7 +60,9 @@ export class CredentialVault {
     if (!supabaseKey) {
       errors.push('SUPABASE_SERVICE_KEY/SUPABASE_SERVICE_ROLE_KEY is not set');
     } else if (supabaseKey.length < 30) {
-      errors.push(`SUPABASE_SERVICE_KEY is too short (${supabaseKey.length} chars) - likely empty or invalid`);
+      // DEBUG: Show first few chars to diagnose truncation
+      const preview = supabaseKey.substring(0, 10);
+      errors.push(`SUPABASE_SERVICE_KEY is too short (${supabaseKey.length} chars, starts with "${preview}") - likely empty or invalid`);
     } else if (supabaseKey.includes('[') || supabaseKey.includes('Get from')) {
       errors.push('SUPABASE_SERVICE_KEY contains placeholder text - not a real key');
     } else {
