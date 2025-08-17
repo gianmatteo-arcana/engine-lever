@@ -161,9 +161,30 @@ export abstract class BaseAgent implements AgentExecutor {
    */
   private loadBaseTemplate(): BaseAgentTemplate {
     try {
-      const basePath = path.join(__dirname, '../../../config/agents/base_agent.yaml');
-      const baseContent = fs.readFileSync(basePath, 'utf8');
-      const baseYaml = yaml.parse(baseContent);
+      // Try multiple path resolutions for Railway compatibility
+      let baseContent: string;
+      const possiblePaths = [
+        path.join(process.cwd(), 'config/agents/base_agent.yaml'), // Production (Railway)
+        path.join(__dirname, '../../../config/agents/base_agent.yaml'), // Development
+        path.join('/app/config/agents/base_agent.yaml') // Docker/Railway absolute path
+      ];
+      
+      let loadedPath: string | null = null;
+      for (const basePath of possiblePaths) {
+        try {
+          baseContent = fs.readFileSync(basePath, 'utf8');
+          loadedPath = basePath;
+          break;
+        } catch {
+          // Try next path
+        }
+      }
+      
+      if (!loadedPath) {
+        throw new Error('Could not find base_agent.yaml in any of the expected locations');
+      }
+      
+      const baseYaml = yaml.parse(baseContent!);
       
       // Return the agent_template section (common patterns)
       return baseYaml.agent_template || baseYaml.base_agent;
@@ -177,9 +198,30 @@ export abstract class BaseAgent implements AgentExecutor {
    */
   private loadSpecializedConfig(configPath: string): SpecializedAgentConfig {
     try {
-      const fullPath = path.join(__dirname, '../../../config/agents/', configPath);
-      const configContent = fs.readFileSync(fullPath, 'utf8');
-      const config = yaml.parse(configContent);
+      // Try multiple path resolutions for Railway compatibility
+      let configContent: string;
+      const possiblePaths = [
+        path.join(process.cwd(), 'config/agents/', configPath), // Production (Railway)
+        path.join(__dirname, '../../../config/agents/', configPath), // Development
+        path.join('/app/config/agents/', configPath) // Docker/Railway absolute path
+      ];
+      
+      let loadedPath: string | null = null;
+      for (const fullPath of possiblePaths) {
+        try {
+          configContent = fs.readFileSync(fullPath, 'utf8');
+          loadedPath = fullPath;
+          break;
+        } catch {
+          // Try next path
+        }
+      }
+      
+      if (!loadedPath) {
+        throw new Error(`Could not find config file ${configPath} in any of the expected locations`);
+      }
+      
+      const config = yaml.parse(configContent!);
       
       // Check if agent extends base_agent (inheritance pattern)
       if (config.agent?.extends === 'base_agent') {
