@@ -4,7 +4,6 @@ import { AgentManager } from '../agents';
 import { TemplateExecutor } from '../templates/executor';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import tasksRoutes from './tasks';
-import { taskEventsRoutes } from './task-events';
 
 const router = Router();
 const templateExecutor = new TemplateExecutor();
@@ -153,7 +152,5 @@ router.get('/queues/status', (req, res) => {
 // Generic tasks endpoints (ENGINE PRD compliant)
 router.use('/tasks', tasksRoutes);
 
-// Task events endpoints for task_context_events table
-router.use('/task-events', taskEventsRoutes);
 
 export { router as apiRoutes };

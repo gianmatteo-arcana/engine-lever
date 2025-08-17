@@ -33,24 +33,21 @@ export interface SystemEvent {
  * and initiates appropriate workflows
  */
 export class EventListener {
-  private static instance: EventListener;
   private dbService: DatabaseService;
   private taskService: TaskService;
   private orchestrator: OrchestratorAgent;
   private isListening: boolean = false;
   private listenerConnection: any = null;
 
-  private constructor() {
-    this.dbService = DatabaseService.getInstance();
-    this.taskService = TaskService.getInstance();
-    this.orchestrator = OrchestratorAgent.getInstance();
-  }
-
-  public static getInstance(): EventListener {
-    if (!EventListener.instance) {
-      EventListener.instance = new EventListener();
-    }
-    return EventListener.instance;
+  constructor(
+    dbService?: DatabaseService,
+    taskService?: TaskService,
+    orchestrator?: OrchestratorAgent
+  ) {
+    // Allow dependency injection while maintaining backward compatibility
+    this.dbService = dbService || DatabaseService.getInstance();
+    this.taskService = taskService || TaskService.getInstance();
+    this.orchestrator = orchestrator || OrchestratorAgent.getInstance();
   }
 
   /**
@@ -119,14 +116,26 @@ export class EventListener {
 
   /**
    * Handle system events and route to appropriate handlers
+   * Generic routing supports any event type
    */
   private async handleSystemEvent(event: SystemEvent): Promise<void> {
     switch (event.eventType) {
       case 'USER_REGISTERED':
         await this.handleUserRegisteredEvent(event);
         break;
+      case 'TASK_COMPLETED':
+        await this.handleTaskCompletedEvent(event);
+        break;
+      case 'BUSINESS_CREATED':
+        await this.handleBusinessCreatedEvent(event);
+        break;
+      case 'COMPLIANCE_DEADLINE':
+        await this.handleComplianceDeadlineEvent(event);
+        break;
       default:
         logger.warn('Unknown event type received', { eventType: event.eventType });
+        // Still attempt to handle via generic workflow
+        await this.handleGenericEvent(event);
     }
   }
 
@@ -200,6 +209,81 @@ export class EventListener {
   }
 
   /**
+   * Handle TASK_COMPLETED events
+   */
+  private async handleTaskCompletedEvent(event: SystemEvent): Promise<void> {
+    logger.info('Task completed event received', {
+      taskId: event.contextId,
+      userId: event.userId
+    });
+    
+    // Could trigger follow-up workflows, notifications, etc.
+    // Implementation depends on specific business requirements
+  }
+
+  /**
+   * Handle BUSINESS_CREATED events
+   */
+  private async handleBusinessCreatedEvent(event: SystemEvent): Promise<void> {
+    logger.info('Business created event received', {
+      businessId: event.contextId,
+      userId: event.userId
+    });
+    
+    // Could trigger compliance setup, initial filings, etc.
+  }
+
+  /**
+   * Handle COMPLIANCE_DEADLINE events
+   */
+  private async handleComplianceDeadlineEvent(event: SystemEvent): Promise<void> {
+    logger.info('Compliance deadline event received', {
+      deadlineId: event.contextId,
+      userId: event.userId
+    });
+    
+    // Could trigger reminder workflows, deadline notifications, etc.
+  }
+
+  /**
+   * Generic event handler for unknown event types
+   * This ensures the system is extensible
+   */
+  private async handleGenericEvent(event: SystemEvent): Promise<void> {
+    logger.info('Processing generic event', {
+      eventType: event.eventType,
+      contextId: event.contextId,
+      userId: event.userId
+    });
+    
+    // Generic workflow: Create a task based on event type
+    // This allows the system to handle new event types without code changes
+    try {
+      const context = await this.taskService.create({
+        templateId: event.eventType.toLowerCase(), // e.g., "user_registered" -> "user_registered"
+        tenantId: event.userId || 'system',
+        userToken: '', // Service role will be used
+        initialData: {
+          ...event,
+          source: 'system_event',
+          createdBy: 'event_listener',
+          priority: 'medium'
+        }
+      });
+
+      logger.info('Created generic task from event', {
+        eventType: event.eventType,
+        taskId: context.contextId
+      });
+    } catch (error) {
+      logger.error('Failed to create generic task from event', {
+        eventType: event.eventType,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  /**
    * Manually trigger onboarding for a user (useful for testing)
    */
   public async triggerOnboardingForUser(userId: string, email: string, firstName?: string, lastName?: string): Promise<void> {
@@ -216,5 +300,20 @@ export class EventListener {
   }
 }
 
-// Export singleton instance getter
-export const getEventListener = () => EventListener.getInstance();
+// Factory function for dependency injection
+export function createEventListener(
+  dbService?: DatabaseService,
+  taskService?: TaskService,
+  orchestrator?: OrchestratorAgent
+): EventListener {
+  return new EventListener(dbService, taskService, orchestrator);
+}
+
+// Backward compatibility: getInstance equivalent
+let defaultInstance: EventListener | null = null;
+export const getEventListener = () => {
+  if (!defaultInstance) {
+    defaultInstance = new EventListener();
+  }
+  return defaultInstance;
+};

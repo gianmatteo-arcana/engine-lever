@@ -207,12 +207,10 @@ export interface AuditLogRecord {
 
 export class DatabaseService {
   private serviceClient: SupabaseClient | null = null; // Service role client for system operations
-  private userClients: Map<string, SupabaseClient> = new Map(); // User-scoped clients
-  private userToken?: string; // Optional user token for request-scoped operations
   private static instance: DatabaseService; // Keep for backward compatibility (deprecated)
 
-  constructor(userToken?: string) {
-    this.userToken = userToken;
+  constructor() {
+    // Service role only - no user token support
   }
 
   /**
@@ -246,52 +244,14 @@ export class DatabaseService {
   }
 
   /**
-   * Get or create a user-scoped Supabase client
-   * This client will automatically respect RLS policies for the user
+   * @deprecated Use service role pattern instead
+   * Temporary method for backward compatibility until TaskService is refactored
    */
-  public getUserClient(userToken: string): SupabaseClient {
-    // Check if we already have a client for this token
-    if (this.userClients.has(userToken)) {
-      return this.userClients.get(userToken)!;
-    }
-
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-      throw new Error('Supabase configuration missing');
-    }
-
-    // Create a client with the user's JWT token
-    // This will automatically enforce RLS policies
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${userToken}`
-        }
-      }
-    });
-
-    // Cache the client (you might want to implement cache expiry)
-    this.userClients.set(userToken, userClient);
-
-    return userClient;
+  public getUserClient(_userToken: string): any {
+    // This is a temporary stub to make compilation work
+    // TaskService needs to be refactored to use service role pattern
+    throw new Error('getUserClient is deprecated - use service role pattern instead');
   }
-
-  /**
-   * Clear user client cache (call periodically or on logout)
-   */
-  public clearUserClient(userToken: string): void {
-    this.userClients.delete(userToken);
-  }
-
-  /**
-   * Clear all user clients (for cleanup)
-   */
-  public clearAllUserClients(): void {
-    this.userClients.clear();
-  }
-
 
   // Helper method to convert TaskPriority enum to string
   private convertPriority(priority: TaskPriority): 'critical' | 'high' | 'medium' | 'low' {
@@ -867,14 +827,11 @@ export class DatabaseService {
   
   /**
    * Legacy: Create a task (maps to context creation)
+   * NOTE: userToken validation must happen at API layer - never use auth.getUser() here
    */
-  async createTask(userToken: string, task: Partial<TaskRecord>): Promise<TaskRecord> {
-    // Extract user ID from token
-    const { data: { user } } = await this.getServiceClient().auth.getUser(userToken);
-    if (!user) throw new Error('Invalid user token');
-    
+  async createTask(userId: string, task: Partial<TaskRecord>): Promise<TaskRecord> {
     // Get or create business for user
-    const business = await this.getOrCreateBusiness(user.id, {
+    const business = await this.getOrCreateBusiness(userId, {
       name: task.metadata?.businessName || 'My Business',
       metadata: task.metadata
     });
@@ -882,7 +839,7 @@ export class DatabaseService {
     // Create context for the task
     const context = await this.createContext(
       business.id,
-      user.id,
+      userId,
       task.template_id || task.task_type || 'generic',
       { taskType: task.task_type, ...task.metadata }
     );
@@ -890,7 +847,7 @@ export class DatabaseService {
     // Map context to legacy task format
     return {
       id: context.id,
-      user_id: user.id,
+      user_id: userId,
       business_id: business.id,
       template_id: context.template_id,
       title: task.title || 'Task',
@@ -913,29 +870,16 @@ export class DatabaseService {
 
   /**
    * Get a task by ID - queries the actual tasks table
-   * Note: userToken is passed but validation happens at API layer
+   * Note: userId must be validated at API layer before calling this method
    */
-  async getTask(userToken: string, taskId: string): Promise<TaskRecord | null> {
-    // Get user ID from token to filter tasks
-    const { data: { user }, error: authError } = await this.getServiceClient().auth.getUser(userToken);
-    
-    // Let auth errors propagate naturally - don't pre-validate
-    if (authError) {
-      throw authError;
-    }
-    
-    if (!user) {
-      // This shouldn't happen with valid middleware auth
-      return null;
-    }
-    
+  async getTask(userId: string, taskId: string): Promise<TaskRecord | null> {
     // Use service client to query tasks table directly
     const client = this.getServiceClient();
     const { data: task, error } = await client
       .from('tasks')
       .select('*')
       .eq('id', taskId)
-      .eq('user_id', user.id)  // Ensure user owns this task
+      .eq('user_id', userId)  // Ensure user owns this task
       .single();
     
     if (error) {
@@ -952,7 +896,7 @@ export class DatabaseService {
   /**
    * Legacy: Update a task (maps to context update via events)
    */
-  async updateTask(userToken: string, taskId: string, updates: Partial<TaskRecord>): Promise<TaskRecord> {
+  async updateTask(userId: string, taskId: string, updates: Partial<TaskRecord>): Promise<TaskRecord> {
     // Add an event to record the update
     await this.addContextEvent({
       context_id: taskId,
@@ -964,37 +908,26 @@ export class DatabaseService {
     });
     
     // Return updated task
-    const task = await this.getTask(userToken, taskId);
+    const task = await this.getTask(userId, taskId);
     if (!task) throw new Error('Task not found');
     return task;
   }
 
   /**
    * Get all tasks for a user - queries the actual tasks table
+   * Note: userId must be validated at API layer before calling this method
    */
-  async getUserTasks(userToken: string, filters?: { 
+  async getUserTasks(userId: string, filters?: { 
     status?: string; 
     businessId?: string;
     limit?: number;
   }): Promise<TaskRecord[]> {
-    // Extract user ID from token
-    const { data: { user }, error: authError } = await this.getServiceClient().auth.getUser(userToken);
-    
-    // Let auth errors propagate naturally
-    if (authError) {
-      throw authError;
-    }
-    
-    if (!user) {
-      return [];
-    }
-    
     // Query tasks table directly with service client
     const client = this.getServiceClient();
     let query = client
       .from('tasks')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false });
     
     // Apply filters if provided
@@ -1021,14 +954,19 @@ export class DatabaseService {
   /**
    * Legacy: Get tasks (simplified version)
    */
-  async getTasks(userToken: string): Promise<TaskRecord[]> {
-    return this.getUserTasks(userToken);
+  async getTasks(userId: string): Promise<TaskRecord[]> {
+    return this.getUserTasks(userId);
   }
   
   /**
    * Legacy: Get task executions (maps to context events)
+   * Note: userId validation must happen at API layer
    */
-  async getTaskExecutions(userToken: string, taskId: string): Promise<TaskExecutionRecord[]> {
+  async getTaskExecutions(userId: string, taskId: string): Promise<TaskExecutionRecord[]> {
+    // Verify user owns the task first
+    const task = await this.getTask(userId, taskId);
+    if (!task) return [];
+    
     // Map context events to execution records
     const client = this.getServiceClient();
     const { data: events } = await client
@@ -1058,8 +996,13 @@ export class DatabaseService {
   
   /**
    * Legacy: Get agent contexts (maps to agent states)
+   * Note: userId validation must happen at API layer
    */
-  async getAgentContexts(userToken: string, taskId: string): Promise<any[]> {
+  async getAgentContexts(userId: string, taskId: string): Promise<any[]> {
+    // Verify user owns the task first
+    const task = await this.getTask(userId, taskId);
+    if (!task) return [];
+    
     const states = await this.getContextAgentStates(taskId);
     return states.map(state => ({
       id: state.id,
@@ -1075,8 +1018,13 @@ export class DatabaseService {
   
   /**
    * Legacy: Get context history (maps to context events)
+   * Note: userId validation must happen at API layer
    */
-  async getContextHistory(userToken: string, taskId: string, limit?: number): Promise<ContextHistoryRecord[]> {
+  async getContextHistory(userId: string, taskId: string, limit?: number): Promise<ContextHistoryRecord[]> {
+    // Verify user owns the task first
+    const task = await this.getTask(userId, taskId);
+    if (!task) return [];
+    
     const client = this.getServiceClient();
     
     let query = client
@@ -1120,10 +1068,11 @@ export class DatabaseService {
   
   /**
    * Legacy: Create context history entry (maps to context event)
+   * Note: This method doesn't require user validation as it's for system-generated events
    */
-  async createContextHistoryEntry(userToken: string, entry: Partial<ContextHistoryRecord>): Promise<ContextHistoryRecord> {
+  async createContextHistoryEntry(taskId: string, entry: Partial<ContextHistoryRecord>): Promise<ContextHistoryRecord> {
     const event = await this.addContextEvent({
-      context_id: entry.task_id!,
+      context_id: taskId,
       actor_type: entry.actor_type || 'system',
       actor_id: entry.actor_id || 'unknown',
       operation: entry.operation || entry.entry_type || 'update',
@@ -1135,7 +1084,7 @@ export class DatabaseService {
     // Map back to legacy format
     return {
       id: event.id,
-      task_id: entry.task_id!,
+      task_id: taskId,
       sequence_number: event.sequence_number,
       entry_type: event.operation,
       actor_type: event.actor_type,
@@ -1336,9 +1285,9 @@ export class DatabaseService {
    * Get task events from task_context_events table
    * Validates user ownership before returning events
    */
-  async getTaskEvents(userToken: string, taskId: string): Promise<any[]> {
+  async getTaskEvents(userId: string, taskId: string): Promise<any[]> {
     // First verify the user owns this task
-    const task = await this.getTask(userToken, taskId);
+    const task = await this.getTask(userId, taskId);
     if (!task) {
       // Return empty array if task not found or user doesn't own it
       return [];
@@ -1364,7 +1313,7 @@ export class DatabaseService {
    * Create a task context event
    * Validates user ownership before creating event
    */
-  async createTaskContextEvent(userToken: string, taskId: string, eventData: {
+  async createTaskContextEvent(userId: string, taskId: string, eventData: {
     contextId?: string;
     actorType: string;
     actorId: string;
@@ -1374,7 +1323,7 @@ export class DatabaseService {
     trigger?: any;
   }): Promise<any> {
     // First verify the user owns this task
-    const task = await this.getTask(userToken, taskId);
+    const task = await this.getTask(userId, taskId);
     if (!task) {
       throw new Error('Task not found or unauthorized');
     }

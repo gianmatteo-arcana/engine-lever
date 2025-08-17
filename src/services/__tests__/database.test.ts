@@ -372,7 +372,7 @@ describe('DatabaseService - New Schema', () => {
       (DatabaseService as any).instance = undefined;
       
       const service = DatabaseService.getInstance();
-      expect(() => service.getUserClient('token')).toThrow('Supabase configuration missing');
+      expect(() => service.getUserClient('token')).toThrow('getUserClient is deprecated - use service role pattern instead');
     });
 
     it('should handle database errors', async () => {

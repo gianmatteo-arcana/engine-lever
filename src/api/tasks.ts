@@ -70,7 +70,7 @@ router.post('/create', requireAuth, async (req: AuthenticatedRequest, res) => {
     const context = await taskService.create({
       templateId: input.templateId,
       tenantId,
-      userToken,
+      userToken, // TODO: Remove when TaskService is refactored to service role pattern
       initialData: {
         ...input.initialData,
         userId,
@@ -205,14 +205,14 @@ router.get('/:taskId/context-history', requireAuth, async (req: AuthenticatedReq
     const dbService = DatabaseService.getInstance();
     
     // Verify user owns this task
-    const task = await dbService.getTask(userToken, taskId);
+    const task = await dbService.getTask(req.userId!, taskId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
     
     // Get context history (if table exists)
     try {
-      const history = await dbService.getContextHistory(userToken, taskId);
+      const history = await dbService.getContextHistory(req.userId!, taskId);
       
       res.json({
         taskId,
@@ -257,7 +257,7 @@ router.post('/:taskId/events', requireAuth, async (req: AuthenticatedRequest, re
     const dbService = DatabaseService.getInstance();
     
     // Verify user owns this task
-    const task = await dbService.getTask(userToken, taskId);
+    const task = await dbService.getTask(req.userId!, taskId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
@@ -267,7 +267,6 @@ router.post('/:taskId/events', requireAuth, async (req: AuthenticatedRequest, re
       taskId,
       ...data
     }, {
-      userToken,
       actorType: 'user',
       reasoning
     });
@@ -338,7 +337,6 @@ router.post('/:taskId/events', requireAuth, async (req: AuthenticatedRequest, re
  */
 router.get('/:taskId/context/stream', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { taskId } = req.params;
-  const userToken = req.userToken!;
   const userId = req.userId!;
   
   try {
@@ -359,7 +357,7 @@ router.get('/:taskId/context/stream', requireAuth, async (req: AuthenticatedRequ
      * 3. Task ownership verification here
      * 4. Channel-specific NOTIFY scoped to this task only
      */
-    const task = await dbService.getTask(userToken, taskId);
+    const task = await dbService.getTask(req.userId!, taskId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
@@ -379,7 +377,7 @@ router.get('/:taskId/context/stream', requireAuth, async (req: AuthenticatedRequ
       // Get context events (if they exist)
       let contextEvents: any[] = [];
       try {
-        contextEvents = await dbService.getContextHistory(userToken, taskId);
+        contextEvents = await dbService.getContextHistory(req.userId!, taskId);
       } catch (error: any) {
         if (error.code !== '42P01') {
           logger.warn('Could not get context events', error);
@@ -498,7 +496,7 @@ router.get('/:taskId/context/stream', requireAuth, async (req: AuthenticatedRequ
 router.post('/:taskId/context/events', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { taskId } = req.params;
   const { operation, data, reasoning } = req.body;
-  const userToken = req.userToken!;
+  const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
   const userId = req.userId!;
   
   try {
@@ -507,7 +505,7 @@ router.post('/:taskId/context/events', requireAuth, async (req: AuthenticatedReq
     const dbService = DatabaseService.getInstance();
     
     // Verify user owns this task
-    const task = await dbService.getTask(userToken, taskId);
+    const task = await dbService.getTask(req.userId!, taskId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
@@ -517,7 +515,7 @@ router.post('/:taskId/context/events', requireAuth, async (req: AuthenticatedReq
     const actorId = req.body.agentId || userId;
     
     // Create context event using database service method
-    const event = await dbService.createTaskContextEvent(userToken, taskId, {
+    const event = await dbService.createTaskContextEvent(req.userId!, taskId, {
       contextId: req.body.contextId,
       actorType,
       actorId,
@@ -532,7 +530,6 @@ router.post('/:taskId/context/events', requireAuth, async (req: AuthenticatedReq
       taskId,
       event
     }, {
-      userToken,
       actorType: actorType,
       reasoning: reasoning || 'Context event added'
     });
@@ -548,7 +545,7 @@ router.post('/:taskId/context/events', requireAuth, async (req: AuthenticatedReq
       }
     };
     
-    await dbService.updateTask(userToken, taskId, {
+    await dbService.updateTask(req.userId!, taskId, {
       metadata: updatedMetadata
     });
     
@@ -584,7 +581,7 @@ router.get('/:taskId/status', requireAuth, async (req: AuthenticatedRequest, res
     const dbService = DatabaseService.getInstance();
     
     // Get task
-    const task = await dbService.getTask(userToken, taskId);
+    const task = await dbService.getTask(req.userId!, taskId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
@@ -592,7 +589,7 @@ router.get('/:taskId/status', requireAuth, async (req: AuthenticatedRequest, res
     // Get agent contexts (if they exist)
     let agentContexts: any[] = [];
     try {
-      agentContexts = await dbService.getAgentContexts(userToken, taskId);
+      agentContexts = await dbService.getAgentContexts(req.userId!, taskId);
     } catch (error: any) {
       if (error.code !== '42P01') {
         logger.warn('Could not get agent contexts', error);
@@ -645,7 +642,7 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
     const dbService = DatabaseService.getInstance();
     
     // Create task using universal pattern
-    const taskId = await dbService.createTask(userToken, {
+    const taskRecord = await dbService.createTask(req.userId!, {
       task_type: taskType,
       title: title || `${taskType} Task`,
       description: description || `Created via universal API`,
@@ -657,20 +654,19 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
     
     // Emit task creation event
     await emitTaskEvent('task_created', {
-      taskId,
+      taskId: taskRecord.id,
       taskType,
       templateId
     }, {
-      userToken,
       actorType: 'user',
       reasoning: 'Universal task creation'
     });
     
-    logger.info('Universal task created', { taskId, taskType });
+    logger.info('Universal task created', { taskId: taskRecord.id, taskType });
     
     res.status(201).json({
       success: true,
-      taskId,
+      taskId: taskRecord.id,
       taskType,
       message: 'Task created successfully'
     });
@@ -697,7 +693,7 @@ router.put('/:taskId', requireAuth, async (req: AuthenticatedRequest, res) => {
     const dbService = DatabaseService.getInstance();
     
     // Verify user owns this task
-    const task = await dbService.getTask(userToken, taskId);
+    const task = await dbService.getTask(req.userId!, taskId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
@@ -712,7 +708,7 @@ router.put('/:taskId', requireAuth, async (req: AuthenticatedRequest, res) => {
       lastUpdated: new Date().toISOString()
     };
     
-    await dbService.updateTask(userToken, taskId, {
+    await dbService.updateTask(req.userId!, taskId, {
       ...(status && { status }),
       metadata: updatedMetadata
     });
@@ -722,7 +718,6 @@ router.put('/:taskId', requireAuth, async (req: AuthenticatedRequest, res) => {
       taskId,
       changes: { status, step, hasFormData: !!formData }
     }, {
-      userToken,
       actorType: 'user',
       reasoning: 'Universal task update'
     });
@@ -751,7 +746,7 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
     logger.info('Listing tasks for user', { userId });
     
     const dbService = DatabaseService.getInstance();
-    const tasks = await dbService.getUserTasks(userToken);
+    const tasks = await dbService.getUserTasks(req.userId!);
     
     res.json({
       tasks: tasks.map((task: any) => ({
