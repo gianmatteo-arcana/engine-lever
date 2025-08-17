@@ -147,10 +147,44 @@ export abstract class BaseAgent implements AgentExecutor {
     } else {
       // Import the actual implementations
       const { LLMProvider: LLMProviderImpl } = require('../../services/llm-provider');
-      const { ToolChain: ToolChainImpl } = require('../../services/tool-chain');
       
       // Use getInstance for LLMProvider (singleton pattern)
       this.llmProvider = LLMProviderImpl.getInstance();
+      
+      // ToolChain requires Supabase - FAIL HARD if not configured
+      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+        const errorMsg = `
+========================================
+🚨 CRITICAL CONFIGURATION ERROR 🚨
+========================================
+Supabase environment variables are REQUIRED but not set!
+
+Missing variables:
+  SUPABASE_URL: ${process.env.SUPABASE_URL ? '✅ Set' : '❌ MISSING'}
+  SUPABASE_SERVICE_KEY: ${process.env.SUPABASE_SERVICE_KEY ? '✅ Set' : '❌ MISSING'}
+
+To fix this in Railway:
+1. Go to your Railway project dashboard
+2. Click on the biz-buddy-backend service
+3. Go to the Variables tab
+4. Add these variables:
+   SUPABASE_URL=https://raenkewzlvrdqufwxjpl.supabase.co
+   SUPABASE_SERVICE_KEY=[Get from Supabase Dashboard > Settings > API]
+
+These are REQUIRED for:
+- Database connections
+- Authentication
+- Credential storage
+- Task management
+
+The application CANNOT run without these configured.
+========================================
+`;
+        console.error(errorMsg);
+        throw new Error('CRITICAL: Supabase configuration missing. See logs for details.');
+      }
+      
+      const { ToolChain: ToolChainImpl } = require('../../services/tool-chain');
       this.toolChain = new ToolChainImpl();
     }
   }
