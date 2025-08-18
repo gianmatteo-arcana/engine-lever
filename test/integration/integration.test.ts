@@ -162,6 +162,22 @@ describe('Service Integration Tests', () => {
         }
       }
       
+      const templatePaths: string[] = [];
+      const templateContent = `
+task_template:
+  id: test_template
+  name: Test Template
+  description: Test template for integration testing
+  category: test
+  priority: medium
+  estimatedDuration: 30
+  goals:
+    primary:
+      - id: test_goal
+        description: Test goal
+        required: true
+      `;
+      
       // Location 1: config/templates
       const configTemplatesDir = path.join(testConfigPath, 'templates');
       if (!fs.existsSync(configTemplatesDir)) {
@@ -184,6 +200,13 @@ describe('Service Integration Tests', () => {
       if (!fileExistedBefore && fs.existsSync(templatePath)) {
         fs.unlinkSync(templatePath);
       }
+      
+      // Clean up created template files
+      templatePaths.forEach(path => {
+        if (fs.existsSync(path)) {
+          fs.unlinkSync(path);
+        }
+      });
     });
   });
 

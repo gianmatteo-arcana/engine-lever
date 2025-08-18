@@ -91,25 +91,8 @@ describe('Database Integration Tests', () => {
     jest.clearAllMocks();
     console.log(`Using test user ID: ${testUserId}`);
     
-    // Reset all mock functions to return 'this' for chaining
-    mockChain.select.mockReturnThis();
-    mockChain.insert.mockReturnThis();
-    mockChain.update.mockReturnThis();
-    mockChain.upsert.mockReturnThis();
-    mockChain.eq.mockReturnThis();
-    mockChain.order.mockReturnThis();
-    mockChain.limit.mockReturnThis();
-    mockChain.gte.mockReturnThis();
-    mockChain.lte.mockReturnThis();
-    mockChain.in.mockReturnThis();
-    mockChain.contains.mockReturnThis();
-    mockChain.containedBy.mockReturnThis();
-    mockChain.range.mockReturnThis();
-    mockChain.filter.mockReturnThis();
-    mockChain.single.mockResolvedValue({ data: null, error: null });
-    mockChain.then = jest.fn((resolve) => {
-      resolve({ data: [], error: null });
-    });
+    // Reset mock functions
+    mockSupabaseClient.from.mockClear();
     
     process.env.SUPABASE_URL = 'https://test.supabase.co';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';

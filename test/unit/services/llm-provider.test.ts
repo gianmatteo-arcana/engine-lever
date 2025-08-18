@@ -2,7 +2,7 @@
  * Tests for LLM Provider Service
  */
 
-import { LLMProvider, LLMRequest, LLMResponse } from '../../../src/services/llm-provider';
+import { LLMProvider, LLMRequest, LLMResponse, MediaAttachment, ModelCapabilities } from '../../../src/services/llm-provider';
 
 // Mock the complete method to avoid actual API calls
 const mockComplete = jest.fn();
@@ -79,10 +79,17 @@ describe('LLMProvider', () => {
       
       // Mock the complete method to avoid actual API calls
       provider.complete = mockComplete.mockImplementation(async (request: LLMRequest): Promise<LLMResponse> => {
-        const lastMessage = request.messages ? request.messages[request.messages.length - 1] : { content: request.prompt };
+        const lastMessage = request.messages ? request.messages[request.messages.length - 1] : { content: request.prompt || '' };
         let content = 'Mock LLM response';
         
-        if (lastMessage.content.toLowerCase().includes('plan')) {
+        // Extract text content for analysis
+        const textContent = typeof lastMessage.content === 'string' 
+          ? lastMessage.content 
+          : Array.isArray(lastMessage.content) 
+            ? lastMessage.content.filter(c => c.type === 'text').map(c => c.text).join(' ')
+            : '';
+        
+        if (textContent.toLowerCase().includes('plan')) {
           content = JSON.stringify({
             plan: {
               phases: [
@@ -94,7 +101,7 @@ describe('LLMProvider', () => {
               estimatedDuration: '15 minutes'
             }
           });
-        } else if (lastMessage.content.toLowerCase().includes('analyze')) {
+        } else if (textContent.toLowerCase().includes('analyze')) {
           content = JSON.stringify({
             analysis: {
               taskType: 'onboarding',
@@ -299,6 +306,206 @@ describe('LLMProvider', () => {
       };
 
       await expect(provider.complete(request)).rejects.toThrow('OpenAI client not initialized');
+    });
+  });
+
+  describe('Multi-Modal Functionality', () => {
+    let provider: LLMProvider;
+
+    beforeEach(() => {
+      process.env.ANTHROPIC_API_KEY = 'test-key';
+      LLMProvider.resetInstance();
+      provider = LLMProvider.getInstance();
+    });
+
+    describe('Model Capabilities', () => {
+      it('should return capabilities for Claude 3 models', () => {
+        const capabilities = provider.getModelCapabilities('claude-3-opus-20240229');
+        
+        expect(capabilities.supportsImages).toBe(true);
+        expect(capabilities.supportsDocuments).toBe(true);
+        expect(capabilities.supportsAudio).toBe(false);
+        expect(capabilities.supportsVideo).toBe(false);
+        expect(capabilities.maxImageSize).toBe(5 * 1024 * 1024);
+        expect(capabilities.supportedImageTypes).toContain('image/jpeg');
+        expect(capabilities.supportedDocumentTypes).toContain('application/pdf');
+      });
+
+      it('should return capabilities for GPT-4 Vision', () => {
+        const capabilities = provider.getModelCapabilities('gpt-4-vision-preview');
+        
+        expect(capabilities.supportsImages).toBe(true);
+        expect(capabilities.supportsDocuments).toBe(false);
+        expect(capabilities.maxImageSize).toBe(20 * 1024 * 1024);
+        expect(capabilities.supportedImageTypes).toContain('image/png');
+      });
+
+      it('should return no capabilities for text-only models', () => {
+        const capabilities = provider.getModelCapabilities('claude-2.1');
+        
+        expect(capabilities.supportsImages).toBe(false);
+        expect(capabilities.supportsDocuments).toBe(false);
+        expect(capabilities.maxImageSize).toBe(0);
+        expect(capabilities.supportedImageTypes).toHaveLength(0);
+      });
+    });
+
+    describe('Media Type Support Checking', () => {
+      it('should correctly identify image support', () => {
+        expect(provider.supportsMediaType('image', 'claude-3-opus-20240229')).toBe(true);
+        expect(provider.supportsMediaType('image', 'gpt-4-vision-preview')).toBe(true);
+        expect(provider.supportsMediaType('image', 'claude-2.1')).toBe(false);
+        expect(provider.supportsMediaType('image', 'gpt-3.5-turbo')).toBe(false);
+      });
+
+      it('should correctly identify document support', () => {
+        expect(provider.supportsMediaType('document', 'claude-3-opus-20240229')).toBe(true);
+        expect(provider.supportsMediaType('document', 'gpt-4-vision-preview')).toBe(false);
+        expect(provider.supportsMediaType('document', 'claude-2.1')).toBe(false);
+      });
+    });
+
+    describe('Attachment Validation', () => {
+      it('should validate valid image attachment', () => {
+        const attachment: MediaAttachment = {
+          type: 'image',
+          data: 'base64-image-data',
+          mediaType: 'image/jpeg',
+          size: 1024 * 1024 // 1MB
+        };
+
+        const result = provider.validateAttachment(attachment, 'claude-3-opus-20240229');
+        expect(result.valid).toBe(true);
+        expect(result.error).toBeUndefined();
+      });
+
+      it('should reject oversized image attachment', () => {
+        const attachment: MediaAttachment = {
+          type: 'image',
+          data: 'base64-image-data',
+          mediaType: 'image/jpeg',
+          size: 10 * 1024 * 1024 // 10MB (over 5MB limit for Claude)
+        };
+
+        const result = provider.validateAttachment(attachment, 'claude-3-opus-20240229');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('size');
+        expect(result.error).toContain('exceeds limit');
+      });
+
+      it('should reject unsupported media type', () => {
+        const attachment: MediaAttachment = {
+          type: 'image',
+          data: 'base64-image-data',
+          mediaType: 'image/bmp', // Not in supported types
+          size: 1024
+        };
+
+        const result = provider.validateAttachment(attachment, 'claude-3-opus-20240229');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('not supported');
+      });
+
+      it('should reject image attachment for text-only model', () => {
+        const attachment: MediaAttachment = {
+          type: 'image',
+          data: 'base64-image-data',
+          mediaType: 'image/jpeg',
+          size: 1024
+        };
+
+        const result = provider.validateAttachment(attachment, 'claude-2.1');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('does not support image attachments');
+      });
+
+      it('should reject document attachment for OpenAI models', () => {
+        const attachment: MediaAttachment = {
+          type: 'document',
+          data: 'base64-pdf-data',
+          mediaType: 'application/pdf',
+          size: 1024
+        };
+
+        const result = provider.validateAttachment(attachment, 'gpt-4-vision-preview');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('does not support document attachments');
+      });
+    });
+
+    describe('Runtime Capability Validation', () => {
+      it('should throw error when using attachments with unsupported model', async () => {
+        const request: LLMRequest = {
+          prompt: 'Analyze this image',
+          attachments: [{
+            type: 'image',
+            data: 'base64-data',
+            mediaType: 'image/jpeg'
+          }],
+          model: 'claude-2.1' // Text-only model
+        };
+
+        // Mock the complete method to test validation
+        const validateSpy = jest.spyOn(provider as any, 'validateRequestCapabilities');
+        
+        try {
+          await provider.complete(request);
+        } catch (error: any) {
+          expect(validateSpy).toHaveBeenCalled();
+          expect(error.message).toContain('does not support any media attachments');
+        }
+      });
+
+      it('should throw error when exceeding attachment count limit', async () => {
+        const attachments: MediaAttachment[] = [];
+        // Create 25 attachments (over the 20 limit for Claude)
+        for (let i = 0; i < 25; i++) {
+          attachments.push({
+            type: 'image',
+            data: 'base64-data',
+            mediaType: 'image/jpeg',
+            size: 1024
+          });
+        }
+
+        const request: LLMRequest = {
+          prompt: 'Analyze these images',
+          attachments,
+          model: 'claude-3-opus-20240229'
+        };
+
+        try {
+          await provider.complete(request);
+        } catch (error: any) {
+          expect(error.message).toContain('Too many attachments');
+          expect(error.message).toContain('maximum 20');
+        }
+      });
+    });
+
+    describe('Helper Methods', () => {
+      it('should get supported image types', () => {
+        const imageTypes = provider.getSupportedImageTypes('claude-3-opus-20240229');
+        expect(imageTypes).toContain('image/jpeg');
+        expect(imageTypes).toContain('image/png');
+        expect(imageTypes).toContain('image/webp');
+        expect(imageTypes).toContain('image/gif');
+      });
+
+      it('should get supported document types', () => {
+        const docTypes = provider.getSupportedDocumentTypes('claude-3-opus-20240229');
+        expect(docTypes).toContain('application/pdf');
+        expect(docTypes).toContain('text/plain');
+        expect(docTypes).toContain('text/csv');
+      });
+
+      it('should return empty arrays for unsupported models', () => {
+        const imageTypes = provider.getSupportedImageTypes('claude-2.1');
+        const docTypes = provider.getSupportedDocumentTypes('claude-2.1');
+        
+        expect(imageTypes).toHaveLength(0);
+        expect(docTypes).toHaveLength(0);
+      });
     });
   });
 });

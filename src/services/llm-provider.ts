@@ -2,37 +2,302 @@
  * LLM Provider Service
  * 
  * Model-agnostic LLM provider that supports multiple models and providers.
+ * Includes multi-modal support for images, documents, audio, and video.
  * Defaults to Claude 3 Sonnet but allows specifying any model.
  * 
  * Supported providers:
- * - Anthropic (Claude models)
- * - OpenAI (GPT models)
+ * - Anthropic (Claude models) - supports images and documents
+ * - OpenAI (GPT models) - supports images only
  * 
- * Usage:
- * const llm = UnifiedLLMProvider.getInstance();
+ * USAGE EXAMPLES:
+ * 
+ * ## Basic Text-Only Usage
+ * ```typescript
+ * const llm = LLMProvider.getInstance();
+ * 
+ * // Simple prompt
  * const response = await llm.complete({
- *   prompt: "Your prompt here",
- *   model: "claude-3-opus-20240229", // Optional, uses default if not specified
- *   temperature: 0.3 // Optional
+ *   prompt: "Explain quantum computing in simple terms"
  * });
+ * 
+ * // With specific model and parameters
+ * const response = await llm.complete({
+ *   prompt: "Analyze this business plan",
+ *   model: "claude-3-opus-20240229",
+ *   temperature: 0.3,
+ *   maxTokens: 1000,
+ *   responseFormat: 'json'
+ * });
+ * 
+ * // With system prompt
+ * const response = await llm.complete({
+ *   prompt: "Write a business proposal",
+ *   systemPrompt: "You are a business consultant with 20 years of experience",
+ *   temperature: 0.5
+ * });
+ * ```
+ * 
+ * ## Multi-Modal Usage with Images
+ * ```typescript
+ * // Using legacy attachments format
+ * const response = await llm.complete({
+ *   prompt: "What do you see in this image?",
+ *   model: "claude-3-sonnet-20240229",
+ *   attachments: [{
+ *     type: 'image',
+ *     data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+ *     mediaType: 'image/png',
+ *     size: 68
+ *   }]
+ * });
+ * 
+ * // Using new messages format
+ * const response = await llm.complete({
+ *   messages: [{
+ *     role: 'user',
+ *     content: [
+ *       { type: 'text', text: 'Analyze this screenshot for UI/UX issues:' },
+ *       { 
+ *         type: 'image', 
+ *         image: { 
+ *           data: 'base64-image-data-here',
+ *           detail: 'high' 
+ *         } 
+ *       }
+ *     ]
+ *   }],
+ *   model: "claude-3-opus-20240229"
+ * });
+ * 
+ * // Using image URL
+ * const response = await llm.complete({
+ *   messages: [{
+ *     role: 'user',
+ *     content: [
+ *       { type: 'text', text: 'Describe this image:' },
+ *       { 
+ *         type: 'image', 
+ *         image: { 
+ *           url: 'https://example.com/image.jpg',
+ *           detail: 'auto' 
+ *         } 
+ *       }
+ *     ]
+ *   }],
+ *   model: "gpt-4-vision-preview"
+ * });
+ * ```
+ * 
+ * ## Document Processing (Claude only)
+ * ```typescript
+ * const pdfBuffer = fs.readFileSync('contract.pdf');
+ * 
+ * const response = await llm.complete({
+ *   prompt: "Summarize the key terms in this contract",
+ *   model: "claude-3-opus-20240229",
+ *   attachments: [{
+ *     type: 'document',
+ *     data: pdfBuffer,
+ *     mediaType: 'application/pdf',
+ *     filename: 'contract.pdf',
+ *     size: pdfBuffer.length
+ *   }]
+ * });
+ * 
+ * // Or using messages format
+ * const response = await llm.complete({
+ *   messages: [{
+ *     role: 'user',
+ *     content: [
+ *       { type: 'text', text: 'Extract all dates and deadlines from this document:' },
+ *       { 
+ *         type: 'document', 
+ *         document: { 
+ *           data: pdfBuffer,
+ *           mediaType: 'application/pdf',
+ *           filename: 'legal-document.pdf' 
+ *         } 
+ *       }
+ *     ]
+ *   }],
+ *   model: "claude-3-sonnet-20240229"
+ * });
+ * ```
+ * 
+ * ## Model Capability Checking
+ * ```typescript
+ * const llm = LLMProvider.getInstance();
+ * 
+ * // Check if model supports images
+ * if (llm.supportsMediaType('image', 'claude-3-opus-20240229')) {
+ *   console.log('Model supports images');
+ * }
+ * 
+ * // Get detailed capabilities
+ * const capabilities = llm.getModelCapabilities('gpt-4-vision-preview');
+ * console.log('Max image size:', capabilities.maxImageSize);
+ * console.log('Supported image types:', capabilities.supportedImageTypes);
+ * 
+ * // Validate attachment before sending
+ * const attachment = {
+ *   type: 'image' as const,
+ *   data: 'base64-data',
+ *   mediaType: 'image/jpeg',
+ *   size: 1024 * 1024 // 1MB
+ * };
+ * 
+ * const validation = llm.validateAttachment(attachment, 'claude-3-sonnet-20240229');
+ * if (!validation.valid) {
+ *   console.error('Attachment invalid:', validation.error);
+ * }
+ * ```
+ * 
+ * ## Conversational Usage
+ * ```typescript
+ * const response = await llm.complete({
+ *   messages: [
+ *     { role: 'user', content: 'What is the capital of France?' },
+ *     { role: 'assistant', content: 'The capital of France is Paris.' },
+ *     { role: 'user', content: 'What is its population?' }
+ *   ],
+ *   model: "claude-3-sonnet-20240229"
+ * });
+ * ```
+ * 
+ * ## Error Handling
+ * ```typescript
+ * try {
+ *   const response = await llm.complete({
+ *     prompt: "Analyze this image",
+ *     model: "claude-2.1", // Text-only model
+ *     attachments: [{ type: 'image', data: 'base64-data', mediaType: 'image/jpeg' }]
+ *   });
+ * } catch (error) {
+ *   if (error.message.includes('does not support image attachments')) {
+ *     console.log('Model does not support images, falling back to text-only');
+ *     // Retry without attachments or use different model
+ *   }
+ * }
+ * ```
+ * 
+ * ## Configuration and Management
+ * ```typescript
+ * const llm = LLMProvider.getInstance();
+ * 
+ * // Check configuration
+ * const config = llm.getConfig();
+ * console.log('Current provider:', config.currentProvider);
+ * console.log('Default model:', config.defaultModel);
+ * console.log('Available models:', config.availableModels);
+ * 
+ * // Check if provider is configured
+ * if (!llm.isConfigured()) {
+ *   throw new Error('LLM provider not configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY');
+ * }
+ * 
+ * // Get supported file types
+ * const imageTypes = llm.getSupportedImageTypes('claude-3-opus-20240229');
+ * const docTypes = llm.getSupportedDocumentTypes('claude-3-opus-20240229');
+ * ```
+ * 
+ * ## Environment Variables
+ * Set these environment variables to configure the provider:
+ * - `ANTHROPIC_API_KEY`: Your Anthropic API key for Claude models
+ * - `OPENAI_API_KEY`: Your OpenAI API key for GPT models  
+ * - `LLM_DEFAULT_MODEL`: Default model to use (e.g., "claude-3-sonnet-20240229")
+ * 
+ * ## Model Support Matrix
+ * | Model | Images | Documents | Audio | Video | Max Image Size | Max Attachments |
+ * |-------|--------|-----------|-------|-------|----------------|-----------------|
+ * | claude-3-opus | ✅ | ✅ | ❌ | ❌ | 5MB | 20 |
+ * | claude-3-sonnet | ✅ | ✅ | ❌ | ❌ | 5MB | 20 |
+ * | claude-3-haiku | ✅ | ✅ | ❌ | ❌ | 5MB | 20 |
+ * | gpt-4-vision | ✅ | ❌ | ❌ | ❌ | 20MB | 10 |
+ * | gpt-4 | ❌ | ❌ | ❌ | ❌ | 0 | 0 |
+ * | claude-2.1 | ❌ | ❌ | ❌ | ❌ | 0 | 0 |
+ * 
+ * ## Common Patterns for Agents
+ * ```typescript
+ * // Task analysis with optional document review
+ * async analyzeTask(taskDescription: string, documents?: Buffer[]): Promise<string> {
+ *   const attachments = documents?.map(doc => ({
+ *     type: 'document' as const,
+ *     data: doc,
+ *     mediaType: 'application/pdf'
+ *   })) || [];
+ * 
+ *   return await this.llm.complete({
+ *     prompt: `Analyze this task: ${taskDescription}`,
+ *     model: "claude-3-sonnet-20240229",
+ *     attachments,
+ *     systemPrompt: "You are a business process analyst",
+ *     responseFormat: 'json'
+ *   });
+ * }
+ * 
+ * // Screenshot analysis for UI automation
+ * async analyzeScreenshot(screenshot: string, instruction: string): Promise<string> {
+ *   return await this.llm.complete({
+ *     messages: [{
+ *       role: 'user',
+ *       content: [
+ *         { type: 'text', text: instruction },
+ *         { type: 'image', image: { data: screenshot, detail: 'high' } }
+ *       ]
+ *     }],
+ *     model: "claude-3-opus-20240229",
+ *     temperature: 0.1 // Low temperature for precise analysis
+ *   });
+ * }
+ * ```
  */
 
 import { logger } from '../utils/logger';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
-// Unified request interface
+// Media attachment interface
+export interface MediaAttachment {
+  type: 'image' | 'document' | 'audio' | 'video';
+  data: string | Buffer; // base64 string or Buffer
+  mediaType: string; // MIME type (e.g., 'image/jpeg', 'application/pdf')
+  filename?: string;
+  size?: number; // bytes
+  url?: string; // Alternative to data for URL-based attachments
+}
+
+// Multi-modal message content
+export interface MessageContent {
+  type: 'text' | 'image' | 'document';
+  text?: string;
+  image?: {
+    url?: string;
+    data?: string; // base64
+    detail?: 'low' | 'high' | 'auto';
+  };
+  document?: {
+    data: string | Buffer;
+    mediaType: string;
+    filename?: string;
+  };
+}
+
+// Enhanced message interface
+export interface LLMMessage {
+  role: 'user' | 'assistant';
+  content: string | MessageContent[];
+}
+
+// Unified request interface with multi-modal support
 export interface LLMRequest {
-  prompt: string;
+  prompt?: string; // Optional when using messages with rich content
   model?: string; // Optional - uses default if not specified
   temperature?: number;
   maxTokens?: number;
   responseFormat?: 'text' | 'json';
   systemPrompt?: string;
-  messages?: Array<{
-    role: 'user' | 'assistant';  // 'system' should only come from systemPrompt field
-    content: string;
-  }>;
+  messages?: LLMMessage[];
+  attachments?: MediaAttachment[]; // Legacy support for simple attachments
   metadata?: {
     taskId?: string;
     agentRole?: string;
@@ -54,40 +319,103 @@ export interface LLMResponse {
   metadata?: Record<string, any>;
 }
 
-// Model configuration
+// Model capabilities interface
+export interface ModelCapabilities {
+  supportsImages: boolean;
+  supportsDocuments: boolean;
+  supportsAudio: boolean;
+  supportsVideo: boolean;
+  maxImageSize: number; // bytes
+  maxDocumentSize: number; // bytes
+  supportedImageTypes: string[]; // MIME types
+  supportedDocumentTypes: string[]; // MIME types
+  maxAttachmentsPerRequest: number;
+  maxTotalAttachmentSize: number; // bytes
+}
+
+// Enhanced model configuration
 interface ModelConfig {
   provider: 'anthropic' | 'openai';
   modelName: string;
   maxTokens: number;
   defaultTemperature: number;
+  capabilities: ModelCapabilities;
 }
 
-// Model registry - easily extensible
+// Model registry with detailed capabilities
 const MODEL_REGISTRY: Record<string, ModelConfig> = {
-  // Anthropic Claude models
+  // Anthropic Claude 3 models with vision
   'claude-3-opus-20240229': {
     provider: 'anthropic',
     modelName: 'claude-3-opus-20240229',
     maxTokens: 4096,
-    defaultTemperature: 0.3
+    defaultTemperature: 0.3,
+    capabilities: {
+      supportsImages: true,
+      supportsDocuments: true,
+      supportsAudio: false,
+      supportsVideo: false,
+      maxImageSize: 5 * 1024 * 1024, // 5MB
+      maxDocumentSize: 100 * 1024 * 1024, // 100MB
+      supportedImageTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+      supportedDocumentTypes: ['application/pdf', 'text/plain', 'text/csv'],
+      maxAttachmentsPerRequest: 20,
+      maxTotalAttachmentSize: 100 * 1024 * 1024 // 100MB total
+    }
   },
   'claude-3-sonnet-20240229': {
     provider: 'anthropic',
     modelName: 'claude-3-sonnet-20240229',
     maxTokens: 4096,
-    defaultTemperature: 0.3
+    defaultTemperature: 0.3,
+    capabilities: {
+      supportsImages: true,
+      supportsDocuments: true,
+      supportsAudio: false,
+      supportsVideo: false,
+      maxImageSize: 5 * 1024 * 1024, // 5MB
+      maxDocumentSize: 100 * 1024 * 1024, // 100MB
+      supportedImageTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+      supportedDocumentTypes: ['application/pdf', 'text/plain', 'text/csv'],
+      maxAttachmentsPerRequest: 20,
+      maxTotalAttachmentSize: 100 * 1024 * 1024 // 100MB total
+    }
   },
   'claude-3-haiku-20240307': {
     provider: 'anthropic',
     modelName: 'claude-3-haiku-20240307',
     maxTokens: 4096,
-    defaultTemperature: 0.3
+    defaultTemperature: 0.3,
+    capabilities: {
+      supportsImages: true,
+      supportsDocuments: true,
+      supportsAudio: false,
+      supportsVideo: false,
+      maxImageSize: 5 * 1024 * 1024, // 5MB
+      maxDocumentSize: 100 * 1024 * 1024, // 100MB
+      supportedImageTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+      supportedDocumentTypes: ['application/pdf', 'text/plain', 'text/csv'],
+      maxAttachmentsPerRequest: 20,
+      maxTotalAttachmentSize: 100 * 1024 * 1024 // 100MB total
+    }
   },
   'claude-2.1': {
     provider: 'anthropic',
     modelName: 'claude-2.1',
     maxTokens: 4096,
-    defaultTemperature: 0.3
+    defaultTemperature: 0.3,
+    capabilities: {
+      supportsImages: false,
+      supportsDocuments: false,
+      supportsAudio: false,
+      supportsVideo: false,
+      maxImageSize: 0,
+      maxDocumentSize: 0,
+      supportedImageTypes: [],
+      supportedDocumentTypes: [],
+      maxAttachmentsPerRequest: 0,
+      maxTotalAttachmentSize: 0
+    }
   },
   
   // OpenAI GPT models
@@ -95,19 +423,73 @@ const MODEL_REGISTRY: Record<string, ModelConfig> = {
     provider: 'openai',
     modelName: 'gpt-4',
     maxTokens: 8192,
-    defaultTemperature: 0.3
+    defaultTemperature: 0.3,
+    capabilities: {
+      supportsImages: false,
+      supportsDocuments: false,
+      supportsAudio: false,
+      supportsVideo: false,
+      maxImageSize: 0,
+      maxDocumentSize: 0,
+      supportedImageTypes: [],
+      supportedDocumentTypes: [],
+      maxAttachmentsPerRequest: 0,
+      maxTotalAttachmentSize: 0
+    }
   },
   'gpt-4-turbo-preview': {
     provider: 'openai',
     modelName: 'gpt-4-turbo-preview',
     maxTokens: 4096,
-    defaultTemperature: 0.3
+    defaultTemperature: 0.3,
+    capabilities: {
+      supportsImages: false,
+      supportsDocuments: false,
+      supportsAudio: false,
+      supportsVideo: false,
+      maxImageSize: 0,
+      maxDocumentSize: 0,
+      supportedImageTypes: [],
+      supportedDocumentTypes: [],
+      maxAttachmentsPerRequest: 0,
+      maxTotalAttachmentSize: 0
+    }
+  },
+  'gpt-4-vision-preview': {
+    provider: 'openai',
+    modelName: 'gpt-4-vision-preview',
+    maxTokens: 4096,
+    defaultTemperature: 0.3,
+    capabilities: {
+      supportsImages: true,
+      supportsDocuments: false,
+      supportsAudio: false,
+      supportsVideo: false,
+      maxImageSize: 20 * 1024 * 1024, // 20MB
+      maxDocumentSize: 0,
+      supportedImageTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+      supportedDocumentTypes: [],
+      maxAttachmentsPerRequest: 10,
+      maxTotalAttachmentSize: 20 * 1024 * 1024 // 20MB total
+    }
   },
   'gpt-3.5-turbo': {
     provider: 'openai',
     modelName: 'gpt-3.5-turbo',
     maxTokens: 4096,
-    defaultTemperature: 0.3
+    defaultTemperature: 0.3,
+    capabilities: {
+      supportsImages: false,
+      supportsDocuments: false,
+      supportsAudio: false,
+      supportsVideo: false,
+      maxImageSize: 0,
+      maxDocumentSize: 0,
+      supportedImageTypes: [],
+      supportedDocumentTypes: [],
+      maxAttachmentsPerRequest: 0,
+      maxTotalAttachmentSize: 0
+    }
   }
 };
 
@@ -178,6 +560,9 @@ export class LLMProvider {
       return this.completeWithInferredProvider(request, model, inferredConfig);
     }
     
+    // Validate request capabilities against model
+    this.validateRequestCapabilities(request, modelConfig);
+    
     // Log the request (without sensitive content)
     logger.info('LLM request initiated', {
       model,
@@ -221,6 +606,339 @@ export class LLMProvider {
   }
 
   /**
+   * Validate request capabilities against model configuration
+   */
+  private validateRequestCapabilities(request: LLMRequest, config: ModelConfig): void {
+    const capabilities = config.capabilities;
+    const attachments = this.extractAllAttachments(request);
+    
+    if (attachments.length === 0) {
+      return; // No attachments to validate
+    }
+    
+    // Check if model supports any attachments
+    if (!capabilities.supportsImages && !capabilities.supportsDocuments && 
+        !capabilities.supportsAudio && !capabilities.supportsVideo) {
+      throw new Error(
+        `Model ${config.modelName} does not support any media attachments. ` +
+        `Use a vision-enabled model like claude-3-opus-20240229 or gpt-4-vision-preview.`
+      );
+    }
+    
+    // Check attachment count limit
+    if (attachments.length > capabilities.maxAttachmentsPerRequest) {
+      throw new Error(
+        `Too many attachments: ${attachments.length}. ` +
+        `Model ${config.modelName} supports maximum ${capabilities.maxAttachmentsPerRequest} attachments per request.`
+      );
+    }
+    
+    let totalSize = 0;
+    
+    for (const attachment of attachments) {
+      // Validate attachment type support
+      this.validateAttachmentType(attachment, capabilities, config.modelName);
+      
+      // Calculate size
+      const size = this.getAttachmentSize(attachment);
+      totalSize += size;
+      
+      // Validate individual attachment size
+      this.validateAttachmentSize(attachment, size, capabilities, config.modelName);
+    }
+    
+    // Validate total attachment size
+    if (totalSize > capabilities.maxTotalAttachmentSize) {
+      throw new Error(
+        `Total attachment size (${this.formatBytes(totalSize)}) exceeds limit ` +
+        `(${this.formatBytes(capabilities.maxTotalAttachmentSize)}) for model ${config.modelName}.`
+      );
+    }
+  }
+  
+  /**
+   * Extract all attachments from request (both legacy and new format)
+   */
+  private extractAllAttachments(request: LLMRequest): MediaAttachment[] {
+    const attachments: MediaAttachment[] = [];
+    
+    // Legacy attachments
+    if (request.attachments) {
+      attachments.push(...request.attachments);
+    }
+    
+    // Extract from messages
+    if (request.messages) {
+      for (const message of request.messages) {
+        if (Array.isArray(message.content)) {
+          for (const content of message.content) {
+            if (content.type === 'image' && content.image) {
+              attachments.push({
+                type: 'image',
+                data: content.image.data || '',
+                mediaType: this.inferMediaTypeFromData(content.image.data || content.image.url || ''),
+                url: content.image.url
+              });
+            } else if (content.type === 'document' && content.document) {
+              attachments.push({
+                type: 'document',
+                data: content.document.data,
+                mediaType: content.document.mediaType,
+                filename: content.document.filename
+              });
+            }
+          }
+        }
+      }
+    }
+    
+    return attachments;
+  }
+  
+  /**
+   * Validate specific attachment type against model capabilities
+   */
+  private validateAttachmentType(attachment: MediaAttachment, capabilities: ModelCapabilities, modelName: string): void {
+    switch (attachment.type) {
+      case 'image':
+        if (!capabilities.supportsImages) {
+          throw new Error(`Model ${modelName} does not support image attachments.`);
+        }
+        if (!capabilities.supportedImageTypes.includes(attachment.mediaType)) {
+          throw new Error(
+            `Image type ${attachment.mediaType} not supported by model ${modelName}. ` +
+            `Supported types: ${capabilities.supportedImageTypes.join(', ')}`
+          );
+        }
+        break;
+        
+      case 'document':
+        if (!capabilities.supportsDocuments) {
+          throw new Error(`Model ${modelName} does not support document attachments.`);
+        }
+        if (!capabilities.supportedDocumentTypes.includes(attachment.mediaType)) {
+          throw new Error(
+            `Document type ${attachment.mediaType} not supported by model ${modelName}. ` +
+            `Supported types: ${capabilities.supportedDocumentTypes.join(', ')}`
+          );
+        }
+        break;
+        
+      case 'audio':
+        if (!capabilities.supportsAudio) {
+          throw new Error(`Model ${modelName} does not support audio attachments.`);
+        }
+        break;
+        
+      case 'video':
+        if (!capabilities.supportsVideo) {
+          throw new Error(`Model ${modelName} does not support video attachments.`);
+        }
+        break;
+        
+      default:
+        throw new Error(`Unknown attachment type: ${attachment.type}`);
+    }
+  }
+  
+  /**
+   * Validate attachment size against model limits
+   */
+  private validateAttachmentSize(
+    attachment: MediaAttachment, 
+    size: number, 
+    capabilities: ModelCapabilities, 
+    modelName: string
+  ): void {
+    let maxSize = 0;
+    let typeName = '';
+    
+    switch (attachment.type) {
+      case 'image':
+        maxSize = capabilities.maxImageSize;
+        typeName = 'image';
+        break;
+      case 'document':
+        maxSize = capabilities.maxDocumentSize;
+        typeName = 'document';
+        break;
+      default:
+        return; // No size limits for audio/video yet
+    }
+    
+    if (size > maxSize) {
+      throw new Error(
+        `${typeName} size (${this.formatBytes(size)}) exceeds limit ` +
+        `(${this.formatBytes(maxSize)}) for model ${modelName}.`
+      );
+    }
+  }
+  
+  /**
+   * Get attachment size in bytes
+   */
+  private getAttachmentSize(attachment: MediaAttachment): number {
+    if (attachment.size) {
+      return attachment.size;
+    }
+    
+    if (typeof attachment.data === 'string') {
+      // Base64 string - estimate size
+      return Math.ceil(attachment.data.length * 3 / 4);
+    } else if (Buffer.isBuffer(attachment.data)) {
+      return attachment.data.length;
+    }
+    
+    return 0;
+  }
+  
+  /**
+   * Infer media type from data or filename
+   */
+  private inferMediaTypeFromData(data: string): string {
+    if (data.startsWith('data:')) {
+      const match = data.match(/data:([^;]+)/);
+      return match ? match[1] : 'application/octet-stream';
+    }
+    
+    // Default fallback
+    return 'application/octet-stream';
+  }
+  
+  /**
+   * Format bytes for human-readable error messages
+   */
+  private formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+  
+  /**
+   * Convert our unified content format to Anthropic's format
+   */
+  private convertToAnthropicContent(content: string | MessageContent[]): any {
+    if (typeof content === 'string') {
+      return content;
+    }
+    
+    // Convert MessageContent[] to Anthropic format
+    return content.map(item => {
+      switch (item.type) {
+        case 'text':
+          return {
+            type: 'text',
+            text: item.text || ''
+          };
+          
+        case 'image':
+          if (item.image?.data) {
+            return {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: this.inferMediaTypeFromData(item.image.data),
+                data: this.ensureBase64(item.image.data)
+              }
+            };
+          } else if (item.image?.url) {
+            return {
+              type: 'image',
+              source: {
+                type: 'url',
+                url: item.image.url
+              }
+            };
+          }
+          throw new Error('Image content must have either data or url');
+          
+        case 'document':
+          // For documents, we'll include them as text for now
+          // In the future, this could be enhanced to extract text from PDFs, etc.
+          return {
+            type: 'text',
+            text: `[Document: ${item.document?.filename || 'unnamed'}]`
+          };
+          
+        default:
+          throw new Error(`Unsupported content type for Anthropic: ${item.type}`);
+      }
+    });
+  }
+  
+  /**
+   * Ensure data is in base64 format (strip data URL prefix if present)
+   */
+  private ensureBase64(data: string | Buffer): string {
+    if (Buffer.isBuffer(data)) {
+      return data.toString('base64');
+    }
+    
+    if (typeof data === 'string') {
+      // If it's a data URL, extract the base64 part
+      if (data.startsWith('data:')) {
+        const base64Index = data.indexOf(',');
+        return base64Index !== -1 ? data.substring(base64Index + 1) : data;
+      }
+      return data;
+    }
+    
+    throw new Error('Invalid data format for base64 conversion');
+  }
+  
+  /**
+   * Convert our unified content format to OpenAI's format
+   */
+  private convertToOpenAIContent(content: string | MessageContent[]): any {
+    if (typeof content === 'string') {
+      return content;
+    }
+    
+    // Convert MessageContent[] to OpenAI format
+    return content.map(item => {
+      switch (item.type) {
+        case 'text':
+          return {
+            type: 'text',
+            text: item.text || ''
+          };
+          
+        case 'image':
+          if (item.image?.data) {
+            return {
+              type: 'image_url',
+              image_url: {
+                url: `data:${this.inferMediaTypeFromData(item.image.data)};base64,${this.ensureBase64(item.image.data)}`,
+                detail: item.image.detail || 'auto'
+              }
+            };
+          } else if (item.image?.url) {
+            return {
+              type: 'image_url',
+              image_url: {
+                url: item.image.url,
+                detail: item.image.detail || 'auto'
+              }
+            };
+          }
+          throw new Error('Image content must have either data or url');
+          
+        case 'document':
+          // OpenAI doesn't support documents directly, so we'll include them as text
+          return {
+            type: 'text',
+            text: `[Document: ${item.document?.filename || 'unnamed'}]`
+          };
+          
+        default:
+          throw new Error(`Unsupported content type for OpenAI: ${item.type}`);
+      }
+    });
+  }
+
+  /**
    * Complete using Anthropic Claude
    */
   private async completeWithAnthropic(request: LLMRequest, config: ModelConfig): Promise<LLMResponse> {
@@ -229,24 +947,44 @@ export class LLMProvider {
     }
     
     try {
-      // Build messages array
+      // Build messages array with multi-modal support
       let messages: any[] = [];
       
       if (request.messages) {
-        // Use provided messages (no system messages should be in this array)
+        // Process messages with potential multi-modal content
         messages = request.messages.map(m => ({
           role: m.role,
-          content: m.content
+          content: this.convertToAnthropicContent(m.content)
         }));
-      } else {
-        // Convert simple prompt to message
+      } else if (request.prompt) {
+        // Handle legacy prompt with attachments
+        const content: any[] = [{ type: 'text', text: request.prompt }];
+        
+        // Add legacy attachments if present
+        if (request.attachments) {
+          for (const attachment of request.attachments) {
+            if (attachment.type === 'image') {
+              content.push({
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: attachment.mediaType,
+                  data: this.ensureBase64(attachment.data)
+                }
+              });
+            }
+          }
+        }
+        
         messages = [{
           role: 'user' as const,
-          content: request.prompt
+          content: content.length === 1 ? content[0].text : content
         }];
+      } else {
+        throw new Error('Either prompt or messages must be provided');
       }
       
-      // Use explicit system prompt (no fallback to messages array)
+      // Use explicit system prompt
       const systemPrompt = request.systemPrompt || 
         'You are a helpful AI assistant that follows instructions precisely and returns well-structured responses.';
       
@@ -303,10 +1041,10 @@ export class LLMProvider {
     }
     
     try {
-      // Build messages array
+      // Build messages array with multi-modal support
       let messages: any[] = [];
       
-      // Use explicit system prompt (no fallback to messages array)
+      // Use explicit system prompt
       const systemPrompt = request.systemPrompt || 
         'You are a helpful AI assistant that follows instructions precisely and returns well-structured responses.';
       
@@ -316,14 +1054,40 @@ export class LLMProvider {
       });
       
       if (request.messages) {
-        // Add provided messages (no system messages should be in this array)
-        messages.push(...request.messages);
-      } else {
-        // Convert simple prompt to message
+        // Process messages with potential multi-modal content
+        for (const message of request.messages) {
+          messages.push({
+            role: message.role,
+            content: this.convertToOpenAIContent(message.content)
+          });
+        }
+      } else if (request.prompt) {
+        // Handle legacy prompt with attachments
+        let content: any = request.prompt;
+        
+        // For vision models, convert to array format if there are image attachments
+        if (request.attachments && config.capabilities.supportsImages) {
+          content = [{ type: 'text', text: request.prompt }];
+          
+          for (const attachment of request.attachments) {
+            if (attachment.type === 'image') {
+              content.push({
+                type: 'image_url',
+                image_url: {
+                  url: attachment.url || `data:${attachment.mediaType};base64,${this.ensureBase64(attachment.data)}`,
+                  detail: 'auto'
+                }
+              });
+            }
+          }
+        }
+        
         messages.push({
           role: 'user',
-          content: request.prompt
+          content
         });
+      } else {
+        throw new Error('Either prompt or messages must be provided');
       }
       
       // Create the completion
@@ -381,7 +1145,23 @@ export class LLMProvider {
       provider: config.provider,
       modelName: model,
       maxTokens: 4096,
-      defaultTemperature: 0.3
+      defaultTemperature: 0.3,
+      capabilities: {
+        supportsImages: config.provider === 'anthropic',
+        supportsDocuments: config.provider === 'anthropic',
+        supportsAudio: false,
+        supportsVideo: false,
+        maxImageSize: config.provider === 'anthropic' ? 5 * 1024 * 1024 : 20 * 1024 * 1024,
+        maxDocumentSize: config.provider === 'anthropic' ? 100 * 1024 * 1024 : 0,
+        supportedImageTypes: config.provider === 'anthropic' 
+          ? ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+          : ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+        supportedDocumentTypes: config.provider === 'anthropic' 
+          ? ['application/pdf', 'text/plain', 'text/csv'] 
+          : [],
+        maxAttachmentsPerRequest: config.provider === 'anthropic' ? 20 : 10,
+        maxTotalAttachmentSize: config.provider === 'anthropic' ? 100 * 1024 * 1024 : 20 * 1024 * 1024
+      }
     };
     
     if (config.provider === 'anthropic') {
@@ -479,6 +1259,92 @@ export class LLMProvider {
     // Infer from model name
     const inferred = this.inferModelConfig(this.defaultModel);
     return inferred ? inferred.provider : 'anthropic';
+  }
+  
+  /**
+   * Get model capabilities for a specific model
+   */
+  getModelCapabilities(model?: string): ModelCapabilities {
+    const targetModel = model || this.defaultModel;
+    const config = MODEL_REGISTRY[targetModel];
+    
+    if (!config) {
+      // Return default capabilities for unknown models
+      return {
+        supportsImages: false,
+        supportsDocuments: false,
+        supportsAudio: false,
+        supportsVideo: false,
+        maxImageSize: 0,
+        maxDocumentSize: 0,
+        supportedImageTypes: [],
+        supportedDocumentTypes: [],
+        maxAttachmentsPerRequest: 0,
+        maxTotalAttachmentSize: 0
+      };
+    }
+    
+    return config.capabilities;
+  }
+  
+  /**
+   * Check if a model supports a specific media type
+   */
+  supportsMediaType(mediaType: 'image' | 'document' | 'audio' | 'video', model?: string): boolean {
+    const capabilities = this.getModelCapabilities(model);
+    
+    switch (mediaType) {
+      case 'image':
+        return capabilities.supportsImages;
+      case 'document':
+        return capabilities.supportsDocuments;
+      case 'audio':
+        return capabilities.supportsAudio;
+      case 'video':
+        return capabilities.supportsVideo;
+      default:
+        return false;
+    }
+  }
+  
+  /**
+   * Get supported image types for a model
+   */
+  getSupportedImageTypes(model?: string): string[] {
+    return this.getModelCapabilities(model).supportedImageTypes;
+  }
+  
+  /**
+   * Get supported document types for a model
+   */
+  getSupportedDocumentTypes(model?: string): string[] {
+    return this.getModelCapabilities(model).supportedDocumentTypes;
+  }
+  
+  /**
+   * Validate if an attachment is supported by a model
+   */
+  validateAttachment(attachment: MediaAttachment, model?: string): { valid: boolean; error?: string } {
+    try {
+      const targetModel = model || this.defaultModel;
+      const config = MODEL_REGISTRY[targetModel];
+      
+      if (!config) {
+        return { valid: false, error: `Unknown model: ${targetModel}` };
+      }
+      
+      this.validateAttachmentType(attachment, config.capabilities, config.modelName);
+      
+      const size = this.getAttachmentSize(attachment);
+      this.validateAttachmentSize(attachment, size, config.capabilities, config.modelName);
+      
+      return { valid: true };
+    } catch (error) {
+      return { 
+        valid: false, 
+        error: error instanceof Error ? error.message : String(error) 
+      };
+    }
   }
   
   private currentProvider: string = 'anthropic';
