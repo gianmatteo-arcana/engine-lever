@@ -15,8 +15,8 @@ index.ts (startServer)
     │   ├── QueueManager.initialize() - Task Queues
     │   └── MCPServer.initialize() - MCP Tools
     │
-    ├── 3. Agent System Initialization ⚠️ CRITICAL PATH
-    │   └── AgentManager.initialize()
+    ├── 3. Pure A2A Agent System Initialization ⚠️ CRITICAL PATH
+    │   └── OrchestratorAgent.initializeAgentSystem()
     │       └── OrchestratorAgent.getInstance() [SINGLETON]
     │           └── new OrchestratorAgent()
     │               └── super() → BaseAgent('orchestrator.yaml')
@@ -56,13 +56,13 @@ The order is **CRITICAL** and cannot be changed:
 2. **Task Events** - Initializes event bus
 3. **Queue Manager** - Sets up Bull queues
 4. **MCP Server** - Initializes tool registry
-5. **Agent Manager** - Creates all agents (REQUIRES all above)
+5. **Pure A2A Agent System** - Initializes OrchestratorAgent for A2A protocol (REQUIRES all above)
 
 ### 3. Agent System Architecture
 
 #### OrchestratorAgent (Singleton)
-- **Role**: Central coordinator for all task execution
-- **Initialization**: Created once during AgentManager.initialize()
+- **Role**: Central coordinator for pure A2A protocol system
+- **Initialization**: Created once during OrchestratorAgent.initializeAgentSystem()
 - **Dependencies**: 
   - BaseAgent (parent class)
   - ToolChain (requires Supabase)
@@ -159,7 +159,7 @@ at new BaseAgent (/app/dist/agents/base/BaseAgent.js:162:30)
 #### Agent Load Failure
 ```
 at OrchestratorAgent.getInstance (/app/dist/agents/OrchestratorAgent.js:100:42)
-at AgentManagerClass.initialize (/app/dist/agents/index.js:48:72)
+at OrchestratorAgent.initializeAgentSystem (/app/dist/agents/OrchestratorAgent.js:48:72)
 ```
 **Solution**: Check agent YAML configs exist
 
@@ -167,7 +167,7 @@ at AgentManagerClass.initialize (/app/dist/agents/index.js:48:72)
 
 ### Adding New Agents
 1. Create YAML config in `config/agents/`
-2. Register in AgentManager
+2. Agents are discovered automatically via A2A protocol
 3. Update this document with dependencies
 
 ### Changing Initialization Order

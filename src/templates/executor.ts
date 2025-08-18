@@ -180,11 +180,11 @@ export class TemplateExecutor extends EventEmitter {
     // Map step agent to AgentRole enum
     const agentRole = this.mapAgentRole(step.agent);
     
-    // Send task to agent through AgentManager
+    // Send task to agent through pure A2A protocol via OrchestratorAgent
     // For now, we'll simulate the execution
-    // TODO: Implement actual agent communication
+    // TODO: Implement actual A2A agent communication
     
-    logger.info('Sending step to agent', {
+    logger.info('Sending step to agent via A2A protocol', {
       agent: agentRole,
       action: step.action,
       inputs
