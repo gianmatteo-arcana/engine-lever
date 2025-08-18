@@ -1031,13 +1031,13 @@ export class OrchestratorAgent extends BaseAgent {
     try {
       logger.info(`🤖 Creating agent via DI: ${agentId} for task: ${taskId}`);
       
-      // Use Agent DI Registry to create task-scoped agent
-      const { AgentDIRegistry } = await import('../services/agent-di-registry');
+      // Use Dependency Injection Container directly
+      const { DIContainer } = await import('../services/dependency-injection');
       
       // Check if agent is registered in DI
-      if (AgentDIRegistry.isAgentRegistered(agentId)) {
+      if (DIContainer.isAgentRegistered(agentId)) {
         // Create agent with SSE subscriptions already configured
-        const agent = await AgentDIRegistry.resolveAgentForTask(agentId, taskId);
+        const agent = await DIContainer.resolveAgent(agentId, taskId);
         
         // Track active subscription
         if (!this.activeTaskSubscriptions.has(taskId)) {
@@ -1048,7 +1048,7 @@ export class OrchestratorAgent extends BaseAgent {
         logger.info(`✅ Agent created via DI and subscribed to task: ${agentId}`);
         return agent;
       } else {
-        // Fallback to agentDiscovery if not in DI registry
+        // Fallback to agentDiscovery if not in DI container
         const { agentDiscovery } = await import('../services/agent-discovery');
         const agent = await agentDiscovery.instantiateAgent(agentId, taskId);
         

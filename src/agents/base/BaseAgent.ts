@@ -1059,7 +1059,7 @@ Remember: You are an autonomous agent following the universal principles while a
    * @param event - The event to broadcast
    * @protected
    */
-  public async broadcastTaskEvent(taskId: string, event: any): Promise<void> {
+  protected async broadcastTaskEvent(taskId: string, event: any): Promise<void> {
     try {
       const dbService = DatabaseService.getInstance();
       // Use PostgreSQL NOTIFY to broadcast to all SSE subscribers
@@ -1088,7 +1088,7 @@ Remember: You are an autonomous agent following the universal principles while a
    * @param handler - The event handler
    * @protected
    */
-  public async subscribeToTaskEvents(
+  protected async subscribeToTaskEvents(
     taskId: string,
     handler: (event: any) => Promise<void>
   ): Promise<() => void> {

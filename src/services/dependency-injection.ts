@@ -135,6 +135,63 @@ export class DIContainer {
   static isRegistered(token: string): boolean {
     return this.registrations.has(token);
   }
+
+  /**
+   * Register an agent factory for task-scoped creation
+   * Agents are created per-task with automatic SSE subscriptions
+   * 
+   * @param agentId - The agent identifier
+   * @param factory - Factory function that creates agent instances
+   */
+  static registerAgent(agentId: string, factory: AgentFactory): void {
+    const token = `Agent:${agentId}`;
+    
+    // Register as TRANSIENT - new instance every time
+    this.register(
+      token,
+      () => factory,  // Return the factory function
+      ServiceLifecycle.TRANSIENT
+    );
+    
+    logger.info(`Agent registered with DI container`, { 
+      agentId, 
+      token,
+      lifecycle: 'TRANSIENT' 
+    });
+  }
+
+  /**
+   * Resolve an agent for a specific task
+   * Creates new instance and returns configured agent
+   * 
+   * @param agentId - The agent identifier
+   * @param taskId - The task ID for this agent instance
+   * @returns Promise resolving to the agent instance
+   */
+  static async resolveAgent(agentId: string, taskId: string): Promise<any> {
+    const token = `Agent:${agentId}`;
+    
+    if (!this.isRegistered(token)) {
+      throw new Error(`Agent not registered: ${agentId}`);
+    }
+    
+    // Resolve factory from container
+    const factory = this.resolve<AgentFactory>(token);
+    
+    // Create agent instance for this task
+    const agent = await factory(taskId);
+    
+    logger.info(`Agent created for task`, { agentId, taskId });
+    
+    return agent;
+  }
+
+  /**
+   * Check if an agent is registered
+   */
+  static isAgentRegistered(agentId: string): boolean {
+    return this.isRegistered(`Agent:${agentId}`);
+  }
 }
 
 /**
@@ -147,6 +204,11 @@ export const ServiceTokens = {
   CONFIG_MANAGER: 'ConfigurationManager',
   CREDENTIAL_VAULT: 'CredentialVault'
 } as const;
+
+/**
+ * Agent factory function type for task-scoped agent creation
+ */
+export type AgentFactory = (taskId: string) => Promise<any>;
 
 /**
  * Initialize default service registrations
@@ -219,4 +281,60 @@ export function getConfigManager(): ConfigurationManager {
 
 export function getCredentialVault(): CredentialVault {
   return DIContainer.resolve<CredentialVault>(ServiceTokens.CREDENTIAL_VAULT);
+}
+
+/**
+ * Initialize agent registrations with DI container
+ * Discovers agents from YAML and registers them for task-scoped creation
+ */
+export async function initializeAgents(): Promise<void> {
+  logger.info('🎯 Initializing agent registrations with DI container');
+  
+  try {
+    // Import required modules
+    const { agentDiscovery } = await import('./agent-discovery');
+    const { DefaultAgent } = await import('../agents/DefaultAgent');
+    const { OrchestratorAgent } = await import('../agents/OrchestratorAgent');
+    
+    // Discover all agents from YAML configurations
+    const capabilities = await agentDiscovery.discoverAgents();
+    
+    // Register each discovered agent with DI container
+    for (const [agentId] of capabilities) {
+      // Create factory function for this agent
+      const factory: AgentFactory = async (taskId: string) => {
+        logger.info(`🤖 Creating agent instance for task`, { agentId, taskId });
+        
+        // Create agent instance
+        // The agent will handle its own SSE subscriptions internally
+        const agent = new DefaultAgent(`${agentId}.yaml`, 'system', taskId);
+        
+        // Initialize agent for the task (agent handles subscriptions internally)
+        await agent.initializeForTask(taskId);
+        
+        return agent;
+      };
+      
+      // Register agent with DI container
+      DIContainer.registerAgent(agentId, factory);
+    }
+    
+    // Register OrchestratorAgent separately (special case - singleton)
+    DIContainer.register(
+      'Agent:orchestrator_agent',
+      () => OrchestratorAgent.getInstance(),
+      ServiceLifecycle.SINGLETON
+    );
+    
+    logger.info(`✅ Agent registrations initialized`, {
+      registeredAgents: capabilities.size,
+      agents: Array.from(capabilities.keys())
+    });
+    
+  } catch (error) {
+    logger.error('Failed to initialize agent registrations', { 
+      error: error instanceof Error ? error.message : String(error) 
+    });
+    throw error;
+  }
 }
