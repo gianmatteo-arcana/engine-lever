@@ -195,9 +195,12 @@ export class TaskService {
    */
   async getTask(contextId: string): Promise<TaskContext | null> {
     try {
-      const userClient = this.dbService.getUserClient(this.userToken || '');
+      // Use service client when no user token (e.g., from EventListener)
+      const client = this.userToken 
+        ? this.dbService.getUserClient(this.userToken)
+        : this.dbService.getServiceClient();
       
-      const { data, error } = await userClient
+      const { data, error } = await client
         .from('task_contexts')
         .select('*')
         .eq('context_id', contextId)
@@ -213,7 +216,7 @@ export class TaskService {
       }
 
       // Fetch history
-      const { data: history, error: historyError } = await userClient
+      const { data: history, error: historyError } = await client
         .from('context_history')
         .select('*')
         .eq('context_id', contextId)
@@ -237,9 +240,12 @@ export class TaskService {
    */
   async updateState(contextId: string, newState: Partial<TaskState>): Promise<void> {
     try {
-      const userClient = this.dbService.getUserClient(this.userToken || '');
+      // Use service client when no user token (e.g., from EventListener)
+      const client = this.userToken 
+        ? this.dbService.getUserClient(this.userToken)
+        : this.dbService.getServiceClient();
       
-      const { error } = await userClient
+      const { error } = await client
         .from('task_contexts')
         .update({
           current_state: newState,
@@ -277,9 +283,12 @@ export class TaskService {
       context.history.push(entry);
 
       // Persist to database
-      const userClient = this.dbService.getUserClient(this.userToken || '');
+      // Use service client when no user token (e.g., from EventListener)
+      const client = this.userToken 
+        ? this.dbService.getUserClient(this.userToken)
+        : this.dbService.getServiceClient();
       
-      const { error } = await userClient
+      const { error } = await client
         .from('context_history')
         .insert({
           entry_id: entry.entryId,
@@ -348,9 +357,12 @@ export class TaskService {
    */
   private async loadTemplateFromDatabase(templateId: string): Promise<TaskTemplate | null> {
     try {
-      const userClient = this.dbService.getUserClient(this.userToken || '');
+      // Use service client when no user token (e.g., from EventListener)
+      const client = this.userToken 
+        ? this.dbService.getUserClient(this.userToken)
+        : this.dbService.getServiceClient();
       
-      const { data, error } = await userClient
+      const { data, error } = await client
         .from('task_templates')
         .select('*')
         .eq('id', templateId)
@@ -375,9 +387,12 @@ export class TaskService {
    */
   private async persistContext(context: TaskContext): Promise<void> {
     try {
-      const userClient = this.dbService.getUserClient(this.userToken || '');
+      // Use service client when no user token (e.g., from EventListener)
+      const client = this.userToken 
+        ? this.dbService.getUserClient(this.userToken)
+        : this.dbService.getServiceClient();
       
-      const { error } = await userClient
+      const { error } = await client
         .from('task_contexts')
         .insert({
           context_id: context.contextId,
@@ -539,9 +554,12 @@ export class TaskService {
       };
 
       // Use dependency-injected database service
-      const userClient = this.dbService.getUserClient(request.userToken);
+      // Use service client when no user token provided
+      const client = request.userToken 
+        ? this.dbService.getUserClient(request.userToken)
+        : this.dbService.getServiceClient();
 
-      const { data, error } = await userClient
+      const { data, error } = await client
         .from('tasks')
         .insert(dbTask)
         .select()
@@ -612,11 +630,13 @@ export class TaskService {
 
       // getUserClient ensures RLS policies are applied
       // This provides database-level security
-      const userClient = this.dbService.getUserClient(userToken);
+      const client = userToken
+        ? this.dbService.getUserClient(userToken)
+        : this.dbService.getServiceClient();
 
       // Additional explicit user_id filter for defense in depth
       // Even if RLS fails, this ensures data isolation
-      const { data, error } = await userClient
+      const { data, error } = await client
         .from('tasks')
         .select('*')
         .eq('user_id', userId)  // Explicit user filter
@@ -668,10 +688,12 @@ export class TaskService {
       logger.info('Task access requested', { userId, taskId });
 
       // RLS-enabled client for database-level security
-      const userClient = this.dbService.getUserClient(userToken);
+      const client = userToken
+        ? this.dbService.getUserClient(userToken)
+        : this.dbService.getServiceClient();
 
       // Query with explicit user_id filter for defense in depth
-      const { data, error } = await userClient
+      const { data, error } = await client
         .from('tasks')
         .select('*')
         .eq('id', taskId)

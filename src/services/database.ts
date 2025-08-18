@@ -228,7 +228,7 @@ export class DatabaseService {
    * Initialize the service role client for system operations
    * This should only be used for operations that don't involve user data
    */
-  private getServiceClient(): SupabaseClient {
+  public getServiceClient(): SupabaseClient {
     if (!this.serviceClient) {
       const supabaseUrl = process.env.SUPABASE_URL;
       const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1343,13 +1343,18 @@ export class DatabaseService {
     reasoning: string;
     trigger?: any;
   }): Promise<any> {
-    // First verify the user owns this task
-    const task = await this.getTask(userId, taskId);
-    if (!task) {
-      throw new Error('Task not found or unauthorized');
+    // Skip ownership check for system operations (orchestration, agents)
+    if (userId !== 'system' && eventData.actorType !== 'system' && eventData.actorType !== 'agent') {
+      // Verify the user owns this task for user operations
+      const task = await this.getTask(userId, taskId);
+      if (!task) {
+        throw new Error('Task not found or unauthorized');
+      }
     }
     
-    const eventId = `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Generate a proper UUID for the event ID
+    const { v4: uuidv4 } = require('uuid');
+    const eventId = uuidv4();
     const contextId = eventData.contextId || taskId;
     
     // Insert event using service client
@@ -1415,6 +1420,63 @@ export class DatabaseService {
       };
     } catch (error) {
       logger.error('Error setting up channel listener', { channelName, error });
+      return () => {}; // Return empty cleanup function
+    }
+  }
+
+  /**
+   * Listen to table INSERT events using Supabase Realtime
+   * This is the proper way to receive notifications for new records
+   */
+  async listenToTableInserts(tableName: string, schema: string = 'public', callback: (payload: any) => void): Promise<() => void> {
+    try {
+      const serviceClient = this.getServiceClient();
+      
+      // Create a unique channel name for this subscription
+      const channelName = `${schema}_${tableName}_inserts`;
+      
+      // Subscribe to INSERT events on the specified table
+      const subscription = serviceClient
+        .channel(channelName)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: schema,
+          table: tableName
+        }, (payload: any) => {
+          try {
+            logger.info(`📡 Received INSERT event on ${schema}.${tableName}`, {
+              id: payload.new?.id,
+              eventType: payload.eventType,
+              table: tableName
+            });
+            
+            // Pass the new record to the callback
+            callback(payload.new);
+          } catch (error) {
+            logger.error('Failed to process table INSERT event', { 
+              tableName, 
+              schema, 
+              error 
+            });
+          }
+        })
+        .subscribe((status: string) => {
+          if (status === 'SUBSCRIBED') {
+            logger.info(`✅ Successfully subscribed to ${schema}.${tableName} INSERT events`);
+          } else {
+            logger.info(`📡 Subscription status for ${schema}.${tableName}: ${status}`);
+          }
+        });
+
+      logger.info(`🔄 Setting up listener for ${schema}.${tableName} INSERT events`);
+
+      // Return unsubscribe function
+      return () => {
+        subscription.unsubscribe();
+        logger.info(`🔌 Stopped listening to ${schema}.${tableName} INSERT events`);
+      };
+    } catch (error) {
+      logger.error('Error setting up table INSERT listener', { tableName, schema, error });
       return () => {}; // Return empty cleanup function
     }
   }

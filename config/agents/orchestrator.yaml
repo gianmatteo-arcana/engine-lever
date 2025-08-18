@@ -112,7 +112,7 @@ schemas:
 examples:
   create_execution_plan:
     input:
-      taskTemplate: "user_onboarding"
+      taskTemplate: "onboarding"
       currentState: 
         status: "pending"
     output:

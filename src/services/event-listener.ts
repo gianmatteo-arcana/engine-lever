@@ -17,6 +17,7 @@ import { OrchestratorAgent } from '../agents/OrchestratorAgent';
 import { logger } from '../utils/logger';
 import { UnifiedEventBus } from './event-bus/UnifiedEventBus';
 import { Task } from '../types/a2a-types';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface SystemEvent {
   eventType: string;
@@ -25,6 +26,14 @@ export interface SystemEvent {
   email?: string;
   firstName?: string;
   lastName?: string;
+  // Task creation event fields
+  taskId?: string;
+  taskType?: string;
+  templateId?: string;
+  status?: string;
+  priority?: string;
+  title?: string;
+  timestamp?: string;
   [key: string]: any;
 }
 
@@ -96,20 +105,70 @@ export class EventListener {
 
   /**
    * Set up PostgreSQL LISTEN/NOTIFY subscription
+   * Now using Supabase Realtime to listen to table INSERT events
    */
   private async setupPostgreSQLListener(): Promise<void> {
     try {
-      // Use database service to listen to the channel
-      await this.dbService.listenToChannel('new_user_events', async (payload: string) => {
+      // Listen to new user registrations (auth.users table)
+      await this.dbService.listenToTableInserts('users', 'auth', async (newUser: any) => {
         try {
-          const event: SystemEvent = JSON.parse(payload);
+          logger.info('🆕 New user registration detected', {
+            userId: newUser.id,
+            email: newUser.email
+          });
+          
+          // Convert to SystemEvent format
+          const event: SystemEvent = {
+            eventType: 'USER_REGISTERED',
+            contextId: `user_${newUser.id}`, // Add contextId for user registration
+            userId: newUser.id,
+            email: newUser.email,
+            timestamp: newUser.created_at || new Date().toISOString(),
+            metadata: {
+              email_confirmed: newUser.email_confirmed_at ? true : false,
+              provider: newUser.app_metadata?.provider || 'email'
+            }
+          };
+          
           await this.handleSystemEvent(event);
         } catch (error) {
-          logger.error('Failed to process new user event', { error, payload });
+          logger.error('Failed to process new user event', { error, newUser });
         }
       });
+
+      // Listen to new task creation (tasks table)
+      await this.dbService.listenToTableInserts('tasks', 'public', async (newTask: any) => {
+        try {
+          logger.info('📋 New task creation detected', {
+            taskId: newTask.id,
+            userId: newTask.user_id,
+            taskType: newTask.task_type,
+            templateId: newTask.template_id
+          });
+          
+          // Convert to SystemEvent format for task creation
+          const event: SystemEvent = {
+            eventType: 'TASK_CREATED',
+            contextId: newTask.id, // Use task ID as context ID
+            taskId: newTask.id,
+            userId: newTask.user_id,
+            taskType: newTask.task_type,
+            templateId: newTask.template_id,
+            status: newTask.status,
+            priority: newTask.priority,
+            title: newTask.title,
+            timestamp: newTask.created_at || new Date().toISOString()
+          };
+          
+          await this.handleTaskCreationEvent(event);
+        } catch (error) {
+          logger.error('Failed to process task creation event', { error, newTask });
+        }
+      });
+
+      logger.info('✅ EventListener subscribed to Supabase Realtime: auth.users INSERT, public.tasks INSERT');
     } catch (error) {
-      logger.error('Failed to set up PostgreSQL listener', error);
+      logger.error('Failed to set up Realtime listeners', error);
       throw error;
     }
   }
@@ -140,6 +199,146 @@ export class EventListener {
   }
 
   /**
+   * Handle TASK_CREATED events from database trigger
+   * This is the key integration point for orchestration
+   */
+  private async handleTaskCreationEvent(event: SystemEvent): Promise<void> {
+    logger.info('🎯 Task creation event received', {
+      eventType: event.eventType,
+      taskId: event.taskId,
+      userId: event.userId,
+      taskType: event.taskType,
+      templateId: event.templateId
+    });
+
+    try {
+      // Create a simple TaskContext object for orchestration
+      // We'll use task_context_events table for storing events
+      const taskContext = {
+        contextId: event.taskId, // Use the task ID as context ID
+        taskTemplateId: event.templateId || event.taskType || 'onboarding',
+        tenantId: event.userId || 'system',
+        createdAt: new Date().toISOString(),
+        currentState: {
+          status: event.status || 'pending',
+          phase: 'initialization',
+          completeness: 0,
+          data: {
+            taskId: event.taskId,
+            userId: event.userId,
+            title: event.title || 'Task',
+            taskType: event.taskType,
+            metadata: event.metadata || {}
+          }
+        },
+        history: [],
+        templateSnapshot: {
+          id: event.templateId || event.taskType || 'onboarding',
+          version: '1.0.0',
+          metadata: {
+            name: event.title || 'Task',
+            description: 'Task execution'
+          },
+          goals: {
+            primary: [
+              { id: 'complete_task', description: 'Complete the task', required: true }
+            ],
+            secondary: []
+          },
+          phases: [
+            {
+              id: 'initialization',
+              name: 'Initialization',
+              description: 'Task setup',
+              requiredCapabilities: ['orchestrator'],
+              estimatedDurationMinutes: 1
+            },
+            {
+              id: 'execution',
+              name: 'Execution',
+              description: 'Execute task',
+              requiredCapabilities: ['execution'],
+              estimatedDurationMinutes: 10
+            },
+            {
+              id: 'completion',
+              name: 'Completion',
+              description: 'Complete task',
+              requiredCapabilities: ['orchestrator'],
+              estimatedDurationMinutes: 1
+            }
+          ]
+        }
+      };
+
+      // Record the orchestration initiation event
+      const dbService = this.dbService.getServiceClient();
+      const { error: eventError } = await dbService
+        .from('task_context_events')
+        .insert({
+          context_id: event.taskId, // Use task ID as context ID (it's already a UUID)
+          task_id: event.taskId,
+          operation: 'ORCHESTRATION_INITIATED',
+          actor_id: 'EventListener',
+          actor_type: 'system',
+          data: {
+            templateId: event.templateId,
+            taskType: event.taskType,
+            userId: event.userId
+          },
+          reasoning: 'Task created via Realtime event, initiating orchestration'
+        });
+
+      if (eventError) {
+        logger.error('Failed to record orchestration event', {
+          taskId: event.taskId,
+          error: eventError
+        });
+      }
+
+      logger.info('✅ Orchestration event recorded', {
+        taskId: event.taskId,
+        templateId: taskContext.taskTemplateId
+      });
+
+      // Start orchestration asynchronously
+      this.orchestrator.orchestrateTask(taskContext as any).catch(error => {
+        logger.error('Orchestration failed for task', {
+          taskId: event.taskId,
+          error: error.message
+        });
+      });
+
+      // Emit event to UnifiedEventBus for other subscribers
+      const eventBus = new UnifiedEventBus(event.taskId || '', event.taskId || '');
+      const taskEvent: Task = {
+        id: event.taskId || '',
+        status: 'running' as const,
+        result: {
+          type: 'task_orchestration_initiated',
+          originalTaskId: event.taskId,
+          userId: event.userId,
+          taskType: event.taskType,
+          templateId: event.templateId
+        }
+      };
+      
+      await eventBus.publish(taskEvent);
+
+      logger.info('🚀 Task orchestration initiated successfully', {
+        taskId: event.taskId
+      });
+
+    } catch (error) {
+      logger.error('Failed to handle task creation event', {
+        eventType: event.eventType,
+        taskId: event.taskId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  /**
    * Handle USER_REGISTERED event specifically
    */
   private async handleUserRegisteredEvent(event: SystemEvent): Promise<void> {
@@ -150,48 +349,148 @@ export class EventListener {
     });
 
     try {
-      // Create onboarding task using TaskService
-      const context = await this.taskService.create({
-        templateId: 'user_onboarding',
+      const taskId = uuidv4(); // Generate proper UUID
+      
+      // First create a task in the tasks table
+      const dbService = this.dbService.getServiceClient();
+      const { error: taskError } = await dbService
+        .from('tasks')
+        .insert({
+          id: taskId,
+          user_id: event.userId,
+          task_type: 'onboarding',
+          template_id: 'onboarding',
+          title: `Onboarding for ${event.email}`,
+          description: 'User onboarding workflow',
+          status: 'pending',
+          priority: 'high',
+          metadata: {
+            email: event.email,
+            source: 'oauth_registration'
+          }
+        });
+
+      if (taskError) {
+        logger.error('Failed to create onboarding task', {
+          userId: event.userId,
+          error: taskError
+        });
+        return;
+      }
+
+      // Create a simple TaskContext for orchestration
+      const taskContext = {
+        contextId: taskId,
+        taskTemplateId: 'onboarding',
         tenantId: event.userId || 'system',
-        userToken: '', // Service role will be used
-        initialData: {
-          userId: event.userId || '',
-          email: event.email || '',
-          firstName: event.firstName || '',
-          lastName: event.lastName || '',
-          contextId: event.contextId,
-          source: 'oauth_registration',
-          createdBy: 'system',
-          priority: 'high'
+        createdAt: new Date().toISOString(),
+        currentState: {
+          status: 'pending',
+          phase: 'initialization',
+          completeness: 0,
+          data: {
+            userId: event.userId || '',
+            email: event.email || '',
+            firstName: event.firstName || '',
+            lastName: event.lastName || ''
+          }
+        },
+        history: [],
+        templateSnapshot: {
+          id: 'onboarding',
+          version: '1.0.0',
+          metadata: {
+            name: 'Business Onboarding',
+            description: 'Complete business profile setup'
+          },
+          goals: {
+            primary: [
+              { id: 'verify_identity', description: 'Verify user identity', required: true },
+              { id: 'collect_business_info', description: 'Collect business information', required: true }
+            ],
+            secondary: []
+          },
+          phases: [
+            {
+              id: 'initialization',
+              name: 'Initialization',
+              description: 'Task setup and planning',
+              requiredCapabilities: ['orchestrator'],
+              estimatedDurationMinutes: 1
+            },
+            {
+              id: 'data_collection',
+              name: 'Data Collection',
+              description: 'Gather necessary information',
+              requiredCapabilities: ['data_collection'],
+              estimatedDurationMinutes: 5
+            },
+            {
+              id: 'verification',
+              name: 'Verification',
+              description: 'Verify collected data',
+              requiredCapabilities: ['verification'],
+              estimatedDurationMinutes: 2
+            },
+            {
+              id: 'completion',
+              name: 'Completion',
+              description: 'Finalize onboarding',
+              requiredCapabilities: ['orchestrator'],
+              estimatedDurationMinutes: 1
+            }
+          ]
         }
-      });
+      };
+
+      // Record the onboarding initiation event
+      const { error: eventError } = await dbService
+        .from('task_context_events')
+        .insert({
+          context_id: taskId, // Use task ID as context ID
+          task_id: taskId,
+          operation: 'ONBOARDING_INITIATED',
+          actor_id: 'EventListener',
+          actor_type: 'system',
+          data: {
+            userId: event.userId,
+            email: event.email
+          },
+          reasoning: 'New user registered, initiating onboarding workflow'
+        });
+
+      if (eventError) {
+        logger.error('Failed to record onboarding event', {
+          taskId,
+          error: eventError
+        });
+      }
 
       logger.info('Created onboarding task for new user', {
         userId: event.userId,
-        taskId: context.contextId,
-        templateId: context.taskTemplateId
+        taskId,
+        templateId: 'onboarding'
       });
 
       // Start orchestration asynchronously
-      this.orchestrator.orchestrateTask(context).catch(error => {
+      this.orchestrator.orchestrateTask(taskContext as any).catch(error => {
         logger.error('Orchestration failed for new user onboarding', {
-          contextId: context.contextId,
+          taskId,
           userId: event.userId,
           error: error.message
         });
       });
 
       // Emit task event to UnifiedEventBus for other subscribers
-      const eventBus = new UnifiedEventBus(context.contextId, context.contextId);
+      const eventBus = new UnifiedEventBus(taskId, taskId);
       const taskEvent: Task = {
-        id: context.contextId,
+        id: taskId,
         status: 'created',
         result: {
           type: 'onboarding_initiated',
           userId: event.userId,
           email: event.email,
-          templateId: 'user_onboarding'
+          templateId: 'onboarding'
         }
       };
       
