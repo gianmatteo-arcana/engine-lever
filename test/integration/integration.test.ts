@@ -122,46 +122,99 @@ describe('Service Integration Tests', () => {
       }
     });
 
-    test.skip('should cache loaded configurations', async () => {
-      // Create a test template file
+    test('should cache loaded configurations', async () => {
+      // Create a test template file with proper schema for DeclarativeTemplateParser
       const testTemplate = {
         task_template: {
           id: 'test_template',
-          version: '1.0',
-          metadata: {
-            name: 'Test Template',
-            description: 'Test template for integration testing',
-            category: 'test'
-          },
+          name: 'Test Template',
+          description: 'Test template for integration testing',
+          category: 'test',
+          priority: 'medium',
+          estimatedDuration: 30,
           goals: {
             primary: [
-              { id: 'test_goal', description: 'Test goal', required: true }
-            ]
+              { 
+                id: 'test_goal', 
+                description: 'Test goal', 
+                required: true,
+                successCriteria: ['Goal achieved']
+              }
+            ],
+            secondary: []
+          },
+          requiredInputs: {
+            minimal: ['test_input'],
+            recommended: [],
+            optional: []
+          },
+          completionCriteria: ['Test complete'],
+          phases: [
+            {
+              id: 'test_phase',
+              name: 'Test Phase',
+              description: 'A test phase',
+              estimatedMinutes: 10,
+              canRunInBackground: false
+            }
+          ],
+          metadata: {
+            version: '1.0'
           }
         }
       };
       
-      // Create template in src/templates/tasks directory where DeclarativeTemplateParser looks
+      // Create template in all possible locations to ensure it's found
+      const yaml = require('yaml');
+      const templateContent = yaml.stringify(testTemplate);
+      const templatePaths: string[] = [];
+      
+      // Location 1: config/templates
+      const configTemplatesDir = path.join(testConfigPath, 'templates');
+      if (!fs.existsSync(configTemplatesDir)) {
+        fs.mkdirSync(configTemplatesDir, { recursive: true });
+      }
+      const configTemplatePath = path.join(configTemplatesDir, 'test_template.yaml');
+      fs.writeFileSync(configTemplatePath, templateContent);
+      templatePaths.push(configTemplatePath);
+      
+      // Location 2: src/templates/tasks
       const srcTemplatesDir = path.join(__dirname, '../../src/templates/tasks');
       if (!fs.existsSync(srcTemplatesDir)) {
         fs.mkdirSync(srcTemplatesDir, { recursive: true });
       }
+      const srcTemplatePath = path.join(srcTemplatesDir, 'test_template.yaml');
+      fs.writeFileSync(srcTemplatePath, templateContent);
+      templatePaths.push(srcTemplatePath);
       
-      const templatePath = path.join(srcTemplatesDir, 'test_template.yaml');
-      const yaml = require('yaml');
-      fs.writeFileSync(templatePath, yaml.stringify(testTemplate));
+      // Location 3: process.cwd()/src/templates/tasks
+      const cwdTemplatesDir = path.join(process.cwd(), 'src', 'templates', 'tasks');
+      if (!fs.existsSync(cwdTemplatesDir)) {
+        fs.mkdirSync(cwdTemplatesDir, { recursive: true });
+      }
+      const cwdTemplatePath = path.join(cwdTemplatesDir, 'test_template.yaml');
+      fs.writeFileSync(cwdTemplatePath, templateContent);
+      templatePaths.push(cwdTemplatePath);
       
       try {
+        // Create a new ConfigurationManager with the test config path
+        const testConfigManager = new ConfigurationManager(testConfigPath);
+        
         // Load template twice
-        const template1 = await configManager.loadTemplate('test_template');
-        const template2 = await configManager.loadTemplate('test_template');
+        const template1 = await testConfigManager.loadTemplate('test_template');
+        const template2 = await testConfigManager.loadTemplate('test_template');
         
         // Should be the same cached instance
         expect(template1).toBe(template2);
+        expect(template1.id).toBe('test_template');
+        expect(template1.version).toBe('1.0.0'); // DeclarativeParser sets version to '1.0.0'
+        expect(template1.metadata.name).toBe('Test Template');
       } finally {
-        // Clean up
-        if (fs.existsSync(templatePath)) {
-          fs.unlinkSync(templatePath);
+        // Clean up all created files
+        for (const templatePath of templatePaths) {
+          if (fs.existsSync(templatePath)) {
+            fs.unlinkSync(templatePath);
+          }
         }
       }
     });

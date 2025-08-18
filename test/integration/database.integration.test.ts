@@ -34,14 +34,14 @@ const mockChain = {
 };
 
 // Create mock client with from() that returns the chain
-const mockChain: any = {
+const mockSupabaseClient: any = {
   from: jest.fn(() => mockChain),
   auth: mockAuth
 };
 
 // Mock must be set up before importing DatabaseService
 jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => mockChain)
+  createClient: jest.fn(() => mockSupabaseClient)
 }));
 
 // Import after mock is set up
@@ -55,6 +55,26 @@ describe('Database Integration Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     console.log(`Using test user ID: ${testUserId}`);
+    
+    // Reset all mock functions to return 'this' for chaining
+    mockChain.select.mockReturnThis();
+    mockChain.insert.mockReturnThis();
+    mockChain.update.mockReturnThis();
+    mockChain.upsert.mockReturnThis();
+    mockChain.eq.mockReturnThis();
+    mockChain.order.mockReturnThis();
+    mockChain.limit.mockReturnThis();
+    mockChain.gte.mockReturnThis();
+    mockChain.lte.mockReturnThis();
+    mockChain.in.mockReturnThis();
+    mockChain.contains.mockReturnThis();
+    mockChain.containedBy.mockReturnThis();
+    mockChain.range.mockReturnThis();
+    mockChain.filter.mockReturnThis();
+    mockChain.single.mockResolvedValue({ data: null, error: null });
+    mockChain.then = jest.fn((resolve) => {
+      resolve({ data: [], error: null });
+    });
     
     process.env.SUPABASE_URL = 'https://test.supabase.co';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
@@ -141,49 +161,51 @@ describe('Database Integration Tests', () => {
       expect(readTask).toBeDefined();
       expect(readTask?.id).toBe('ctx-123');
       
-      // Mock update (via event)
-      mockChain.single.mockResolvedValueOnce({
-        data: { id: 'event-123', sequence_number: 1 },
-        error: null
-      });
-      
       // Mock for getTask (called by updateTask)
-      mockSupabaseClient.from.mockReturnValueOnce({
-        select: jest.fn().mockReturnValueOnce({
-          eq: jest.fn().mockReturnValueOnce({
-            eq: jest.fn().mockReturnValueOnce({
-              single: jest.fn().mockResolvedValueOnce({
-                data: {
-                  id: 'ctx-123',
-                  user_id: 'test-user-123',
-                  business_id: 'biz-123',
-                  status: 'pending',
-                  template_id: 'test',
-                  metadata: { title: 'Test Task' },
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                },
-                error: null
-              })
-            })
-          })
-        })
-      });
-      
-      // Mock for the actual update
       mockChain.single.mockResolvedValueOnce({
         data: {
           id: 'ctx-123',
           user_id: 'test-user-123',
           business_id: 'biz-123',
-          status: 'completed',  // Add status field for tasks table
-          current_state: { status: 'completed', phase: 'done', completeness: 100, data: {} },
+          status: 'pending',
           template_id: 'test',
           metadata: { title: 'Test Task' },
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         },
         error: null
+      });
+      
+      // Mock for task_context_events insert
+      mockChain.insert.mockReturnValueOnce({
+        select: jest.fn().mockReturnValueOnce({
+          single: jest.fn().mockResolvedValueOnce({
+            data: { id: 'event-123', sequence_number: 1 },
+            error: null
+          })
+        })
+      });
+      
+      // Mock for the second getTask call (after update) - returns updated task
+      mockChain.select.mockReturnValueOnce({
+        eq: jest.fn().mockReturnValueOnce({
+          eq: jest.fn().mockReturnValueOnce({
+            single: jest.fn().mockResolvedValueOnce({
+              data: {
+                id: 'ctx-123',
+                user_id: 'test-user-123',
+                business_id: 'biz-123',
+                status: 'completed',  // Updated status
+                template_id: 'test',
+                current_state: { status: 'completed', phase: 'done', completeness: 100, data: {} },
+                metadata: { title: 'Test Task' },
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              },
+              error: null
+            })
+          })
+        })
       });
       
       const updated = await dbService.updateTask(mockUserToken, 'ctx-123', {
@@ -229,9 +251,15 @@ describe('Database Integration Tests', () => {
       jest.clearAllMocks();
       
       // Mock getTask to return null (task not found)
-      mockChain.single.mockResolvedValueOnce({
-        data: null,
-        error: { code: 'PGRST116', message: 'Row not found' }
+      mockChain.select.mockReturnValueOnce({
+        eq: jest.fn().mockReturnValueOnce({
+          eq: jest.fn().mockReturnValueOnce({
+            single: jest.fn().mockResolvedValueOnce({
+              data: null,
+              error: { code: 'PGRST116', message: 'Row not found' }
+            })
+          })
+        })
       });
       
       const task = await dbService.getTask(mockUserToken, 'non-existent');
@@ -241,43 +269,39 @@ describe('Database Integration Tests', () => {
 
   describe('Task Execution Operations', () => {
     it('should create system execution', async () => {
-      // First mock - for getting the task
-      mockSupabaseClient.from.mockReturnValueOnce({
-        select: jest.fn().mockReturnValueOnce({
+      // Mock for getting the task
+      mockChain.select.mockReturnValueOnce({
+        eq: jest.fn().mockReturnValueOnce({
           eq: jest.fn().mockReturnValueOnce({
-            eq: jest.fn().mockReturnValueOnce({
-              single: jest.fn().mockResolvedValueOnce({
-                data: {
-                  id: 'ctx-123',
-                  user_id: 'system',
-                  status: 'pending'
-                },
-                error: null
-              })
+            single: jest.fn().mockResolvedValueOnce({
+              data: {
+                id: 'ctx-123',
+                user_id: 'system',
+                status: 'pending'
+              },
+              error: null
             })
           })
         })
       });
       
-      // Second mock - for task_context_events table
-      mockSupabaseClient.from.mockReturnValueOnce({
-        insert: jest.fn().mockReturnValueOnce({
-          select: jest.fn().mockReturnValueOnce({
-            single: jest.fn().mockResolvedValueOnce({
-              data: { 
-                id: 'event-123', 
-                context_id: 'ctx-123',
-                sequence_number: 1,
-                operation: 'start',
-                actor: 'system',
-                metadata: {
-                  execution_id: 'exec-123',
-                  status: 'running'
-                },
-                created_at: new Date().toISOString()
+      // Mock for task_context_events insert
+      mockChain.insert.mockReturnValueOnce({
+        select: jest.fn().mockReturnValueOnce({
+          single: jest.fn().mockResolvedValueOnce({
+            data: { 
+              id: 'event-123', 
+              context_id: 'ctx-123',
+              sequence_number: 1,
+              operation: 'start',
+              actor: 'system',
+              metadata: {
+                execution_id: 'exec-123',
+                status: 'running'
               },
-              error: null
-            })
+              created_at: new Date().toISOString()
+            },
+            error: null
           })
         })
       });
@@ -304,9 +328,14 @@ describe('Database Integration Tests', () => {
 
   describe('Agent Message Operations', () => {
     it('should save system message', async () => {
-      mockChain.single.mockResolvedValueOnce({
-        data: { id: 'audit-123' },
-        error: null
+      // Mock for audit_logs table insert
+      mockChain.insert.mockReturnValueOnce({
+        select: jest.fn().mockReturnValueOnce({
+          single: jest.fn().mockResolvedValueOnce({
+            data: { id: 'audit-123' },
+            error: null
+          })
+        })
       });
       
       await expect(dbService.saveSystemMessage({
@@ -323,9 +352,14 @@ describe('Database Integration Tests', () => {
 
   describe('Audit Operations', () => {
     it('should create system audit entry', async () => {
-      mockChain.single.mockResolvedValueOnce({
-        data: { id: 'audit-123' },
-        error: null
+      // Mock for audit_logs table insert
+      mockChain.insert.mockReturnValueOnce({
+        select: jest.fn().mockReturnValueOnce({
+          single: jest.fn().mockResolvedValueOnce({
+            data: { id: 'audit-123' },
+            error: null
+          })
+        })
       });
       
       await expect(dbService.createSystemAuditEntry({
