@@ -76,6 +76,8 @@ import {
   BaseAgentResponse,
   ContextEntry
 } from '../../types/base-agent-types';
+import { TaskContext } from '../../types/engine-types';
+import { DatabaseService } from '../../services/database';
 import { logger } from '../../utils/logger';
 import {
   AgentExecutor,
@@ -493,6 +495,7 @@ Remember: You are an autonomous agent following the universal principles while a
       trigger: {
         type: 'orchestrator_request',
         source: 'orchestrator',
+        details: { requestId: request.parameters?.requestId },
         requestId: request.parameters?.requestId
       }
     };
@@ -574,18 +577,140 @@ Remember: You are an autonomous agent following the universal principles while a
   
   /**
    * Get agent capabilities from specialized config
+   * Enhanced with A2A protocol discovery information
    */
   getCapabilities(): any {
+    const agent = this.specializedTemplate.agent;
+    const a2a = agent.a2a || {};
+    
     return {
-      id: this.specializedTemplate.agent.id,
-      name: this.specializedTemplate.agent.name,
-      role: this.specializedTemplate.agent.role,
-      skills: this.specializedTemplate.agent.agent_card.skills,
-      specializations: this.specializedTemplate.agent.agent_card.specializations,
-      version: this.specializedTemplate.agent.version,
-      extends: this.specializedTemplate.agent.extends || 'base_agent'
+      // Basic agent information
+      id: agent.id,
+      name: agent.name,
+      role: agent.role,
+      version: agent.version,
+      extends: agent.extends || 'base_agent',
+      
+      // Skills and specializations
+      skills: agent.agent_card?.skills || [],
+      specializations: agent.agent_card?.specializations || [],
+      
+      // A2A Protocol capabilities
+      a2a: {
+        protocolVersion: a2a.protocolVersion || '1.0.0',
+        communicationMode: a2a.communicationMode || 'async',
+        messageFormats: a2a.messageFormats || ['json'],
+        routing: {
+          canReceiveFrom: a2a.routing?.canReceiveFrom || [],
+          canSendTo: a2a.routing?.canSendTo || []
+        },
+        messageHandling: a2a.messageHandling || {
+          bufferSize: 50,
+          timeoutMs: 30000,
+          retryEnabled: true
+        }
+      },
+      
+      // Operations this agent can perform
+      operations: Object.keys(this.specializedTemplate.operations || {}),
+      
+      // Current availability status
+      availability: this.getAvailabilityStatus()
     };
   }
+  
+  /**
+   * Get A2A protocol routing information
+   * Allows other agents to discover communication capabilities
+   * 
+   * ## How A2A Routing Works:
+   * 
+   * The A2A (Agent-to-Agent) protocol defines which agents can communicate
+   * with each other through explicit routing rules in their YAML configs.
+   * 
+   * ### Routing Configuration:
+   * Each agent's YAML file contains an `a2a.routing` section that defines:
+   * - `canReceiveFrom`: List of agent IDs that can send messages to this agent
+   * - `canSendTo`: List of agent IDs this agent can send messages to
+   * 
+   * ### Example YAML Configuration:
+   * ```yaml
+   * agent:
+   *   id: business_discovery
+   *   a2a:
+   *     routing:
+   *       canReceiveFrom: 
+   *         - orchestrator
+   *         - profile_collector
+   *       canSendTo:
+   *         - data_enrichment_agent
+   *         - entity_compliance_agent
+   * ```
+   * 
+   * ### Communication Flow Example:
+   * 1. OrchestratorAgent wants to send task to BusinessDiscoveryAgent
+   * 2. Orchestrator calls: `canCommunicateWith('business_discovery')` → true
+   * 3. BusinessDiscovery calls: `canReceiveFrom('orchestrator')` → true
+   * 4. Message is allowed and processed
+   * 
+   * ### Routing Table Visualization:
+   * ```
+   * orchestrator ──────► business_discovery ──────► data_enrichment
+   *      │                      │                         │
+   *      ▼                      ▼                         ▼
+   * profile_collector    entity_compliance       task_coordinator
+   * ```
+   * 
+   * @returns Object with arrays of agent IDs for inbound and outbound routing
+   */
+  getA2ARouting(): { canReceiveFrom: string[], canSendTo: string[] } {
+    const a2a = this.specializedTemplate.agent.a2a || {};
+    
+    // Start with static routing from YAML config
+    let canReceiveFrom = a2a.routing?.canReceiveFrom || [];
+    let canSendTo = a2a.routing?.canSendTo || [];
+    
+    // ARCHITECTURAL DECISION: Dynamic routing for orchestrator
+    // Only the OrchestratorAgent should be able to send to ALL agents
+    // This prevents chaotic inter-agent communication while allowing
+    // the orchestrator to coordinate all agents dynamically
+    if (this.specializedTemplate.agent.id === 'orchestrator') {
+      // Orchestrator can send to any agent discovered in the system
+      // This will be populated dynamically by AgentManager
+      canSendTo = ['*']; // Special value meaning "all agents"
+    }
+    
+    // All agents can receive from orchestrator by default
+    // This ensures new agents are automatically reachable
+    if (!canReceiveFrom.includes('orchestrator')) {
+      canReceiveFrom.push('orchestrator');
+    }
+    
+    return {
+      canReceiveFrom,
+      canSendTo
+    };
+  }
+  
+  
+  /**
+   * Check if this agent can receive from another agent
+   */
+  canReceiveFrom(sourceAgentId: string): boolean {
+    const routing = this.getA2ARouting();
+    return routing.canReceiveFrom.includes(sourceAgentId);
+  }
+  
+  /**
+   * Get agent's availability status
+   * Can be overridden by subclasses for dynamic status
+   */
+  protected getAvailabilityStatus(): 'available' | 'busy' | 'offline' {
+    // Default implementation - always available
+    // Subclasses can override for more sophisticated status
+    return 'available';
+  }
+  
   
   /**
    * Get merged configuration for debugging
@@ -821,6 +946,404 @@ Remember: You are an autonomous agent following the universal principles while a
   protected cleanupTask(taskId: string): void {
     // Default implementation - subclasses can override
     logger.debug('Cleaning up task resources', { taskId });
+  }
+
+  /**
+   * Record entry in task context using SSE broadcasting
+   * CRITICAL: No in-memory state - database is single source of truth
+   * 
+   * This broadcasts events on the SSE message bus for loose coupling.
+   * All agents subscribe to the task-centered message bus and react to events.
+   * 
+   * @param context - The task context to update
+   * @param entry - Partial context entry (will be completed with defaults)
+   * @protected - Available to all child agents
+   */
+  protected async recordContextEntry(
+    context: TaskContext,
+    entry: Partial<ContextEntry>
+  ): Promise<void> {
+    const fullEntry: ContextEntry = {
+      entryId: `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      sequenceNumber: 0, // Will be determined by database sequence
+      actor: {
+        type: 'agent',
+        id: this.specializedTemplate.agent.id,
+        version: this.specializedTemplate.agent.version
+      },
+      operation: entry.operation || 'agent_operation',
+      data: entry.data || {},
+      reasoning: entry.reasoning || `Operation by ${this.specializedTemplate.agent.name}`,
+      confidence: entry.confidence || 0.8,
+      trigger: entry.trigger || {
+        type: 'orchestrator_request',
+        source: 'orchestrator',
+        details: { requestId: `req_${Date.now()}` },
+        requestId: `req_${Date.now()}`
+      },
+      ...entry
+    };
+    
+    // NO IN-MEMORY STORAGE - Database is the single source of truth
+    // Events are broadcast via SSE for loose coupling
+    
+    // CRITICAL: Persist to database for durability
+    // Using the unified task_context_events table (event sourcing architecture)
+    try {
+      const dbService = DatabaseService.getInstance();
+      
+      // In the TaskContext, the contextId IS the taskId
+      // This is part of the universal engine architecture
+      const taskId = context.contextId;
+      
+      // Use the agent's userId if available, otherwise fall back to system
+      const userId = this.userId || context.tenantId || 'system';
+      
+      await dbService.createTaskContextEvent(userId, taskId, {
+        contextId: context.contextId,
+        actorType: fullEntry.actor.type,
+        actorId: fullEntry.actor.id,
+        operation: fullEntry.operation,
+        data: fullEntry.data,
+        reasoning: fullEntry.reasoning || '',
+        trigger: { 
+          source: this.specializedTemplate.agent.id, 
+          timestamp: fullEntry.timestamp 
+        }
+      });
+      
+      // Broadcast event on SSE message bus for loose coupling
+      // All agents listening to this task will receive the update
+      await this.broadcastTaskEvent(taskId, {
+        type: 'TASK_CONTEXT_UPDATE',
+        taskId,
+        agentId: this.specializedTemplate.agent.id,
+        operation: fullEntry.operation,
+        data: fullEntry.data,
+        timestamp: fullEntry.timestamp
+      });
+      
+      logger.debug('Context entry persisted and broadcast via SSE', {
+        agentId: this.specializedTemplate.agent.id,
+        contextId: context.contextId,
+        operation: fullEntry.operation
+      });
+    } catch (error) {
+      logger.error('Failed to persist/broadcast context entry', {
+        agentId: this.specializedTemplate.agent.id,
+        contextId: context.contextId,
+        operation: fullEntry.operation,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Throw error - without persistence/broadcast, the system cannot function
+      // But this should be monitored and handled via retry mechanism
+    }
+  }
+
+  /**
+   * =============================================================================
+   * SSE MESSAGE BUS - LOOSE COUPLING & EVENT-DRIVEN COMMUNICATION
+   * =============================================================================
+   * 
+   * These methods implement SSE-based messaging for loose coupling between agents.
+   * Agents subscribe to task-centered message buses and react to events.
+   * Database is the single source of truth, SSE provides real-time updates.
+   */
+
+  /**
+   * Broadcast a task event via SSE for loose coupling
+   * All agents subscribed to this task will receive the update
+   * 
+   * @param taskId - The task to broadcast to
+   * @param event - The event to broadcast
+   * @protected
+   */
+  protected async broadcastTaskEvent(taskId: string, event: any): Promise<void> {
+    try {
+      const dbService = DatabaseService.getInstance();
+      // Use PostgreSQL NOTIFY to broadcast to all SSE subscribers
+      await dbService.notifyTaskContextUpdate(taskId, event.type || 'AGENT_UPDATE', event);
+      
+      logger.debug('Task event broadcast via SSE', {
+        agentId: this.specializedTemplate.agent.id,
+        taskId,
+        eventType: event.type
+      });
+    } catch (error) {
+      logger.error('Failed to broadcast task event', {
+        agentId: this.specializedTemplate.agent.id,
+        taskId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Subscribe to task events via SSE
+   * Agents use this to listen for updates and determine if they can proceed
+   * 
+   * TODO: Implement SSE reconnection scenarios
+   *   - Handle connection drops and automatic reconnection
+   *   - Implement exponential backoff for reconnection attempts
+   *   - Queue missed events during disconnection
+   *   - Add connection health monitoring
+   * 
+   * TODO: Add database failure recovery
+   *   - Implement circuit breaker pattern for database operations
+   *   - Add retry logic with configurable attempts
+   *   - Fallback to cached data when database is unavailable
+   *   - Log and alert on persistent failures
+   * 
+   * @param taskId - The task to subscribe to
+   * @param handler - The event handler
+   * @protected
+   */
+  protected async subscribeToTaskEvents(
+    taskId: string,
+    handler: (event: any) => Promise<void>
+  ): Promise<() => void> {
+    const dbService = DatabaseService.getInstance();
+    
+    // Subscribe to PostgreSQL LISTEN/NOTIFY for this task
+    const unsubscribe = await dbService.listenForTaskUpdates(taskId, async (payload) => {
+      try {
+        // Analyze if this event affects this agent's work
+        if (this.shouldHandleEvent(payload)) {
+          await handler(payload);
+        }
+      } catch (error) {
+        logger.error('Error handling task event', {
+          agentId: this.specializedTemplate.agent.id,
+          taskId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    });
+    
+    logger.info('Agent subscribed to task events', {
+      agentId: this.specializedTemplate.agent.id,
+      taskId
+    });
+    
+    return unsubscribe;
+  }
+
+  /**
+   * Determine if this agent should handle an event
+   * Agents analyze each update to determine if they can proceed
+   * 
+   * @param event - The event to analyze
+   * @returns true if this agent should handle the event
+   * @protected
+   */
+  protected shouldHandleEvent(event: any): boolean {
+    // Base implementation - agents can override for specific logic
+    // Check if event is relevant to this agent's current work
+    return event.data?.targetAgentId === this.specializedTemplate.agent.id ||
+           event.type === 'ORCHESTRATOR_COMMAND' ||
+           event.type === 'TASK_BLOCKED' ||
+           event.type === 'DEPENDENCY_RESOLVED';
+  }
+
+  /**
+   * Announce that this agent is blocked and needs something
+   * Other agents listen for these announcements to provide help
+   * 
+   * @param taskId - The task context
+   * @param blockage - Description of what's blocking
+   * @protected
+   */
+  protected async announceBlockage(taskId: string, blockage: {
+    reason: string;
+    needs: string[];
+    data?: any;
+  }): Promise<void> {
+    await this.broadcastTaskEvent(taskId, {
+      type: 'AGENT_BLOCKED',
+      agentId: this.specializedTemplate.agent.id,
+      blockage,
+      timestamp: new Date().toISOString()
+    });
+    
+    logger.info('Agent announced blockage', {
+      agentId: this.specializedTemplate.agent.id,
+      taskId,
+      reason: blockage.reason
+    });
+  }
+
+  /**
+   * Announce that this agent has completed its work
+   * 
+   * @param taskId - The task context
+   * @param result - The work product
+   * @protected
+   */
+  protected async announceCompletion(taskId: string, result: any): Promise<void> {
+    await this.broadcastTaskEvent(taskId, {
+      type: 'AGENT_COMPLETED',
+      agentId: this.specializedTemplate.agent.id,
+      result,
+      timestamp: new Date().toISOString()
+    });
+    
+    logger.info('Agent announced completion', {
+      agentId: this.specializedTemplate.agent.id,
+      taskId
+    });
+  }
+
+  /**
+   * =============================================================================
+   * PURE A2A MESSAGING - DIRECT AGENT COMMUNICATION
+   * =============================================================================
+   * 
+   * These methods allow agents to communicate directly using the A2A protocol
+   * without needing a central AgentManager. Each agent can discover and 
+   * communicate with other agents autonomously.
+   */
+
+  /**
+   * Send a message to another agent using A2A protocol
+   */
+  protected async sendA2AMessage(toAgentId: string, message: any): Promise<any> {
+    try {
+      // Get orchestrator instance for A2A messaging
+      const { OrchestratorAgent } = await import('../OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      // Use orchestrator's A2A messaging system
+      return await orchestrator.routeA2AMessage(
+        this.specializedTemplate.agent.id,
+        toAgentId,
+        message
+      );
+    } catch (error) {
+      logger.error(`Failed to send A2A message to ${toAgentId}`, {
+        fromAgent: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Handle incoming A2A messages (override in subclasses for specific behavior)
+   */
+  public async handleMessage(fromAgentId: string, message: any): Promise<any> {
+    logger.info(`Agent ${this.specializedTemplate.agent.id} received A2A message from ${fromAgentId}`, {
+      messageType: message.type || 'unknown',
+      hasData: !!message.data
+    });
+    
+    // Default implementation - just acknowledge
+    return {
+      status: 'acknowledged',
+      agentId: this.specializedTemplate.agent.id,
+      receivedFrom: fromAgentId,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  /**
+   * Discover peer agents using A2A protocol
+   */
+  protected async discoverPeerAgents(): Promise<any[]> {
+    try {
+      const { OrchestratorAgent } = await import('../OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      return await orchestrator.getDiscoveredCapabilities();
+    } catch (error) {
+      logger.error('Failed to discover peer agents', {
+        agentId: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Find agents by skill using A2A discovery
+   */
+  protected async findAgentsBySkill(skill: string): Promise<any[]> {
+    try {
+      const { OrchestratorAgent } = await import('../OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      return await orchestrator.findAgentsBySkill(skill);
+    } catch (error) {
+      logger.error(`Failed to find agents by skill: ${skill}`, {
+        agentId: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Check if this agent can communicate with another agent
+   */
+  protected async canCommunicateWith(toAgentId: string): Promise<boolean> {
+    try {
+      const { OrchestratorAgent } = await import('../OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      return await orchestrator.canAgentsCommunicate(
+        this.specializedTemplate.agent.id,
+        toAgentId
+      );
+    } catch (error) {
+      logger.error(`Failed to check communication permissions with ${toAgentId}`, {
+        agentId: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Get routing information for this agent
+   */
+  protected async getMyRouting(): Promise<{ canReceiveFrom: string[], canSendTo: string[] } | undefined> {
+    try {
+      const { OrchestratorAgent } = await import('../OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      return await orchestrator.getAgentRouting(this.specializedTemplate.agent.id);
+    } catch (error) {
+      logger.error('Failed to get routing information', {
+        agentId: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return undefined;
+    }
+  }
+
+  /**
+   * Request another agent to be created for a task via DI
+   * The agent will be subscribed to the task's message bus
+   */
+  protected async requestAgentSpawn(agentId: string, taskId?: string): Promise<any> {
+    try {
+      const { OrchestratorAgent } = await import('../OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      // Use task ID if provided, otherwise use a system channel
+      const channel = taskId || 'system';
+      
+      // Create agent via DI and subscribe to task message bus
+      return await orchestrator.createAgentForTask(agentId, channel);
+    } catch (error) {
+      logger.error(`Failed to request agent for task: ${agentId}`, {
+        requestingAgent: this.specializedTemplate.agent.id,
+        taskId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
   }
 
 }

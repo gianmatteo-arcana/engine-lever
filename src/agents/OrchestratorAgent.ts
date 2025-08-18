@@ -26,7 +26,6 @@ import { logger } from '../utils/logger';
 import {
   TaskContext,
   TaskTemplate,
-  ContextEntry,
   ExecutionPlan,
   ExecutionPhase,
   AgentRequest,
@@ -86,6 +85,11 @@ export class OrchestratorAgent extends BaseAgent {
   private agentRegistry: Map<string, AgentCapability>;
   private activeExecutions: Map<string, ExecutionPlan>;
   private pendingUIRequests: Map<string, UIRequest[]>;
+  
+  // Pure A2A System - Agent Lifecycle Management via DI
+  // NO AGENT INSTANCES STORED - Using DI and task-centered message bus
+  private agentCapabilities: Map<string, any> = new Map();
+  private activeTaskSubscriptions: Map<string, Set<string>> = new Map(); // taskId -> Set of agentIds
   
   private constructor() {
     try {
@@ -910,40 +914,423 @@ export class OrchestratorAgent extends BaseAgent {
     return null;
   }
   
+  // recordContextEntry method moved to BaseAgent as protected method
+  // Now all agents including OrchestratorAgent can use this.recordContextEntry()
+  
   /**
-   * Record entry in task context
+   * =============================================================================
+   * PURE A2A SYSTEM - AGENT LIFECYCLE MANAGEMENT
+   * =============================================================================
+   * 
+   * These methods replace AgentManager functionality with pure A2A approach.
+   * OrchestratorAgent now manages the entire agent ecosystem.
    */
-  private async recordContextEntry(
-    context: TaskContext,
-    entry: Partial<ContextEntry>
-  ): Promise<void> {
-    const fullEntry: ContextEntry = {
-      entryId: `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      sequenceNumber: context.history.length + 1,
-      actor: {
-        type: 'agent',
-        id: 'orchestrator_agent',
-        version: this.config.version
-      },
-      operation: entry.operation || 'orchestration',
-      data: entry.data || {},
-      reasoning: entry.reasoning || 'Orchestration decision',
-      ...entry
-    };
+  
+  /**
+   * Initialize the entire agent system using A2A discovery
+   */
+  public async initializeAgentSystem(): Promise<void> {
+    logger.info('🚀 Initializing Pure A2A Agent System');
     
-    // Append to history (append-only)
-    context.history.push(fullEntry);
-    
-    // Persist to database
     try {
-      await this.getDBService().createContextHistoryEntry(context.contextId, fullEntry);
+      // Import agentDiscovery service
+      const { agentDiscovery } = await import('../services/agent-discovery');
+      
+      // Discover all agents from YAML configurations
+      logger.info('🔍 Discovering agents from YAML configurations...');
+      this.agentCapabilities = await agentDiscovery.discoverAgents();
+      
+      // Log discovered capabilities
+      logger.info('📊 Agent Capabilities Discovered:', {
+        count: this.agentCapabilities.size,
+        agents: Array.from(this.agentCapabilities.keys())
+      });
+      
+      // Print capability report for debugging
+      const capabilityReport = agentDiscovery.generateCapabilityReport();
+      logger.info('\n' + capabilityReport);
+      
+      logger.info('✅ Pure A2A Agent System initialized successfully');
     } catch (error) {
-      logger.error('Failed to persist context entry', {
-        contextId: context.contextId,
-        error: (error as Error).message
+      logger.error('💥 Failed to initialize A2A Agent System', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Configure agents for execution plan via DI and SSE subscription
+   * 
+   * This method creates agents via DI and subscribes them to the task message bus.
+   * Agents remain active, listening for updates and working autonomously.
+   * 
+   * @param plan - The execution plan with agent requirements
+   * @param taskId - The task ID for the message bus
+   */
+  private async configureAgentsForExecution(plan: ExecutionPlan, taskId: string): Promise<void> {
+    // Extract all unique agents from all phases
+    const requiredAgents = new Set<string>();
+    for (const phase of plan.phases) {
+      phase.agents.forEach(agent => requiredAgents.add(agent));
+    }
+    
+    logger.info('Configuring agents for execution plan', {
+      taskId,
+      requiredAgents: Array.from(requiredAgents),
+      phaseCount: plan.phases.length
+    });
+    
+    // Track which agents are subscribed to this task
+    const subscribedAgents = new Set<string>();
+    
+    for (const agentId of requiredAgents) {
+      try {
+        // Create agent via DI and configure for task
+        await this.createAgentForTask(agentId, taskId);
+        subscribedAgents.add(agentId);
+        
+        logger.info(`Agent ${agentId} configured for task ${taskId}`);
+      } catch (error) {
+        logger.error(`Failed to configure agent ${agentId}`, error);
+        // Continue with other agents even if one fails
+      }
+    }
+    
+    // Store subscription tracking
+    this.activeTaskSubscriptions.set(taskId, subscribedAgents);
+    
+    // Broadcast execution plan to all subscribed agents
+    await this.broadcastTaskEvent(taskId, {
+      type: 'EXECUTION_PLAN',
+      plan: {
+        taskId,
+        phases: plan.phases,
+        requiredAgents: Array.from(subscribedAgents),
+        coordinator: 'orchestrator_agent'
+      },
+      timestamp: new Date().toISOString()
+    });
+    
+    logger.info('All agents configured and execution plan broadcast', {
+      taskId,
+      subscribedCount: subscribedAgents.size
+    });
+  }
+  
+  /**
+   * Create agent instance via Dependency Injection and configure for task
+   * 
+   * CRITICAL: Agents are NOT stored - they're created per-task and configured
+   * to subscribe to the task-centered message bus. Agents remain active listening
+   * for updates and analyze each event to determine if they can proceed.
+   * 
+   * @param agentId - The agent type to create
+   * @param taskId - The task to subscribe the agent to
+   * @returns The configured agent instance
+   */
+  public async createAgentForTask(agentId: string, taskId: string): Promise<any> {
+    try {
+      logger.info(`🤖 Creating agent via DI: ${agentId} for task: ${taskId}`);
+      
+      // Use Dependency Injection Container directly
+      const { DIContainer } = await import('../services/dependency-injection');
+      
+      // Check if agent is registered in DI
+      if (DIContainer.isAgentRegistered(agentId)) {
+        // Create agent with SSE subscriptions already configured
+        const agent = await DIContainer.resolveAgent(agentId, taskId);
+        
+        // Track active subscription
+        if (!this.activeTaskSubscriptions.has(taskId)) {
+          this.activeTaskSubscriptions.set(taskId, new Set());
+        }
+        this.activeTaskSubscriptions.get(taskId)!.add(agentId);
+        
+        logger.info(`✅ Agent created via DI and subscribed to task: ${agentId}`);
+        return agent;
+      } else {
+        // Fallback to agentDiscovery if not in DI container
+        const { agentDiscovery } = await import('../services/agent-discovery');
+        const agent = await agentDiscovery.instantiateAgent(agentId, taskId);
+        
+        // Configure agent to subscribe to task message bus
+        await this.configureAgentForTask(agent, taskId);
+        return agent;
+      }
+    
+    } catch (error) {
+      logger.error(`❌ Failed to create agent: ${agentId}`, {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  }
+  
+  /**
+   * Configure an agent to subscribe to task-centered message bus
+   * 
+   * The agent will listen for events and analyze each update to determine
+   * if it can continue its work, is blocked, or has completed.
+   * 
+   * @param agent - The agent instance to configure
+   * @param taskId - The task to subscribe to
+   */
+  private async configureAgentForTask(agent: any, taskId: string): Promise<void> {
+    // Subscribe agent to task events via SSE
+    if (agent && typeof agent.subscribeToTaskEvents === 'function') {
+      await agent.subscribeToTaskEvents(taskId, async (event: any) => {
+        // Agent analyzes event to determine if it can proceed
+        logger.debug('Agent received task event', {
+          agentId: agent.specializedTemplate?.agent?.id || 'unknown',
+          taskId,
+          eventType: event.type
+        });
+        
+        // Agent's internal logic will handle the event
+        // It may announce completion, blockage, or continue working
+      });
+      
+      logger.info('Agent subscribed to task message bus', {
+        agentId: agent.specializedTemplate?.agent?.id || 'unknown',
+        taskId
       });
     }
+  }
+  
+  /**
+   * Route A2A message via SSE broadcast
+   * 
+   * Instead of direct agent-to-agent calls, messages are broadcast
+   * on the task message bus for loose coupling. Target agents listening
+   * on the bus will receive and process the message.
+   */
+  public async routeA2AMessage(fromAgentId: string, toAgentId: string, message: any, taskId?: string): Promise<any> {
+    try {
+      // Validate communication permissions using A2A protocol
+      const { agentDiscovery } = await import('../services/agent-discovery');
+      
+      if (!agentDiscovery.canCommunicate(fromAgentId, toAgentId)) {
+        throw new Error(`A2A communication not allowed: ${fromAgentId} -> ${toAgentId}`);
+      }
+      
+      // Broadcast message on SSE for target agent
+      // If no taskId provided, use a system-wide channel
+      const channel = taskId || 'system';
+      
+      await this.broadcastTaskEvent(channel, {
+        type: 'A2A_MESSAGE',
+        from: fromAgentId,
+        to: toAgentId,
+        message,
+        timestamp: new Date().toISOString()
+      });
+      
+      logger.debug(`A2A message broadcast: ${fromAgentId} -> ${toAgentId}`, {
+        channel,
+        messageType: message.type
+      });
+      
+      return { 
+        status: 'message_broadcast', 
+        from: fromAgentId,
+        to: toAgentId,
+        channel 
+      };
+    } catch (error) {
+      logger.error(`Failed A2A message: ${fromAgentId} -> ${toAgentId}`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Create task using pure A2A system
+   */
+  public async createTask(taskRequest: any): Promise<string> {
+    const taskContext = {
+      contextId: `ctx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      taskTemplateId: taskRequest.templateId,
+      tenantId: taskRequest.userId,
+      createdAt: new Date().toISOString(),
+      currentState: {
+        status: 'pending',
+        phase: 'initialization',
+        completeness: 0,
+        data: {}
+      },
+      history: [],
+      templateSnapshot: {},
+      metadata: taskRequest.metadata || {}
+    };
+
+    logger.info('Creating task with Pure A2A system', {
+      contextId: taskContext.contextId,
+      templateId: taskContext.taskTemplateId
+    });
+
+    // Save task to database if userId provided
+    if (taskRequest.userId) {
+      const db = this.getDBService();
+      await db.createTask(taskRequest.userId, {
+        id: taskContext.contextId,
+        user_id: taskRequest.userId,
+        title: `${taskRequest.templateId} Task`,
+        description: `Task for ${taskRequest.businessId}`,
+        task_type: taskRequest.templateId || 'general',
+        business_id: taskRequest.businessId,
+        template_id: taskRequest.templateId,
+        status: 'pending',
+        priority: taskRequest.priority || 'medium',
+        deadline: taskRequest.deadline,
+        metadata: taskRequest.metadata || {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      logger.info('Task saved to database', { contextId: taskContext.contextId });
+    }
+
+    // Create execution plan with agent requirements
+    const executionPlan = await this.createExecutionPlan(taskContext as any);
+    
+    // Configure agents via DI for this task's message bus
+    await this.configureAgentsForExecution(executionPlan, taskContext.contextId);
+    
+    // Start orchestration - agents work autonomously via SSE
+    await this.orchestrateTask(taskContext as any);
+    
+    return taskContext.contextId;
+  }
+  
+  /**
+   * Get task status using direct database access
+   */
+  public async getTaskStatus(taskId: string, userId: string): Promise<any> {
+    try {
+      const db = this.getDBService();
+      const task = await db.getTask(userId, taskId);
+      
+      if (!task) {
+        return null;
+      }
+
+      return {
+        taskId: task.id,
+        userId: task.user_id,
+        status: task.status,
+        priority: task.priority,
+        businessId: task.business_id,
+        templateId: task.template_id,
+        metadata: task.metadata,
+        createdAt: task.created_at,
+        updatedAt: task.updated_at,
+        completedAt: task.completed_at
+      };
+    } catch (error) {
+      logger.error('Failed to get task status', { taskId, error });
+      return null;
+    }
+  }
+  
+  /**
+   * Get user tasks using direct database access
+   */
+  public async getUserTasks(userId: string): Promise<any[]> {
+    try {
+      const db = this.getDBService();
+      const tasks = await db.getUserTasks(userId);
+      
+      return tasks.map(task => ({
+        taskId: task.id,
+        userId: task.user_id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        businessId: task.business_id,
+        templateId: task.template_id,
+        metadata: task.metadata,
+        createdAt: task.created_at,
+        updatedAt: task.updated_at,
+        completedAt: task.completed_at
+      }));
+    } catch (error) {
+      logger.error('Failed to get user tasks', error);
+      return [];
+    }
+  }
+  
+  /**
+   * A2A Discovery Methods - Pure A2A Protocol
+   */
+  public async getDiscoveredCapabilities(): Promise<any[]> {
+    const { agentDiscovery } = await import('../services/agent-discovery');
+    return agentDiscovery.getCapabilities();
+  }
+  
+  public async findAgentsBySkill(skill: string): Promise<any[]> {
+    const { agentDiscovery } = await import('../services/agent-discovery');
+    return agentDiscovery.findAgentsBySkill(skill);
+  }
+  
+  public async findAgentsByRole(role: string): Promise<any[]> {
+    const { agentDiscovery } = await import('../services/agent-discovery');
+    return agentDiscovery.findAgentsByRole(role);
+  }
+  
+  public async getAgentRouting(agentId: string): Promise<{ canReceiveFrom: string[], canSendTo: string[] } | undefined> {
+    const { agentDiscovery } = await import('../services/agent-discovery');
+    const capability = agentDiscovery.getAgentCapability(agentId);
+    if (capability) {
+      return {
+        canReceiveFrom: capability.canReceiveFrom,
+        canSendTo: capability.canSendTo
+      };
+    }
+    return undefined;
+  }
+  
+  public async canAgentsCommunicate(fromAgent: string, toAgent: string): Promise<boolean> {
+    const { agentDiscovery } = await import('../services/agent-discovery');
+    return agentDiscovery.canCommunicate(fromAgent, toAgent);
+  }
+  
+  public async getCapabilityReport(): Promise<string> {
+    const { agentDiscovery } = await import('../services/agent-discovery');
+    return agentDiscovery.generateCapabilityReport();
+  }
+  
+  /**
+   * System health check for pure A2A system
+   */
+  public isSystemHealthy(): boolean {
+    // In pure A2A system, health means orchestrator is running
+    // and can discover agents on-demand
+    return this.agentCapabilities.size > 0;
+  }
+  
+  /**
+   * Shutdown agent system
+   */
+  public async shutdownSystem(): Promise<void> {
+    logger.info('Shutting down Pure A2A Agent System');
+    
+    // Notify all subscribed agents via SSE that system is shutting down
+    // Agents listening on task message buses will receive shutdown signal
+    for (const [taskId] of this.activeTaskSubscriptions.entries()) {
+      try {
+        await this.broadcastTaskEvent(taskId, {
+          type: 'SYSTEM_SHUTDOWN',
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        logger.error('Error broadcasting shutdown to task', { taskId, error });
+      }
+    }
+
+    // Clear all task subscriptions
+    this.activeTaskSubscriptions.clear();
+    this.agentCapabilities.clear();
+    this.agentRegistry.clear();
+
+    logger.info('Pure A2A Agent System shut down');
   }
   
 }

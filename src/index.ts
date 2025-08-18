@@ -8,8 +8,8 @@ import { createServer } from 'http';
 import { logger } from './utils/logger';
 import { extractUserContext } from './middleware/auth';
 import { apiRoutes } from './api';
-import { AgentManager } from './agents';
-// PersistentAgentManager removed - using consolidated AgentManager
+import { OrchestratorAgent } from './agents/OrchestratorAgent';
+// AgentManager removed - using pure A2A protocol with OrchestratorAgent
 import { MCPServer } from './mcp-server';
 import { QueueManager } from './queues';
 import { initializeTaskEvents } from './services/task-events';
@@ -100,16 +100,28 @@ app.use(morgan('combined', { stream: { write: (message) => logger.info(message.t
 app.use(extractUserContext);
 
 // Health check endpoint (no auth required)
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    services: {
-      agents: AgentManager.isHealthy(),
-      mcp: MCPServer.isHealthy(),
-      queues: QueueManager.isHealthy()
-    }
-  });
+app.get('/health', async (req, res) => {
+  try {
+    const orchestrator = OrchestratorAgent.getInstance();
+    const agentSystemHealthy = orchestrator.isSystemHealthy();
+    
+    res.json({ 
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      services: {
+        agents: agentSystemHealthy,
+        mcp: MCPServer.isHealthy(),
+        queues: QueueManager.isHealthy()
+      }
+    });
+  } catch (error) {
+    logger.error('Health check failed', error);
+    res.status(503).json({
+      status: 'unhealthy',
+      error: 'Agent system unavailable',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // API routes
@@ -146,7 +158,8 @@ const gracefulShutdown = async () => {
       }
       
       // Shutdown services
-      await AgentManager.stop();
+      const orchestrator = OrchestratorAgent.getInstance();
+      await orchestrator.shutdownSystem();
       if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
         // Stop Event Listener
         try {
@@ -298,6 +311,11 @@ async function startServer() {
     initializeServices();
     logger.info('✅ Dependency injection container initialized');
     
+    // Initialize agent registrations with DI container
+    const { initializeAgents } = await import('./services/dependency-injection');
+    await initializeAgents();
+    logger.info('✅ Agents registered with DI container - ready for task-scoped creation');
+    
     // Initialize task events service
     initializeTaskEvents();
     logger.info('✅ Task Events service initialized');
@@ -309,13 +327,15 @@ async function startServer() {
     await MCPServer.initialize();
     logger.info('✅ MCP Server initialized');
     
-    await AgentManager.initialize();
-    logger.info('✅ Agent Manager initialized');
+    // Initialize OrchestratorAgent (pure A2A system)
+    const orchestrator = OrchestratorAgent.getInstance();
+    await orchestrator.initializeAgentSystem();
+    logger.info('✅ Pure A2A Agent System initialized');
     
-    // Initialize Persistent Agent Manager if Supabase is configured
+    // Initialize Event System if Supabase is configured
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
-      // AgentManager initialization handled elsewhere
-      logger.info('✅ Persistent Agent Manager initialized');
+      // Pure A2A system - no persistent agent manager needed
+      logger.info('✅ A2A Event System ready');
       
       // Start Event Listener for system events
       try {
@@ -327,17 +347,25 @@ async function startServer() {
         // Non-critical - continue startup even if listener fails
       }
     } else {
-      logger.warn('⚠️ Supabase not configured - using in-memory agent manager only');
+      logger.warn('⚠️ Supabase not configured - A2A system running without persistence');
     }
     
     // Start HTTP server
-    server.listen(PORT, () => {
+    server.listen(PORT, async () => {
       logger.info(`🌟 Biz Buddy Backend running on port ${PORT}`);
       logger.info(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`🔗 Health check: http://localhost:${PORT}/health`);
-      logger.info(`🤖 Agents: ${AgentManager.getAgentCount()} active`);
+      
+      try {
+        // Get agent count from OrchestratorAgent
+        const agentCapabilities = await orchestrator.getDiscoveredCapabilities();
+        logger.info(`🤖 Agents: ${agentCapabilities.length} discovered via A2A`);
+      } catch (error) {
+        logger.warn(`🤖 Agents: Could not get count - ${error}`);
+      }
+      
       logger.info(`🛠️ MCP Tools: ${MCPServer.getToolCount()} available`);
-      logger.info(`🚀 Ready to serve requests!`);
+      logger.info(`🚀 Pure A2A Agent System ready to serve requests!`);
     });
     
   } catch (error) {

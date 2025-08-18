@@ -3,11 +3,19 @@ import express from 'express';
 import { apiRoutes } from '../../src/api';
 
 // Mock dependencies to avoid real initialization
-jest.mock('../../src/agents', () => ({
-  AgentManager: {
-    initialize: jest.fn().mockResolvedValue(undefined),
-    stop: jest.fn().mockResolvedValue(undefined),
-    isHealthy: jest.fn().mockReturnValue(true)
+jest.mock('../../src/agents/OrchestratorAgent', () => ({
+  OrchestratorAgent: {
+    getInstance: jest.fn(() => ({
+      initializeAgentSystem: jest.fn().mockResolvedValue(undefined),
+      shutdown: jest.fn().mockResolvedValue(undefined),
+      getSystemHealth: jest.fn().mockResolvedValue(true),
+      getDiscoveredCapabilities: jest.fn().mockResolvedValue([]),
+      findAgentsBySkill: jest.fn().mockResolvedValue([]),
+      findAgentsByRole: jest.fn().mockResolvedValue([]),
+      getAgentRouting: jest.fn().mockResolvedValue(undefined),
+      canAgentsCommunicate: jest.fn().mockResolvedValue(false),
+      getCapabilityReport: jest.fn().mockResolvedValue('')
+    }))
   }
 }));
 
