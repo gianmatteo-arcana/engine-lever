@@ -30,7 +30,7 @@ export interface LLMRequest {
   responseFormat?: 'text' | 'json';
   systemPrompt?: string;
   messages?: Array<{
-    role: 'system' | 'user' | 'assistant';
+    role: 'user' | 'assistant';  // 'system' should only come from systemPrompt field
     content: string;
   }>;
   metadata?: {
@@ -233,8 +233,8 @@ export class UnifiedLLMProvider {
       let messages: any[] = [];
       
       if (request.messages) {
-        // Use provided messages
-        messages = request.messages.filter(m => m.role !== 'system').map(m => ({
+        // Use provided messages (no system messages should be in this array)
+        messages = request.messages.map(m => ({
           role: m.role,
           content: m.content
         }));
@@ -246,9 +246,8 @@ export class UnifiedLLMProvider {
         }];
       }
       
-      // Extract system prompt
+      // Use explicit system prompt (no fallback to messages array)
       const systemPrompt = request.systemPrompt || 
-        request.messages?.find(m => m.role === 'system')?.content ||
         'You are a helpful AI assistant that follows instructions precisely and returns well-structured responses.';
       
       // Create the completion
@@ -307,9 +306,8 @@ export class UnifiedLLMProvider {
       // Build messages array
       let messages: any[] = [];
       
-      // Add system message
+      // Use explicit system prompt (no fallback to messages array)
       const systemPrompt = request.systemPrompt || 
-        request.messages?.find(m => m.role === 'system')?.content ||
         'You are a helpful AI assistant that follows instructions precisely and returns well-structured responses.';
       
       messages.push({
@@ -318,8 +316,8 @@ export class UnifiedLLMProvider {
       });
       
       if (request.messages) {
-        // Add provided messages (excluding system)
-        messages.push(...request.messages.filter(m => m.role !== 'system'));
+        // Add provided messages (no system messages should be in this array)
+        messages.push(...request.messages);
       } else {
         // Convert simple prompt to message
         messages.push({

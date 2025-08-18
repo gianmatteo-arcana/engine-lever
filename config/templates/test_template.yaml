@@ -1,0 +1,12 @@
+task_template:
+  id: test_template
+  version: "1.0"
+  metadata:
+    name: Test Template
+    description: Test template for integration testing
+    category: test
+  goals:
+    primary:
+      - id: test_goal
+        description: Test goal
+        required: true

@@ -67,7 +67,7 @@
 import * as fs from 'fs';
 import * as yaml from 'yaml';
 import * as path from 'path';
-import { LLMProvider } from '../../services/llm-provider';
+import { UnifiedLLMProvider } from '../../services/unified-llm-provider';
 import type { ToolChain } from '../../services/tool-chain';
 import { 
   BaseAgentTemplate,
@@ -101,7 +101,7 @@ import {
 export abstract class BaseAgent implements AgentExecutor {
   protected baseTemplate: BaseAgentTemplate;
   protected specializedTemplate: SpecializedAgentConfig;
-  protected llmProvider!: LLMProvider;
+  protected llmProvider!: UnifiedLLMProvider;
   protected toolChain!: ToolChain;
   protected businessId: string;
   protected userId?: string;
@@ -148,10 +148,10 @@ export abstract class BaseAgent implements AgentExecutor {
       } as any;
     } else {
       // Import the actual implementations
-      const { LLMProvider: LLMProviderImpl } = require('../../services/llm-provider');
+      const { UnifiedLLMProvider: UnifiedLLMProviderImpl } = require('../../services/unified-llm-provider');
       
-      // Use getInstance for LLMProvider (singleton pattern)
-      this.llmProvider = LLMProviderImpl.getInstance();
+      // Use getInstance for UnifiedLLMProvider (singleton pattern)
+      this.llmProvider = UnifiedLLMProviderImpl.getInstance();
       
       // ToolChain requires Supabase - let CredentialVault handle validation
       // The validation happens at the actual point of connection
@@ -893,13 +893,8 @@ Remember: You are an autonomous agent following the universal principles while a
     
     // Call LLM with merged prompt
     const llmResponse = await this.llmProvider.complete({
+      prompt: fullPrompt,
       model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-sonnet-20240229',
-      messages: [
-        {
-          role: 'user',
-          content: fullPrompt
-        }
-      ],
       temperature: 0.3,
       systemPrompt: this.specializedTemplate.agent?.mission || 'You are a helpful AI assistant that follows instructions precisely.'
     });

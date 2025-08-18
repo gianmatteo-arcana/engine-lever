@@ -85,7 +85,7 @@ describe('Service Integration Tests', () => {
 
   describe('ConfigurationManager Tests', () => {
     let configManager: ConfigurationManager;
-    const testConfigPath = path.join(__dirname, '../../../config');
+    const testConfigPath = path.join(__dirname, '../../config');
     
     beforeEach(() => {
       // Create test config directory if it doesn't exist

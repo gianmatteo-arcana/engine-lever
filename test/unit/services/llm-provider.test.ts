@@ -2,22 +2,20 @@
  * Tests for LLM Provider Service
  */
 
-import { LLMProvider, LLMRequest, LLMResponse } from '../../../src/services/llm-provider';
-import { UnifiedLLMProvider } from '../../../src/services/unified-llm-provider';
+import { UnifiedLLMProvider, LLMRequest, LLMResponse } from '../../../src/services/unified-llm-provider';
 
 // Mock the complete method to avoid actual API calls
 const mockComplete = jest.fn();
 
-describe('LLMProvider', () => {
-  let provider: LLMProvider;
+describe('UnifiedLLMProvider', () => {
+  let provider: UnifiedLLMProvider;
   const originalEnv = process.env;
 
   beforeEach(() => {
     // Reset environment
     process.env = { ...originalEnv };
     // Clear singleton instances
-    (LLMProvider as any).instance = null;
-    (UnifiedLLMProvider as any).instance = null;
+    UnifiedLLMProvider.resetInstance();
     
     // Reset mock
     mockComplete.mockClear();
@@ -26,13 +24,12 @@ describe('LLMProvider', () => {
   afterEach(() => {
     process.env = originalEnv;
     // Clear singleton instances
-    (LLMProvider as any).instance = null;
-    (UnifiedLLMProvider as any).instance = null;
+    UnifiedLLMProvider.resetInstance();
   });
 
   describe('initialization', () => {
     it('should initialize with default configuration', () => {
-      provider = LLMProvider.getInstance();
+      provider = UnifiedLLMProvider.getInstance();
       const config = provider.getConfig();
 
       // Default provider is determined by the default model
@@ -45,7 +42,7 @@ describe('LLMProvider', () => {
       process.env.OPENAI_API_KEY = 'test-key';
       process.env.LLM_DEFAULT_MODEL = 'gpt-4';
 
-      provider = LLMProvider.getInstance();
+      provider = UnifiedLLMProvider.getInstance();
       const config = provider.getConfig();
 
       // The provider is determined by the default model in UnifiedProvider
@@ -82,7 +79,7 @@ describe('LLMProvider', () => {
   describe('complete (mocked)', () => {
     beforeEach(() => {
       process.env.ANTHROPIC_API_KEY = 'test-key';
-      provider = LLMProvider.getInstance();
+      provider = UnifiedLLMProvider.getInstance();
       
       // Mock the complete method to avoid actual API calls
       provider.complete = mockComplete.mockImplementation(async (request: LLMRequest): Promise<LLMResponse> => {
@@ -232,7 +229,7 @@ describe('LLMProvider', () => {
     it('should return false without API key', () => {
       delete process.env.ANTHROPIC_API_KEY;
       delete process.env.OPENAI_API_KEY;
-      provider = LLMProvider.getInstance();
+      provider = UnifiedLLMProvider.getInstance();
       expect(provider.isConfigured()).toBe(false);
     });
 
@@ -241,7 +238,7 @@ describe('LLMProvider', () => {
       // Reset singletons to pick up new env var
       (LLMProvider as any).instance = null;
       (UnifiedLLMProvider as any).instance = null;
-      provider = LLMProvider.getInstance();
+      provider = UnifiedLLMProvider.getInstance();
       expect(provider.isConfigured()).toBe(true);
     });
   });
@@ -252,7 +249,7 @@ describe('LLMProvider', () => {
       // Reset singletons to pick up new env var
       (LLMProvider as any).instance = null;
       (UnifiedLLMProvider as any).instance = null;
-      provider = LLMProvider.getInstance();
+      provider = UnifiedLLMProvider.getInstance();
       const config = provider.getConfig();
 
       expect(config.hasApiKey).toBe(true);
@@ -269,7 +266,7 @@ describe('LLMProvider', () => {
       // Reset singletons to clear any cached instance
       (LLMProvider as any).instance = null;
       (UnifiedLLMProvider as any).instance = null;
-      provider = LLMProvider.getInstance();
+      provider = UnifiedLLMProvider.getInstance();
       
       const request: LLMRequest = {
         messages: [
@@ -288,7 +285,7 @@ describe('LLMProvider', () => {
       // Reset singletons to pick up new settings
       (LLMProvider as any).instance = null;
       (UnifiedLLMProvider as any).instance = null;
-      provider = LLMProvider.getInstance();
+      provider = UnifiedLLMProvider.getInstance();
 
       const request: LLMRequest = {
         messages: [

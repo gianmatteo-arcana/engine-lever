@@ -410,17 +410,8 @@ export class OrchestratorAgent extends BaseAgent {
     `;
     
     const llmResponse = await this.llmProvider.complete({
+      prompt: planPrompt,
       model: process.env.LLM_DEFAULT_MODEL || 'claude-3-sonnet-20240229',
-      messages: [
-        {
-          role: 'system',
-          content: this.config.mission
-        },
-        {
-          role: 'user',
-          content: planPrompt
-        }
-      ],
       temperature: 0.3,
       systemPrompt: this.config.mission
     });
@@ -661,17 +652,8 @@ export class OrchestratorAgent extends BaseAgent {
     
     try {
       const response = await this.llmProvider.complete({
+        prompt: optimizationPrompt,
         model: process.env.LLM_DEFAULT_MODEL || 'claude-3-sonnet-20240229',
-        messages: [
-          {
-            role: 'system',
-            content: 'You optimize UI request ordering for minimal user interruption.'
-          },
-          {
-            role: 'user',
-            content: optimizationPrompt
-          }
-        ],
         temperature: 0.3,
         systemPrompt: 'You optimize UI request ordering for minimal user interruption.'
       });
@@ -895,17 +877,8 @@ export class OrchestratorAgent extends BaseAgent {
     `;
     
     const response = await this.llmProvider.complete({
+      prompt: prompt,
       model: process.env.LLM_DEFAULT_MODEL || 'claude-3-sonnet-20240229',
-      messages: [
-        {
-          role: 'system',
-          content: 'You provide clear, helpful guidance for manual task completion.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
       temperature: 0.5,
       systemPrompt: 'You provide clear, helpful guidance for manual task completion.'
     });
