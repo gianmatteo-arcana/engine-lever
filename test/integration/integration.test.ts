@@ -129,30 +129,37 @@ describe('Service Integration Tests', () => {
         fs.mkdirSync(templatesDir, { recursive: true });
       }
       
+      // Copy test template from /test to the expected location
+      const sourceTemplatePath = path.join(__dirname, '..', 'test_template.yaml');
       const templatePath = path.join(templatesDir, 'test_template.yaml');
       const fileExistedBefore = fs.existsSync(templatePath);
       
       if (!fileExistedBefore) {
-        // Create a test template file
-        const testTemplate = {
-          task_template: {
-            id: 'test_template',
-            version: '1.0',
-            metadata: {
-              name: 'Test Template',
-              description: 'Test template for integration testing',
-              category: 'test'
-            },
-            goals: {
-              primary: [
-                { id: 'test_goal', description: 'Test goal', required: true }
-              ]
+        // Copy the test template to the expected location
+        if (fs.existsSync(sourceTemplatePath)) {
+          fs.copyFileSync(sourceTemplatePath, templatePath);
+        } else {
+          // Create a test template file if source doesn't exist
+          const testTemplate = {
+            task_template: {
+              id: 'test_template',
+              version: '1.0',
+              metadata: {
+                name: 'Test Template',
+                description: 'Test template for integration testing',
+                category: 'test'
+              },
+              goals: {
+                primary: [
+                  { id: 'test_goal', description: 'Test goal', required: true }
+                ]
+              }
             }
-          }
-        };
-        
-        const yaml = require('yaml');
-        fs.writeFileSync(templatePath, yaml.stringify(testTemplate));
+          };
+          
+          const yaml = require('yaml');
+          fs.writeFileSync(templatePath, yaml.stringify(testTemplate));
+        }
       }
       
       // Location 1: config/templates
