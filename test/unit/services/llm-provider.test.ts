@@ -33,7 +33,7 @@ describe('LLMProvider', () => {
       const config = provider.getConfig();
 
       // Default provider is determined by the default model
-      expect(config.provider).toBe('anthropic');
+      expect(config.currentProvider).toBe('anthropic');
       expect(config.defaultModel).toBe('claude-3-sonnet-20240229');
       expect(config.hasApiKey).toBe(false);
     });
@@ -46,7 +46,7 @@ describe('LLMProvider', () => {
       const config = provider.getConfig();
 
       // The provider is determined by the default model
-      expect(config.provider).toBe('openai');
+      expect(config.currentProvider).toBe('openai');
       expect(config.defaultModel).toBe('gpt-4');
       expect(config.hasApiKey).toBe(true);
     });
@@ -58,21 +58,17 @@ describe('LLMProvider', () => {
       expect(instance1).toBe(instance2);
     });
 
-    it('should accept custom configuration', () => {
-      provider = LLMProvider.getInstance({
-        provider: 'openai',
-        defaultModel: 'gpt-4-turbo-preview',
-        maxRetries: 5,
-        timeout: 60000
-      });
+    it('should use default configuration when getInstance is called', () => {
+      // LLMProvider.getInstance() doesn't take parameters
+      provider = LLMProvider.getInstance();
       const config = provider.getConfig();
 
-      // Provider is derived from the model, not from the config
-      expect(config.provider).toBe('openai');
-      expect(config.defaultModel).toBe('gpt-4-turbo-preview');
-      // These are hardcoded in the wrapper
-      expect(config.maxRetries).toBe(3);
-      expect(config.timeout).toBe(30000);
+      // Provider is derived from the model
+      expect(config.currentProvider).toBe('anthropic');
+      expect(config.defaultModel).toBe('claude-3-sonnet-20240229');
+      // Check available models
+      expect(config.availableModels).toBeInstanceOf(Array);
+      expect(config.hasApiKey).toBeDefined();
     });
   });
 
@@ -83,7 +79,7 @@ describe('LLMProvider', () => {
       
       // Mock the complete method to avoid actual API calls
       provider.complete = mockComplete.mockImplementation(async (request: LLMRequest): Promise<LLMResponse> => {
-        const lastMessage = request.messages[request.messages.length - 1];
+        const lastMessage = request.messages ? request.messages[request.messages.length - 1] : { content: request.prompt };
         let content = 'Mock LLM response';
         
         if (lastMessage.content.toLowerCase().includes('plan')) {
@@ -117,13 +113,15 @@ describe('LLMProvider', () => {
             completionTokens: 50,
             totalTokens: 150
           },
-          finishReason: 'stop'
+          finishReason: 'stop',
+          provider: 'anthropic'
         };
       });
     });
 
     it('should handle basic completion request', async () => {
       const request: LLMRequest = {
+        prompt: 'Hello',
         messages: [
           { role: 'user', content: 'Hello' }
         ]
@@ -139,6 +137,7 @@ describe('LLMProvider', () => {
 
     it('should return plan response for plan requests', async () => {
       const request: LLMRequest = {
+        prompt: 'Create a plan for onboarding',
         messages: [
           { role: 'user', content: 'Create a plan for onboarding' }
         ],
@@ -155,6 +154,7 @@ describe('LLMProvider', () => {
 
     it('should return analysis response for analyze requests', async () => {
       const request: LLMRequest = {
+        prompt: 'Analyze this task requirement',
         messages: [
           { role: 'user', content: 'Analyze this task requirement' }
         ]
@@ -170,11 +170,11 @@ describe('LLMProvider', () => {
 
     it('should handle system prompts', async () => {
       const request: LLMRequest = {
+        prompt: 'Hello',
         messages: [
-          { role: 'system', content: 'You are a helpful assistant' },
           { role: 'user', content: 'Hello' }
         ],
-        systemPrompt: 'Always be concise',
+        systemPrompt: 'You are a helpful assistant. Always be concise',
         temperature: 0.5,
         maxTokens: 100
       };
@@ -187,6 +187,7 @@ describe('LLMProvider', () => {
 
     it('should handle multiple messages', async () => {
       const request: LLMRequest = {
+        prompt: 'And 3+3?',
         messages: [
           { role: 'user', content: 'What is 2+2?' },
           { role: 'assistant', content: '2+2 equals 4' },
@@ -202,6 +203,7 @@ describe('LLMProvider', () => {
 
     it('should include metadata in request', async () => {
       const request: LLMRequest = {
+        prompt: 'Test message',
         messages: [
           { role: 'user', content: 'Test message' }
         ],
@@ -254,7 +256,7 @@ describe('LLMProvider', () => {
 
       expect(config.hasApiKey).toBe(true);
       expect(config).not.toHaveProperty('apiKey');
-      expect(config.provider).toBe('anthropic');
+      expect(config.currentProvider).toBe('anthropic');
     });
   });
 
@@ -269,6 +271,7 @@ describe('LLMProvider', () => {
       provider = LLMProvider.getInstance();
       
       const request: LLMRequest = {
+        prompt: 'Hello',
         messages: [
           { role: 'user', content: 'Hello' }
         ]
@@ -288,6 +291,7 @@ describe('LLMProvider', () => {
       provider = LLMProvider.getInstance();
 
       const request: LLMRequest = {
+        prompt: 'Hello',
         messages: [
           { role: 'user', content: 'Hello' }
         ],
