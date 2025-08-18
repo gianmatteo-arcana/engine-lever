@@ -209,6 +209,9 @@ describe('Database Integration Tests', () => {
     });
 
     it('should return null when task not found or access denied', async () => {
+      // First reset the mock to ensure clean state
+      jest.clearAllMocks();
+      
       // Mock getTask to return null (task not found)
       mockSupabaseClient.single.mockResolvedValueOnce({
         data: null,

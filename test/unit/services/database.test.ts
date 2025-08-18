@@ -10,24 +10,35 @@ import {
   ContextEventRecord
 } from '../../../src/services/database';
 
-// Mock Supabase
-const mockSupabaseClient = {
-  from: jest.fn().mockReturnThis(),
-  select: jest.fn().mockReturnThis(),
-  insert: jest.fn().mockReturnThis(),
-  update: jest.fn().mockReturnThis(),
-  upsert: jest.fn().mockReturnThis(),
-  eq: jest.fn().mockReturnThis(),
-  order: jest.fn().mockReturnThis(),
-  limit: jest.fn().mockReturnThis(),
-  single: jest.fn(),
-  auth: {
+// Create a properly chainable mock
+const createMockSupabaseClient = () => {
+  const mock: any = {};
+  
+  // Chainable methods
+  const chainableMethods = ['from', 'select', 'insert', 'update', 'upsert', 'eq', 'order', 'limit', 'gte', 'lte', 'in', 'contains', 'containedBy', 'range', 'filter'];
+  
+  chainableMethods.forEach(method => {
+    mock[method] = jest.fn(() => mock);
+  });
+  
+  // Terminal methods
+  mock.single = jest.fn();
+  mock.then = jest.fn((resolve) => {
+    resolve({ data: [], error: null });
+  });
+  
+  // Auth mock
+  mock.auth = {
     getUser: jest.fn().mockResolvedValue({
       data: { user: { id: 'user-123' } },
       error: null
     })
-  }
+  };
+  
+  return mock;
 };
+
+const mockSupabaseClient = createMockSupabaseClient();
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => mockSupabaseClient)
@@ -74,14 +85,15 @@ describe('DatabaseService - New Schema', () => {
     });
 
     it('should get user businesses', async () => {
-      mockSupabaseClient.select.mockReturnValueOnce({
-        eq: jest.fn().mockResolvedValueOnce({
+      // Override the then method for this specific test
+      mockSupabaseClient.then = jest.fn((resolve) => {
+        resolve({
           data: [
             { businesses: { id: 'biz-1', name: 'Business 1' } },
             { businesses: { id: 'biz-2', name: 'Business 2' } }
           ],
           error: null
-        })
+        });
       });
 
       const businesses = await dbService.getUserBusinesses('user-123');
@@ -164,39 +176,28 @@ describe('DatabaseService - New Schema', () => {
 
   describe('Event Sourcing', () => {
     it('should add a context event', async () => {
-      // First mock - for getting the task
-      mockSupabaseClient.from.mockReturnValueOnce({
-        select: jest.fn().mockReturnValueOnce({
-          eq: jest.fn().mockReturnValueOnce({
-            eq: jest.fn().mockReturnValueOnce({
-              single: jest.fn().mockResolvedValueOnce({
-                data: {
-                  id: 'ctx-123',
-                  user_id: 'system',
-                  status: 'pending'
-                },
-                error: null
-              })
-            })
-          })
-        })
+      // Mock for getting the task (first single call)
+      mockSupabaseClient.single.mockResolvedValueOnce({
+        data: {
+          id: 'ctx-123',
+          user_id: 'system',
+          status: 'pending'
+        },
+        error: null
       });
       
-      // Second mock - for task_context_events table
-      mockSupabaseClient.from.mockReturnValueOnce({
-        insert: jest.fn().mockReturnValueOnce({
-          select: jest.fn().mockReturnValueOnce({
-            single: jest.fn().mockResolvedValueOnce({
-              data: {
-                id: 'event-123',
-                sequence_number: 1,
-                context_id: 'ctx-123',
-                operation: 'status_update'
-              },
-              error: null
-            })
-          })
-        })
+      // Mock for task_context_events insert (second single call)
+      mockSupabaseClient.single.mockResolvedValueOnce({
+        data: {
+          id: 'event-123',
+          sequence_number: 1,
+          context_id: 'ctx-123',
+          task_id: 'ctx-123',
+          operation: 'status_update',
+          actor_id: 'agent-1',
+          actor_type: 'agent'
+        },
+        error: null
       });
 
       const event = await dbService.addContextEvent({
@@ -277,14 +278,15 @@ describe('DatabaseService - New Schema', () => {
     });
 
     it('should get context agent states', async () => {
-      mockSupabaseClient.select.mockReturnValueOnce({
-        eq: jest.fn().mockResolvedValueOnce({
+      // Override the then method for this specific test  
+      mockSupabaseClient.then = jest.fn((resolve) => {
+        resolve({
           data: [
             { id: 'state-1', agent_role: 'orchestrator' },
             { id: 'state-2', agent_role: 'legal_compliance' }
           ],
           error: null
-        })
+        });
       });
 
       const states = await dbService.getContextAgentStates('ctx-123');
@@ -318,29 +320,22 @@ describe('DatabaseService - New Schema', () => {
 
   describe('Legacy Compatibility', () => {
     it('should create task using legacy method', async () => {
-      // Mock for business lookup
-      mockSupabaseClient.select.mockReturnValueOnce({
-        eq: jest.fn().mockReturnValueOnce({
-          eq: jest.fn().mockReturnValueOnce({
-            single: jest.fn().mockResolvedValueOnce({ data: null, error: null })
-          })
-        })
-      });
+      // Mock for business lookup (returns null - no existing business)
+      mockSupabaseClient.single.mockResolvedValueOnce({ data: null, error: null });
       
       // Mock for business creation
-      mockSupabaseClient.insert.mockReturnValueOnce({
-        select: jest.fn().mockReturnValueOnce({
-          single: jest.fn().mockResolvedValueOnce({
-            data: { id: 'biz-123', name: 'My Business' },
-            error: null
-          })
-        })
+      mockSupabaseClient.single.mockResolvedValueOnce({
+        data: { id: 'biz-123', name: 'My Business' },
+        error: null
       });
       
-      // Mock for business_users insert
-      mockSupabaseClient.insert.mockReturnValueOnce({
-        data: null,
-        error: null
+      // Mock for business_users insert (uses then, not single)
+      mockSupabaseClient.then = jest.fn((resolve) => {
+        resolve({ data: null, error: null });
+        // Reset for next call
+        mockSupabaseClient.then = jest.fn((resolve) => {
+          resolve({ data: [], error: null });
+        });
       });
       
       // Mock for context creation
