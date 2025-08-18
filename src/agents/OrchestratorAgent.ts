@@ -86,6 +86,10 @@ export class OrchestratorAgent extends BaseAgent {
   private activeExecutions: Map<string, ExecutionPlan>;
   private pendingUIRequests: Map<string, UIRequest[]>;
   
+  // Pure A2A System - Agent Lifecycle Management
+  private agentInstances: Map<string, any> = new Map();
+  private agentCapabilities: Map<string, any> = new Map();
+  
   private constructor() {
     try {
       logger.info('🚀 OrchestratorAgent constructor starting...');
@@ -911,5 +915,286 @@ export class OrchestratorAgent extends BaseAgent {
   
   // recordContextEntry method moved to BaseAgent as protected method
   // Now all agents including OrchestratorAgent can use this.recordContextEntry()
+  
+  /**
+   * =============================================================================
+   * PURE A2A SYSTEM - AGENT LIFECYCLE MANAGEMENT
+   * =============================================================================
+   * 
+   * These methods replace AgentManager functionality with pure A2A approach.
+   * OrchestratorAgent now manages the entire agent ecosystem.
+   */
+  
+  /**
+   * Initialize the entire agent system using A2A discovery
+   */
+  public async initializeAgentSystem(): Promise<void> {
+    logger.info('🚀 Initializing Pure A2A Agent System');
+    
+    try {
+      // Import agentDiscovery service
+      const { agentDiscovery } = await import('../services/agent-discovery');
+      
+      // Discover all agents from YAML configurations
+      logger.info('🔍 Discovering agents from YAML configurations...');
+      this.agentCapabilities = await agentDiscovery.discoverAgents();
+      
+      // Log discovered capabilities
+      logger.info('📊 Agent Capabilities Discovered:', {
+        count: this.agentCapabilities.size,
+        agents: Array.from(this.agentCapabilities.keys())
+      });
+      
+      // Print capability report for debugging
+      const capabilityReport = agentDiscovery.generateCapabilityReport();
+      logger.info('\n' + capabilityReport);
+      
+      logger.info('✅ Pure A2A Agent System initialized successfully');
+    } catch (error) {
+      logger.error('💥 Failed to initialize A2A Agent System', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Spawn an agent on-demand using A2A discovery
+   */
+  public async spawnAgent(agentId: string, tenantId: string): Promise<any> {
+    // Check if agent is already running
+    if (this.agentInstances.has(agentId)) {
+      return this.agentInstances.get(agentId);
+    }
+    
+    try {
+      logger.info(`🤖 Spawning agent: ${agentId} for tenant: ${tenantId}`);
+      
+      // Import and use agentDiscovery service
+      const { agentDiscovery } = await import('../services/agent-discovery');
+      
+      // Instantiate the agent
+      const agent = await agentDiscovery.instantiateAgent(agentId, tenantId);
+      this.agentInstances.set(agentId, agent);
+      
+      logger.info(`✅ Agent spawned successfully: ${agentId}`);
+      return agent;
+    } catch (error) {
+      logger.error(`❌ Failed to spawn agent: ${agentId}`, {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  }
+  
+  /**
+   * Send A2A message directly between agents
+   */
+  public async routeA2AMessage(fromAgentId: string, toAgentId: string, message: any): Promise<any> {
+    try {
+      // Validate communication permissions using A2A protocol
+      const { agentDiscovery } = await import('../services/agent-discovery');
+      
+      if (!agentDiscovery.canCommunicate(fromAgentId, toAgentId)) {
+        throw new Error(`A2A communication not allowed: ${fromAgentId} -> ${toAgentId}`);
+      }
+      
+      // Ensure target agent is spawned
+      const targetAgent = await this.spawnAgent(toAgentId, 'system');
+      
+      // Send message directly
+      if (targetAgent && typeof targetAgent.handleMessage === 'function') {
+        return await targetAgent.handleMessage(fromAgentId, message);
+      } else {
+        logger.warn(`Target agent ${toAgentId} does not support handleMessage`);
+        return { status: 'message_delivered', agentId: toAgentId };
+      }
+    } catch (error) {
+      logger.error(`Failed A2A message: ${fromAgentId} -> ${toAgentId}`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Create task using pure A2A system
+   */
+  public async createTask(taskRequest: any): Promise<string> {
+    const taskContext = {
+      contextId: `ctx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      taskTemplateId: taskRequest.templateId,
+      tenantId: taskRequest.userId,
+      createdAt: new Date().toISOString(),
+      currentState: {
+        status: 'pending',
+        phase: 'initialization',
+        completeness: 0,
+        data: {}
+      },
+      history: [],
+      templateSnapshot: {},
+      metadata: taskRequest.metadata || {}
+    };
+
+    logger.info('Creating task with Pure A2A system', {
+      contextId: taskContext.contextId,
+      templateId: taskContext.taskTemplateId
+    });
+
+    // Save task to database if userId provided
+    if (taskRequest.userId) {
+      const db = this.getDBService();
+      await db.createTask(taskRequest.userId, {
+        id: taskContext.contextId,
+        user_id: taskRequest.userId,
+        title: `${taskRequest.templateId} Task`,
+        description: `Task for ${taskRequest.businessId}`,
+        task_type: taskRequest.templateId || 'general',
+        business_id: taskRequest.businessId,
+        template_id: taskRequest.templateId,
+        status: 'pending',
+        priority: taskRequest.priority || 'medium',
+        deadline: taskRequest.deadline,
+        metadata: taskRequest.metadata || {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      logger.info('Task saved to database', { contextId: taskContext.contextId });
+    }
+
+    // Orchestrate task directly (no AgentManager)
+    await this.orchestrateTask(taskContext as any);
+    
+    return taskContext.contextId;
+  }
+  
+  /**
+   * Get task status using direct database access
+   */
+  public async getTaskStatus(taskId: string, userId: string): Promise<any> {
+    try {
+      const db = this.getDBService();
+      const task = await db.getTask(userId, taskId);
+      
+      if (!task) {
+        return null;
+      }
+
+      return {
+        taskId: task.id,
+        userId: task.user_id,
+        status: task.status,
+        priority: task.priority,
+        businessId: task.business_id,
+        templateId: task.template_id,
+        metadata: task.metadata,
+        createdAt: task.created_at,
+        updatedAt: task.updated_at,
+        completedAt: task.completed_at
+      };
+    } catch (error) {
+      logger.error('Failed to get task status', { taskId, error });
+      return null;
+    }
+  }
+  
+  /**
+   * Get user tasks using direct database access
+   */
+  public async getUserTasks(userId: string): Promise<any[]> {
+    try {
+      const db = this.getDBService();
+      const tasks = await db.getUserTasks(userId);
+      
+      return tasks.map(task => ({
+        taskId: task.id,
+        userId: task.user_id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        businessId: task.business_id,
+        templateId: task.template_id,
+        metadata: task.metadata,
+        createdAt: task.created_at,
+        updatedAt: task.updated_at,
+        completedAt: task.completed_at
+      }));
+    } catch (error) {
+      logger.error('Failed to get user tasks', error);
+      return [];
+    }
+  }
+  
+  /**
+   * A2A Discovery Methods - Pure A2A Protocol
+   */
+  public async getDiscoveredCapabilities(): Promise<any[]> {
+    const { agentDiscovery } = await import('../services/agent-discovery');
+    return agentDiscovery.getCapabilities();
+  }
+  
+  public async findAgentsBySkill(skill: string): Promise<any[]> {
+    const { agentDiscovery } = await import('../services/agent-discovery');
+    return agentDiscovery.findAgentsBySkill(skill);
+  }
+  
+  public async findAgentsByRole(role: string): Promise<any[]> {
+    const { agentDiscovery } = await import('../services/agent-discovery');
+    return agentDiscovery.findAgentsByRole(role);
+  }
+  
+  public async getAgentRouting(agentId: string): Promise<{ canReceiveFrom: string[], canSendTo: string[] } | undefined> {
+    const { agentDiscovery } = await import('../services/agent-discovery');
+    const capability = agentDiscovery.getAgentCapability(agentId);
+    if (capability) {
+      return {
+        canReceiveFrom: capability.canReceiveFrom,
+        canSendTo: capability.canSendTo
+      };
+    }
+    return undefined;
+  }
+  
+  public async canAgentsCommunicate(fromAgent: string, toAgent: string): Promise<boolean> {
+    const { agentDiscovery } = await import('../services/agent-discovery');
+    return agentDiscovery.canCommunicate(fromAgent, toAgent);
+  }
+  
+  public async getCapabilityReport(): Promise<string> {
+    const { agentDiscovery } = await import('../services/agent-discovery');
+    return agentDiscovery.generateCapabilityReport();
+  }
+  
+  /**
+   * System health check for pure A2A system
+   */
+  public isSystemHealthy(): boolean {
+    // In pure A2A system, health means orchestrator is running
+    // and can discover agents on-demand
+    return this.agentCapabilities.size > 0;
+  }
+  
+  /**
+   * Shutdown agent system
+   */
+  public async shutdownSystem(): Promise<void> {
+    logger.info('Shutting down Pure A2A Agent System');
+    
+    // Shutdown all spawned agents
+    const shutdownPromises = Array.from(this.agentInstances.values()).map(agent => {
+      if (agent && typeof agent.shutdown === 'function') {
+        return agent.shutdown().catch((error: any) => {
+          logger.error('Error shutting down agent', error);
+        });
+      }
+      return Promise.resolve();
+    });
+
+    await Promise.all(shutdownPromises);
+
+    this.agentInstances.clear();
+    this.agentCapabilities.clear();
+    this.agentRegistry.clear();
+
+    logger.info('Pure A2A Agent System shut down');
+  }
   
 }

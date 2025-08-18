@@ -692,17 +692,6 @@ Remember: You are an autonomous agent following the universal principles while a
     };
   }
   
-  /**
-   * Check if this agent can communicate with another agent
-   */
-  canCommunicateWith(targetAgentId: string): boolean {
-    const routing = this.getA2ARouting();
-    // Check for wildcard permission (orchestrator can send to all)
-    if (routing.canSendTo.includes('*')) {
-      return true;
-    }
-    return routing.canSendTo.includes(targetAgentId);
-  }
   
   /**
    * Check if this agent can receive from another agent
@@ -722,18 +711,6 @@ Remember: You are an autonomous agent following the universal principles while a
     return 'available';
   }
   
-  /**
-   * Discover capabilities of other agents (for inter-agent communication)
-   * This would typically query the AgentManager or discovery service
-   */
-  async discoverPeerAgents(): Promise<Map<string, any>> {
-    // This would be implemented to query the agent discovery service
-    // For now, return empty map
-    logger.debug('Agent discovering peer capabilities', {
-      agentId: this.specializedTemplate.agent.id
-    });
-    return new Map();
-  }
   
   /**
    * Get merged configuration for debugging
@@ -1051,6 +1028,151 @@ Remember: You are an autonomous agent following the universal principles while a
       });
       // Don't throw - we've updated in-memory, persistence failure shouldn't stop execution
       // But this should be monitored and handled via retry mechanism
+    }
+  }
+
+  /**
+   * =============================================================================
+   * PURE A2A MESSAGING - DIRECT AGENT COMMUNICATION
+   * =============================================================================
+   * 
+   * These methods allow agents to communicate directly using the A2A protocol
+   * without needing a central AgentManager. Each agent can discover and 
+   * communicate with other agents autonomously.
+   */
+
+  /**
+   * Send a message to another agent using A2A protocol
+   */
+  protected async sendA2AMessage(toAgentId: string, message: any): Promise<any> {
+    try {
+      // Get orchestrator instance for A2A messaging
+      const { OrchestratorAgent } = await import('../OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      // Use orchestrator's A2A messaging system
+      return await orchestrator.routeA2AMessage(
+        this.specializedTemplate.agent.id,
+        toAgentId,
+        message
+      );
+    } catch (error) {
+      logger.error(`Failed to send A2A message to ${toAgentId}`, {
+        fromAgent: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Handle incoming A2A messages (override in subclasses for specific behavior)
+   */
+  public async handleMessage(fromAgentId: string, message: any): Promise<any> {
+    logger.info(`Agent ${this.specializedTemplate.agent.id} received A2A message from ${fromAgentId}`, {
+      messageType: message.type || 'unknown',
+      hasData: !!message.data
+    });
+    
+    // Default implementation - just acknowledge
+    return {
+      status: 'acknowledged',
+      agentId: this.specializedTemplate.agent.id,
+      receivedFrom: fromAgentId,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  /**
+   * Discover peer agents using A2A protocol
+   */
+  protected async discoverPeerAgents(): Promise<any[]> {
+    try {
+      const { OrchestratorAgent } = await import('../OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      return await orchestrator.getDiscoveredCapabilities();
+    } catch (error) {
+      logger.error('Failed to discover peer agents', {
+        agentId: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Find agents by skill using A2A discovery
+   */
+  protected async findAgentsBySkill(skill: string): Promise<any[]> {
+    try {
+      const { OrchestratorAgent } = await import('../OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      return await orchestrator.findAgentsBySkill(skill);
+    } catch (error) {
+      logger.error(`Failed to find agents by skill: ${skill}`, {
+        agentId: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Check if this agent can communicate with another agent
+   */
+  protected async canCommunicateWith(toAgentId: string): Promise<boolean> {
+    try {
+      const { OrchestratorAgent } = await import('../OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      return await orchestrator.canAgentsCommunicate(
+        this.specializedTemplate.agent.id,
+        toAgentId
+      );
+    } catch (error) {
+      logger.error(`Failed to check communication permissions with ${toAgentId}`, {
+        agentId: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Get routing information for this agent
+   */
+  protected async getMyRouting(): Promise<{ canReceiveFrom: string[], canSendTo: string[] } | undefined> {
+    try {
+      const { OrchestratorAgent } = await import('../OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      return await orchestrator.getAgentRouting(this.specializedTemplate.agent.id);
+    } catch (error) {
+      logger.error('Failed to get routing information', {
+        agentId: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return undefined;
+    }
+  }
+
+  /**
+   * Request another agent to be spawned (if not already running)
+   */
+  protected async requestAgentSpawn(agentId: string): Promise<any> {
+    try {
+      const { OrchestratorAgent } = await import('../OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      return await orchestrator.spawnAgent(agentId, this.userId || 'system');
+    } catch (error) {
+      logger.error(`Failed to request spawn of agent: ${agentId}`, {
+        requestingAgent: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
     }
   }
 
