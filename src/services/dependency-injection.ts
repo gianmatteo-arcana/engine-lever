@@ -286,6 +286,20 @@ export function getCredentialVault(): CredentialVault {
 /**
  * Initialize agent registrations with DI container
  * Discovers agents from YAML and registers them for task-scoped creation
+ * 
+ * TODO: Performance testing with many concurrent agents
+ *   - Test with 100+ concurrent agents on same task
+ *   - Measure memory consumption per agent instance
+ *   - Profile CPU usage during heavy agent communication
+ *   - Implement agent pooling if needed for performance
+ *   - Add metrics collection for agent lifecycle timing
+ * 
+ * TODO: Load testing for message bus scalability
+ *   - Simulate 1000+ events/second on task message bus
+ *   - Test PostgreSQL NOTIFY/LISTEN limits
+ *   - Measure event propagation latency under load
+ *   - Implement batching or queuing if needed
+ *   - Consider Redis pub/sub for high-throughput scenarios
  */
 export async function initializeAgents(): Promise<void> {
   logger.info('🎯 Initializing agent registrations with DI container');

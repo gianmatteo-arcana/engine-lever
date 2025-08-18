@@ -1084,6 +1084,18 @@ Remember: You are an autonomous agent following the universal principles while a
    * Subscribe to task events via SSE
    * Agents use this to listen for updates and determine if they can proceed
    * 
+   * TODO: Implement SSE reconnection scenarios
+   *   - Handle connection drops and automatic reconnection
+   *   - Implement exponential backoff for reconnection attempts
+   *   - Queue missed events during disconnection
+   *   - Add connection health monitoring
+   * 
+   * TODO: Add database failure recovery
+   *   - Implement circuit breaker pattern for database operations
+   *   - Add retry logic with configurable attempts
+   *   - Fallback to cached data when database is unavailable
+   *   - Log and alert on persistent failures
+   * 
    * @param taskId - The task to subscribe to
    * @param handler - The event handler
    * @protected

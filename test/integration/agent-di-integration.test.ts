@@ -7,6 +7,22 @@
  * 3. Task-scoped agent creation
  * 4. SSE event subscriptions
  * 5. Agent-to-agent communication via events
+ * 
+ * TODO: Real PostgreSQL integration tests
+ *   - Create test suite using real PostgreSQL instance
+ *   - Test actual LISTEN/NOTIFY functionality
+ *   - Verify event persistence in task_context_events table
+ *   - Test transaction isolation and concurrent updates
+ *   - Measure real database query performance
+ *   - Test connection pooling and limits
+ *   - Verify RLS policies work correctly
+ * 
+ * TODO: Performance benchmarks
+ *   - Add performance test suite separate from unit tests
+ *   - Measure agent creation time (target: <100ms)
+ *   - Measure event broadcast latency (target: <50ms)
+ *   - Test memory usage with 100+ agents
+ *   - Profile hot paths and optimize bottlenecks
  */
 
 import { DIContainer, initializeAgents } from '../../src/services/dependency-injection';
