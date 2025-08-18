@@ -574,17 +574,97 @@ Remember: You are an autonomous agent following the universal principles while a
   
   /**
    * Get agent capabilities from specialized config
+   * Enhanced with A2A protocol discovery information
    */
   getCapabilities(): any {
+    const agent = this.specializedTemplate.agent;
+    const a2a = agent.a2a || {};
+    
     return {
-      id: this.specializedTemplate.agent.id,
-      name: this.specializedTemplate.agent.name,
-      role: this.specializedTemplate.agent.role,
-      skills: this.specializedTemplate.agent.agent_card.skills,
-      specializations: this.specializedTemplate.agent.agent_card.specializations,
-      version: this.specializedTemplate.agent.version,
-      extends: this.specializedTemplate.agent.extends || 'base_agent'
+      // Basic agent information
+      id: agent.id,
+      name: agent.name,
+      role: agent.role,
+      version: agent.version,
+      extends: agent.extends || 'base_agent',
+      
+      // Skills and specializations
+      skills: agent.agent_card?.skills || [],
+      specializations: agent.agent_card?.specializations || [],
+      
+      // A2A Protocol capabilities
+      a2a: {
+        protocolVersion: a2a.protocolVersion || '1.0.0',
+        communicationMode: a2a.communicationMode || 'async',
+        messageFormats: a2a.messageFormats || ['json'],
+        routing: {
+          canReceiveFrom: a2a.routing?.canReceiveFrom || [],
+          canSendTo: a2a.routing?.canSendTo || []
+        },
+        messageHandling: a2a.messageHandling || {
+          bufferSize: 50,
+          timeoutMs: 30000,
+          retryEnabled: true
+        }
+      },
+      
+      // Operations this agent can perform
+      operations: Object.keys(this.specializedTemplate.operations || {}),
+      
+      // Current availability status
+      availability: this.getAvailabilityStatus()
     };
+  }
+  
+  /**
+   * Get A2A protocol routing information
+   * Allows other agents to discover communication capabilities
+   */
+  getA2ARouting(): { canReceiveFrom: string[], canSendTo: string[] } {
+    const a2a = this.specializedTemplate.agent.a2a || {};
+    return {
+      canReceiveFrom: a2a.routing?.canReceiveFrom || [],
+      canSendTo: a2a.routing?.canSendTo || []
+    };
+  }
+  
+  /**
+   * Check if this agent can communicate with another agent
+   */
+  canCommunicateWith(targetAgentId: string): boolean {
+    const routing = this.getA2ARouting();
+    return routing.canSendTo.includes(targetAgentId);
+  }
+  
+  /**
+   * Check if this agent can receive from another agent
+   */
+  canReceiveFrom(sourceAgentId: string): boolean {
+    const routing = this.getA2ARouting();
+    return routing.canReceiveFrom.includes(sourceAgentId);
+  }
+  
+  /**
+   * Get agent's availability status
+   * Can be overridden by subclasses for dynamic status
+   */
+  protected getAvailabilityStatus(): 'available' | 'busy' | 'offline' {
+    // Default implementation - always available
+    // Subclasses can override for more sophisticated status
+    return 'available';
+  }
+  
+  /**
+   * Discover capabilities of other agents (for inter-agent communication)
+   * This would typically query the AgentManager or discovery service
+   */
+  async discoverPeerAgents(): Promise<Map<string, any>> {
+    // This would be implemented to query the agent discovery service
+    // For now, return empty map
+    logger.debug('Agent discovering peer capabilities', {
+      agentId: this.specializedTemplate.agent.id
+    });
+    return new Map();
   }
   
   /**

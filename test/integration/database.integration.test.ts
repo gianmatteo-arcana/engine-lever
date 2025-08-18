@@ -131,6 +131,30 @@ describe('Database Integration Tests', () => {
         error: null
       });
       
+      // Mock for getTask (called by updateTask)
+      mockSupabaseClient.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValueOnce({
+          eq: jest.fn().mockReturnValueOnce({
+            eq: jest.fn().mockReturnValueOnce({
+              single: jest.fn().mockResolvedValueOnce({
+                data: {
+                  id: 'ctx-123',
+                  user_id: 'test-user-123',
+                  business_id: 'biz-123',
+                  status: 'pending',
+                  template_id: 'test',
+                  metadata: { title: 'Test Task' },
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                },
+                error: null
+              })
+            })
+          })
+        })
+      });
+      
+      // Mock for the actual update
       mockSupabaseClient.single.mockResolvedValueOnce({
         data: {
           id: 'ctx-123',
@@ -198,21 +222,45 @@ describe('Database Integration Tests', () => {
 
   describe('Task Execution Operations', () => {
     it('should create system execution', async () => {
-      // Mock the insert operation for context_events
-      mockSupabaseClient.single.mockResolvedValueOnce({
-        data: { 
-          id: 'event-123', 
-          context_id: 'ctx-123',
-          sequence_number: 1,
-          operation: 'start',
-          actor: 'system',
-          metadata: {
-            execution_id: 'exec-123',
-            status: 'running'
-          },
-          created_at: new Date().toISOString()
-        },
-        error: null
+      // First mock - for getting the task
+      mockSupabaseClient.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValueOnce({
+          eq: jest.fn().mockReturnValueOnce({
+            eq: jest.fn().mockReturnValueOnce({
+              single: jest.fn().mockResolvedValueOnce({
+                data: {
+                  id: 'ctx-123',
+                  user_id: 'system',
+                  status: 'pending'
+                },
+                error: null
+              })
+            })
+          })
+        })
+      });
+      
+      // Second mock - for task_context_events table
+      mockSupabaseClient.from.mockReturnValueOnce({
+        insert: jest.fn().mockReturnValueOnce({
+          select: jest.fn().mockReturnValueOnce({
+            single: jest.fn().mockResolvedValueOnce({
+              data: { 
+                id: 'event-123', 
+                context_id: 'ctx-123',
+                sequence_number: 1,
+                operation: 'start',
+                actor: 'system',
+                metadata: {
+                  execution_id: 'exec-123',
+                  status: 'running'
+                },
+                created_at: new Date().toISOString()
+              },
+              error: null
+            })
+          })
+        })
       });
       
       const execution = await dbService.createSystemExecution({

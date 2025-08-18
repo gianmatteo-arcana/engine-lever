@@ -71,6 +71,89 @@ router.get('/agents', (req, res) => {
   });
 });
 
+// A2A Protocol Discovery Endpoints
+router.get('/agents/capabilities', (req, res) => {
+  const capabilities = AgentManager.getDiscoveredCapabilities();
+  
+  res.json({
+    capabilities,
+    count: capabilities.length,
+    report: AgentManager.getCapabilityReport(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Find agents by skill
+router.get('/agents/capabilities/by-skill/:skill', (req, res) => {
+  const { skill } = req.params;
+  const agents = AgentManager.findAgentsBySkill(skill);
+  
+  res.json({
+    skill,
+    agents,
+    count: agents.length
+  });
+});
+
+// Find agents by role
+router.get('/agents/capabilities/by-role/:role', (req, res) => {
+  const { role } = req.params;
+  const agents = AgentManager.findAgentsByRole(role);
+  
+  res.json({
+    role,
+    agents,
+    count: agents.length
+  });
+});
+
+// Get agent routing information
+router.get('/agents/:agentId/routing', (req, res) => {
+  const { agentId } = req.params;
+  const routing = AgentManager.getAgentRouting(agentId);
+  
+  if (!routing) {
+    // Fall back to checking by role for backward compatibility
+    const status = AgentManager.getAgentStatus(agentId as any);
+    
+    if (status.status === 'not_found') {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    return res.json({
+      role: agentId,
+      ...status,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  res.json({
+    agentId,
+    routing,
+    canCommunicateWith: routing.canSendTo,
+    canReceiveFrom: routing.canReceiveFrom
+  });
+});
+
+// Check if two agents can communicate
+router.get('/agents/can-communicate', (req, res) => {
+  const { from, to } = req.query;
+  
+  if (!from || !to) {
+    return res.status(400).json({
+      error: 'Missing required query parameters: from, to'
+    });
+  }
+  
+  const canCommunicate = AgentManager.canAgentsCommunicate(from as string, to as string);
+  
+  res.json({
+    from,
+    to,
+    canCommunicate
+  });
+});
+
 router.get('/agents/:role', (req, res) => {
   const { role } = req.params;
   const status = AgentManager.getAgentStatus(role as any);

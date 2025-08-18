@@ -12,11 +12,15 @@
 import { logger } from '../utils/logger';
 import { AgentRole, TaskContext, convertPriority } from './base/types';
 import { OrchestratorAgent } from './OrchestratorAgent';
+import { DefaultAgent } from './DefaultAgent';
 // TaskManagementAgent removed - not one of the 8 core agents
 import { DatabaseService } from '../services/database';
+import { agentDiscovery, type AgentCapability } from '../services/agent-discovery';
 
 class AgentManagerClass {
   private agents: Map<AgentRole, any> = new Map();
+  private agentCapabilities: Map<string, AgentCapability> = new Map();
+  private agentInstances: Map<string, DefaultAgent> = new Map();
   private isInitialized = false;
 
   /**
@@ -46,46 +50,105 @@ class AgentManagerClass {
       return;
     }
 
-    logger.info('Initializing Agent Manager');
+    logger.info('🚀 Initializing Agent Manager with A2A Protocol Discovery');
 
     try {
-      // Initialize agents using dynamic registry
-      // Registry automatically discovers YAML files - no hardcoding
+      // STEP 1: Discover all agents from YAML configurations
+      logger.info('🔍 Discovering agents from YAML configurations...');
+      this.agentCapabilities = await agentDiscovery.discoverAgents();
       
-      // CRITICAL: OrchestratorAgent MUST be created first
-      // It's a singleton that coordinates all other agents
+      // Log discovered capabilities
+      logger.info('📊 Agent Capabilities Discovered:', {
+        count: this.agentCapabilities.size,
+        agents: Array.from(this.agentCapabilities.keys())
+      });
+      
+      // Print capability report for debugging
+      const capabilityReport = agentDiscovery.generateCapabilityReport();
+      logger.info('\n' + capabilityReport);
+      
+      // STEP 2: Create OrchestratorAgent (special case - singleton)
+      logger.info('🎯 Creating OrchestratorAgent (singleton)...');
       const orchestrator = OrchestratorAgent.getInstance();
       this.agents.set(AgentRole.ORCHESTRATOR, orchestrator);
       
-      // Map AgentRoles to discovered YAML configurations
-      // The registry will find the appropriate YAML file
-      const roleToType: Record<string, string> = {
-        [AgentRole.LEGAL_COMPLIANCE]: 'backend-api',
-        [AgentRole.DATA_COLLECTION]: 'data-enrichment',
-        [AgentRole.PAYMENT]: 'backend-api',
-        [AgentRole.AGENCY_INTERACTION]: 'backend-api',
-        [AgentRole.MONITORING]: 'events',
-        [AgentRole.COMMUNICATION]: 'events'
+      // STEP 3: Map discovered agents to AgentRoles and instantiate
+      const agentIdToRole: Record<string, AgentRole> = {
+        'legal_compliance_agent': AgentRole.LEGAL_COMPLIANCE,
+        'data_collection_agent': AgentRole.DATA_COLLECTION,
+        'payment_agent': AgentRole.PAYMENT,
+        'agency_interaction_agent': AgentRole.AGENCY_INTERACTION,
+        'monitoring_agent': AgentRole.MONITORING,
+        'communication_agent': AgentRole.COMMUNICATION,
+        'profile_collection_agent': AgentRole.DATA_COLLECTION, // Maps to same role
+        'entity_compliance_agent': AgentRole.LEGAL_COMPLIANCE,  // Maps to same role
+        'celebration_agent': AgentRole.COMMUNICATION,           // Maps to communication
+        'ux_optimization_agent': AgentRole.COMMUNICATION        // Maps to communication
       };
-
-      // Create agents for each role
-      // Note: These will be replaced with proper YAML-configured agents
-      for (const [role, agentType] of Object.entries(roleToType)) {
-        logger.info(`Initializing agent for role ${role} with type ${agentType}`);
-        // TODO: Create agents from YAML configurations
+      
+      // STEP 4: Instantiate DefaultAgent for each discovered agent
+      for (const [agentId, capability] of this.agentCapabilities.entries()) {
+        // Skip orchestrator (already created)
+        if (agentId.includes('orchestrator')) {
+          continue;
+        }
+        
+        try {
+          logger.info(`🤖 Instantiating agent: ${agentId}`, {
+            role: capability.role,
+            skills: capability.skills.length
+          });
+          
+          // Create DefaultAgent instance
+          const agent = await agentDiscovery.instantiateAgent(agentId, 'system');
+          this.agentInstances.set(agentId, agent);
+          
+          // Map to AgentRole if defined
+          const role = agentIdToRole[agentId];
+          if (role && !this.agents.has(role)) {
+            this.agents.set(role, agent);
+            logger.info(`   ✅ Mapped ${agentId} to role: ${role}`);
+          }
+          
+        } catch (error) {
+          logger.error(`   ❌ Failed to instantiate agent: ${agentId}`, {
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
       }
+      
+      // STEP 5: Update OrchestratorAgent's registry with discovered agents
+      // The orchestrator needs to know about available agents for task delegation
+      this.updateOrchestratorRegistry(orchestrator);
 
-      // Agents now communicate through direct method calls
-      // No EventEmitter needed - simpler and more direct
+      // Agents now communicate through A2A protocol
+      // Routing is defined in YAML configurations
 
       this.isInitialized = true;
-      logger.info('Agent Manager initialized successfully', {
-        agentCount: this.agents.size
+      logger.info('✅ Agent Manager initialized successfully', {
+        agentCount: this.agents.size,
+        discoveredAgents: this.agentInstances.size,
+        capabilities: this.agentCapabilities.size
       });
     } catch (error) {
-      logger.error('Failed to initialize Agent Manager', error);
+      logger.error('💥 Failed to initialize Agent Manager', error);
       throw error;
     }
+  }
+  
+  /**
+   * Update OrchestratorAgent's internal registry with discovered agents
+   */
+  private updateOrchestratorRegistry(_orchestrator: OrchestratorAgent): void {
+    // The orchestrator needs to know about available agents
+    // This would update its internal agentRegistry Map
+    // For now, we'll log what would be updated
+    logger.info('📋 Updating OrchestratorAgent registry with discovered agents:', {
+      agents: Array.from(this.agentInstances.keys())
+    });
+    
+    // TODO: Add method to OrchestratorAgent to accept discovered agents
+    // orchestrator.updateAgentRegistry(this.agentCapabilities);
   }
 
 
@@ -249,6 +312,55 @@ class AgentManagerClass {
 
   public getAgentCount(): number {
     return this.agents.size;
+  }
+  
+  /**
+   * Get all discovered agent capabilities (A2A Protocol)
+   */
+  public getDiscoveredCapabilities(): AgentCapability[] {
+    return agentDiscovery.getCapabilities();
+  }
+  
+  /**
+   * Find agents by skill
+   */
+  public findAgentsBySkill(skill: string): AgentCapability[] {
+    return agentDiscovery.findAgentsBySkill(skill);
+  }
+  
+  /**
+   * Find agents by role
+   */
+  public findAgentsByRole(role: string): AgentCapability[] {
+    return agentDiscovery.findAgentsByRole(role);
+  }
+  
+  /**
+   * Get routing information for an agent
+   */
+  public getAgentRouting(agentId: string): { canReceiveFrom: string[], canSendTo: string[] } | undefined {
+    const capability = agentDiscovery.getAgentCapability(agentId);
+    if (capability) {
+      return {
+        canReceiveFrom: capability.canReceiveFrom,
+        canSendTo: capability.canSendTo
+      };
+    }
+    return undefined;
+  }
+  
+  /**
+   * Check if two agents can communicate
+   */
+  public canAgentsCommunicate(fromAgent: string, toAgent: string): boolean {
+    return agentDiscovery.canCommunicate(fromAgent, toAgent);
+  }
+  
+  /**
+   * Get capability report (formatted string)
+   */
+  public getCapabilityReport(): string {
+    return agentDiscovery.generateCapabilityReport();
   }
 
   public isHealthy(): boolean {

@@ -99,6 +99,20 @@ export interface SpecializedAgentConfig {
       output_formats?: string[];
     };
     extends?: string; // Reference to base template
+    a2a?: { // A2A Protocol configuration
+      protocolVersion?: string;
+      communicationMode?: string;
+      messageFormats?: string[];
+      routing?: {
+        canReceiveFrom?: string[];
+        canSendTo?: string[];
+      };
+      messageHandling?: {
+        bufferSize?: number;
+        timeoutMs?: number;
+        retryEnabled?: boolean;
+      };
+    };
   };
   schemas: {
     output: any; // JSON schema for agent responses

@@ -912,6 +912,7 @@ export class OrchestratorAgent extends BaseAgent {
   
   /**
    * Record entry in task context
+   * CRITICAL: Persists to database for durability
    */
   private async recordContextEntry(
     context: TaskContext,
@@ -932,17 +933,45 @@ export class OrchestratorAgent extends BaseAgent {
       ...entry
     };
     
-    // Append to history (append-only)
+    // Append to in-memory history (for immediate access)
     context.history.push(fullEntry);
     
-    // Persist to database
+    // CRITICAL: Persist to database for durability
+    // Using the unified task_context_events table (event sourcing architecture)
     try {
-      await this.getDBService().createContextHistoryEntry(context.contextId, fullEntry);
-    } catch (error) {
-      logger.error('Failed to persist context entry', {
+      const dbService = DatabaseService.getInstance();
+      
+      // In the TaskContext, the contextId IS the taskId
+      // This is part of the universal engine architecture
+      const taskId = context.contextId;
+      
+      // For now, we'll use a system-level write that doesn't require userId
+      // In production, the TaskContext should include tenantId/userId for proper scoping
+      const userId = context.tenantId || 'system'; // tenantId is the userId in current implementation
+      
+      await dbService.createTaskContextEvent(userId, taskId, {
         contextId: context.contextId,
-        error: (error as Error).message
+        actorType: fullEntry.actor.type,
+        actorId: fullEntry.actor.id,
+        operation: fullEntry.operation,
+        data: fullEntry.data,
+        reasoning: fullEntry.reasoning || '',
+        trigger: { source: 'orchestrator', timestamp: fullEntry.timestamp }
       });
+      
+      logger.debug('Context entry persisted to task_context_events table', {
+        contextId: context.contextId,
+        operation: fullEntry.operation,
+        sequenceNumber: fullEntry.sequenceNumber
+      });
+    } catch (error) {
+      logger.error('Failed to persist context entry to database', {
+        contextId: context.contextId,
+        operation: fullEntry.operation,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't throw - we've updated in-memory, persistence failure shouldn't stop orchestration
+      // But this should be monitored and handled via retry mechanism
     }
   }
   

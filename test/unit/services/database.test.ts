@@ -164,14 +164,39 @@ describe('DatabaseService - New Schema', () => {
 
   describe('Event Sourcing', () => {
     it('should add a context event', async () => {
-      mockSupabaseClient.single.mockResolvedValueOnce({
-        data: {
-          id: 'event-123',
-          sequence_number: 1,
-          context_id: 'ctx-123',
-          operation: 'status_update'
-        },
-        error: null
+      // First mock - for getting the task
+      mockSupabaseClient.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValueOnce({
+          eq: jest.fn().mockReturnValueOnce({
+            eq: jest.fn().mockReturnValueOnce({
+              single: jest.fn().mockResolvedValueOnce({
+                data: {
+                  id: 'ctx-123',
+                  user_id: 'system',
+                  status: 'pending'
+                },
+                error: null
+              })
+            })
+          })
+        })
+      });
+      
+      // Second mock - for task_context_events table
+      mockSupabaseClient.from.mockReturnValueOnce({
+        insert: jest.fn().mockReturnValueOnce({
+          select: jest.fn().mockReturnValueOnce({
+            single: jest.fn().mockResolvedValueOnce({
+              data: {
+                id: 'event-123',
+                sequence_number: 1,
+                context_id: 'ctx-123',
+                operation: 'status_update'
+              },
+              error: null
+            })
+          })
+        })
       });
 
       const event = await dbService.addContextEvent({
