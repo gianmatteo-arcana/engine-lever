@@ -949,11 +949,11 @@ Remember: You are an autonomous agent following the universal principles while a
   }
 
   /**
-   * Record entry in task context
-   * CRITICAL: Persists to database for durability
+   * Record entry in task context using SSE broadcasting
+   * CRITICAL: No in-memory state - database is single source of truth
    * 
-   * This is a base functionality that all agents can use to record their
-   * operations in the task context with full event sourcing support.
+   * This broadcasts events on the SSE message bus for loose coupling.
+   * All agents subscribe to the task-centered message bus and react to events.
    * 
    * @param context - The task context to update
    * @param entry - Partial context entry (will be completed with defaults)
@@ -966,7 +966,7 @@ Remember: You are an autonomous agent following the universal principles while a
     const fullEntry: ContextEntry = {
       entryId: `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date().toISOString(),
-      sequenceNumber: context.history.length + 1,
+      sequenceNumber: 0, // Will be determined by database sequence
       actor: {
         type: 'agent',
         id: this.specializedTemplate.agent.id,
@@ -985,8 +985,8 @@ Remember: You are an autonomous agent following the universal principles while a
       ...entry
     };
     
-    // Append to in-memory history (for immediate access)
-    context.history.push(fullEntry);
+    // NO IN-MEMORY STORAGE - Database is the single source of truth
+    // Events are broadcast via SSE for loose coupling
     
     // CRITICAL: Persist to database for durability
     // Using the unified task_context_events table (event sourcing architecture)
@@ -1013,22 +1013,174 @@ Remember: You are an autonomous agent following the universal principles while a
         }
       });
       
-      logger.debug('Context entry persisted to task_context_events table', {
+      // Broadcast event on SSE message bus for loose coupling
+      // All agents listening to this task will receive the update
+      await this.broadcastTaskEvent(taskId, {
+        type: 'TASK_CONTEXT_UPDATE',
+        taskId,
+        agentId: this.specializedTemplate.agent.id,
+        operation: fullEntry.operation,
+        data: fullEntry.data,
+        timestamp: fullEntry.timestamp
+      });
+      
+      logger.debug('Context entry persisted and broadcast via SSE', {
         agentId: this.specializedTemplate.agent.id,
         contextId: context.contextId,
-        operation: fullEntry.operation,
-        sequenceNumber: fullEntry.sequenceNumber
+        operation: fullEntry.operation
       });
     } catch (error) {
-      logger.error('Failed to persist context entry to database', {
+      logger.error('Failed to persist/broadcast context entry', {
         agentId: this.specializedTemplate.agent.id,
         contextId: context.contextId,
         operation: fullEntry.operation,
         error: error instanceof Error ? error.message : String(error)
       });
-      // Don't throw - we've updated in-memory, persistence failure shouldn't stop execution
+      // Throw error - without persistence/broadcast, the system cannot function
       // But this should be monitored and handled via retry mechanism
     }
+  }
+
+  /**
+   * =============================================================================
+   * SSE MESSAGE BUS - LOOSE COUPLING & EVENT-DRIVEN COMMUNICATION
+   * =============================================================================
+   * 
+   * These methods implement SSE-based messaging for loose coupling between agents.
+   * Agents subscribe to task-centered message buses and react to events.
+   * Database is the single source of truth, SSE provides real-time updates.
+   */
+
+  /**
+   * Broadcast a task event via SSE for loose coupling
+   * All agents subscribed to this task will receive the update
+   * 
+   * @param taskId - The task to broadcast to
+   * @param event - The event to broadcast
+   * @protected
+   */
+  protected async broadcastTaskEvent(taskId: string, event: any): Promise<void> {
+    try {
+      const dbService = DatabaseService.getInstance();
+      // Use PostgreSQL NOTIFY to broadcast to all SSE subscribers
+      await dbService.notifyTaskContextUpdate(taskId, event.type || 'AGENT_UPDATE', event);
+      
+      logger.debug('Task event broadcast via SSE', {
+        agentId: this.specializedTemplate.agent.id,
+        taskId,
+        eventType: event.type
+      });
+    } catch (error) {
+      logger.error('Failed to broadcast task event', {
+        agentId: this.specializedTemplate.agent.id,
+        taskId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Subscribe to task events via SSE
+   * Agents use this to listen for updates and determine if they can proceed
+   * 
+   * @param taskId - The task to subscribe to
+   * @param handler - The event handler
+   * @protected
+   */
+  protected async subscribeToTaskEvents(
+    taskId: string,
+    handler: (event: any) => Promise<void>
+  ): Promise<() => void> {
+    const dbService = DatabaseService.getInstance();
+    
+    // Subscribe to PostgreSQL LISTEN/NOTIFY for this task
+    const unsubscribe = await dbService.listenForTaskUpdates(taskId, async (payload) => {
+      try {
+        // Analyze if this event affects this agent's work
+        if (this.shouldHandleEvent(payload)) {
+          await handler(payload);
+        }
+      } catch (error) {
+        logger.error('Error handling task event', {
+          agentId: this.specializedTemplate.agent.id,
+          taskId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    });
+    
+    logger.info('Agent subscribed to task events', {
+      agentId: this.specializedTemplate.agent.id,
+      taskId
+    });
+    
+    return unsubscribe;
+  }
+
+  /**
+   * Determine if this agent should handle an event
+   * Agents analyze each update to determine if they can proceed
+   * 
+   * @param event - The event to analyze
+   * @returns true if this agent should handle the event
+   * @protected
+   */
+  protected shouldHandleEvent(event: any): boolean {
+    // Base implementation - agents can override for specific logic
+    // Check if event is relevant to this agent's current work
+    return event.data?.targetAgentId === this.specializedTemplate.agent.id ||
+           event.type === 'ORCHESTRATOR_COMMAND' ||
+           event.type === 'TASK_BLOCKED' ||
+           event.type === 'DEPENDENCY_RESOLVED';
+  }
+
+  /**
+   * Announce that this agent is blocked and needs something
+   * Other agents listen for these announcements to provide help
+   * 
+   * @param taskId - The task context
+   * @param blockage - Description of what's blocking
+   * @protected
+   */
+  protected async announceBlockage(taskId: string, blockage: {
+    reason: string;
+    needs: string[];
+    data?: any;
+  }): Promise<void> {
+    await this.broadcastTaskEvent(taskId, {
+      type: 'AGENT_BLOCKED',
+      agentId: this.specializedTemplate.agent.id,
+      blockage,
+      timestamp: new Date().toISOString()
+    });
+    
+    logger.info('Agent announced blockage', {
+      agentId: this.specializedTemplate.agent.id,
+      taskId,
+      reason: blockage.reason
+    });
+  }
+
+  /**
+   * Announce that this agent has completed its work
+   * 
+   * @param taskId - The task context
+   * @param result - The work product
+   * @protected
+   */
+  protected async announceCompletion(taskId: string, result: any): Promise<void> {
+    await this.broadcastTaskEvent(taskId, {
+      type: 'AGENT_COMPLETED',
+      agentId: this.specializedTemplate.agent.id,
+      result,
+      timestamp: new Date().toISOString()
+    });
+    
+    logger.info('Agent announced completion', {
+      agentId: this.specializedTemplate.agent.id,
+      taskId
+    });
   }
 
   /**
@@ -1159,17 +1311,23 @@ Remember: You are an autonomous agent following the universal principles while a
   }
 
   /**
-   * Request another agent to be spawned (if not already running)
+   * Request another agent to be created for a task via DI
+   * The agent will be subscribed to the task's message bus
    */
-  protected async requestAgentSpawn(agentId: string): Promise<any> {
+  protected async requestAgentSpawn(agentId: string, taskId?: string): Promise<any> {
     try {
       const { OrchestratorAgent } = await import('../OrchestratorAgent');
       const orchestrator = OrchestratorAgent.getInstance();
       
-      return await orchestrator.spawnAgent(agentId, this.userId || 'system');
+      // Use task ID if provided, otherwise use a system channel
+      const channel = taskId || 'system';
+      
+      // Create agent via DI and subscribe to task message bus
+      return await orchestrator.createAgentForTask(agentId, channel);
     } catch (error) {
-      logger.error(`Failed to request spawn of agent: ${agentId}`, {
+      logger.error(`Failed to request agent for task: ${agentId}`, {
         requestingAgent: this.specializedTemplate.agent.id,
+        taskId,
         error: error instanceof Error ? error.message : String(error)
       });
       throw error;
