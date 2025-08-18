@@ -3,16 +3,8 @@
  * Tests for business-centric database operations
  */
 
-import { 
-  DatabaseService,
-  BusinessRecord,
-  ContextRecord,
-  ContextEventRecord
-} from '../../../src/services/database';
-
-// Mock Supabase
-const mockSupabaseClient = {
-  from: jest.fn().mockReturnThis(),
+// Create the mock response chain
+const mockChain = {
   select: jest.fn().mockReturnThis(),
   insert: jest.fn().mockReturnThis(),
   update: jest.fn().mockReturnThis(),
@@ -20,7 +12,22 @@ const mockSupabaseClient = {
   eq: jest.fn().mockReturnThis(),
   order: jest.fn().mockReturnThis(),
   limit: jest.fn().mockReturnThis(),
+  gte: jest.fn().mockReturnThis(),
+  lte: jest.fn().mockReturnThis(),
+  in: jest.fn().mockReturnThis(),
+  contains: jest.fn().mockReturnThis(),
+  containedBy: jest.fn().mockReturnThis(),
+  range: jest.fn().mockReturnThis(),
+  filter: jest.fn().mockReturnThis(),
   single: jest.fn(),
+  then: jest.fn((resolve) => {
+    resolve({ data: [], error: null });
+  })
+};
+
+// Create mock client with from() that returns the chain
+const mockSupabaseClient: any = {
+  from: jest.fn(() => mockChain),
   auth: {
     getUser: jest.fn().mockResolvedValue({
       data: { user: { id: 'user-123' } },
@@ -33,11 +40,34 @@ jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => mockSupabaseClient)
 }));
 
+// Import after mock is set up
+import { 
+  DatabaseService,
+  BusinessRecord,
+  ContextRecord,
+  ContextEventRecord
+} from '../../../src/services/database';
+
 describe('DatabaseService - New Schema', () => {
   let dbService: DatabaseService;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset all mock functions
+    mockChain.single.mockReset();
+    mockChain.then.mockReset();
+    mockChain.order.mockReset();
+    mockChain.select.mockReturnThis();
+    mockChain.insert.mockReturnThis();
+    mockChain.update.mockReturnThis();
+    mockChain.upsert.mockReturnThis();
+    mockChain.eq.mockReturnThis();
+    mockChain.limit.mockReturnThis();
+    // Reset then to default behavior
+    mockChain.then = jest.fn((resolve) => {
+      resolve({ data: [], error: null });
+    });
+    
     process.env.SUPABASE_URL = 'https://test.supabase.co';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
     process.env.SUPABASE_ANON_KEY = 'test-anon-key';
@@ -45,6 +75,11 @@ describe('DatabaseService - New Schema', () => {
     // Reset singleton
     (DatabaseService as any).instance = undefined;
     dbService = DatabaseService.getInstance();
+    
+    // Mock getServiceClient to return our mock client
+    (dbService as any).getServiceClient = jest.fn(() => mockSupabaseClient);
+    // Also set the serviceClient property directly
+    (dbService as any).serviceClient = mockSupabaseClient;
   });
 
   describe('Singleton Pattern', () => {
@@ -58,7 +93,7 @@ describe('DatabaseService - New Schema', () => {
   describe('Business Operations', () => {
     it('should get or create a business', async () => {
       // Mock no existing business
-      mockSupabaseClient.single
+      mockChain.single
         .mockResolvedValueOnce({ data: null, error: null })
         .mockResolvedValueOnce({ 
           data: { id: 'biz-123', name: 'Test Business' },
@@ -74,14 +109,15 @@ describe('DatabaseService - New Schema', () => {
     });
 
     it('should get user businesses', async () => {
-      mockSupabaseClient.select.mockReturnValueOnce({
-        eq: jest.fn().mockResolvedValueOnce({
+      // Override the then method for this specific test
+      mockChain.then = jest.fn((resolve) => {
+        resolve({
           data: [
             { businesses: { id: 'biz-1', name: 'Business 1' } },
             { businesses: { id: 'biz-2', name: 'Business 2' } }
           ],
           error: null
-        })
+        });
       });
 
       const businesses = await dbService.getUserBusinesses('user-123');
@@ -93,7 +129,7 @@ describe('DatabaseService - New Schema', () => {
 
   describe('Context Operations', () => {
     it('should create a context', async () => {
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: {
           id: 'ctx-123',
           business_id: 'biz-123',
@@ -121,7 +157,7 @@ describe('DatabaseService - New Schema', () => {
     });
 
     it('should get a context', async () => {
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: {
           id: 'ctx-123',
           business_id: 'biz-123',
@@ -137,7 +173,7 @@ describe('DatabaseService - New Schema', () => {
     });
 
     it('should return null for non-existent context', async () => {
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: null,
         error: { code: 'PGRST116' }
       });
@@ -147,7 +183,7 @@ describe('DatabaseService - New Schema', () => {
     });
 
     it('should get business contexts', async () => {
-      mockSupabaseClient.order.mockResolvedValueOnce({
+      mockChain.order.mockResolvedValueOnce({
         data: [
           { id: 'ctx-1', business_id: 'biz-123' },
           { id: 'ctx-2', business_id: 'biz-123' }
@@ -164,39 +200,24 @@ describe('DatabaseService - New Schema', () => {
 
   describe('Event Sourcing', () => {
     it('should add a context event', async () => {
-      // First mock - for getting the task
-      mockSupabaseClient.from.mockReturnValueOnce({
-        select: jest.fn().mockReturnValueOnce({
-          eq: jest.fn().mockReturnValueOnce({
-            eq: jest.fn().mockReturnValueOnce({
-              single: jest.fn().mockResolvedValueOnce({
-                data: {
-                  id: 'ctx-123',
-                  user_id: 'system',
-                  status: 'pending'
-                },
-                error: null
-              })
-            })
-          })
-        })
-      });
+      // addContextEvent redirects to createTaskContextEvent which doesn't check task ownership
+      // for system/agent operations, so no getTask call is made
       
-      // Second mock - for task_context_events table
-      mockSupabaseClient.from.mockReturnValueOnce({
-        insert: jest.fn().mockReturnValueOnce({
-          select: jest.fn().mockReturnValueOnce({
-            single: jest.fn().mockResolvedValueOnce({
-              data: {
-                id: 'event-123',
-                sequence_number: 1,
-                context_id: 'ctx-123',
-                operation: 'status_update'
-              },
-              error: null
-            })
-          })
-        })
+      // Mock for task_context_events insert (only single call needed)
+      mockChain.single.mockResolvedValueOnce({
+        data: {
+          id: 'event-123',
+          sequence_number: 1,
+          context_id: 'ctx-123',
+          task_id: 'ctx-123',
+          operation: 'status_update',
+          actor_id: 'agent-1',
+          actor_type: 'agent',
+          data: { status: 'active' },
+          reasoning: 'Legacy event migration',
+          created_at: new Date().toISOString()
+        },
+        error: null
       });
 
       const event = await dbService.addContextEvent({
@@ -214,7 +235,7 @@ describe('DatabaseService - New Schema', () => {
 
   describe('UI Requests', () => {
     it('should create a UI request', async () => {
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: {
           id: 'ui-123',
           context_id: 'ctx-123',
@@ -236,7 +257,7 @@ describe('DatabaseService - New Schema', () => {
     });
 
     it('should get context UI requests', async () => {
-      mockSupabaseClient.order.mockResolvedValueOnce({
+      mockChain.order.mockResolvedValueOnce({
         data: [
           { id: 'ui-1', context_id: 'ctx-123' },
           { id: 'ui-2', context_id: 'ctx-123' }
@@ -254,7 +275,7 @@ describe('DatabaseService - New Schema', () => {
   describe('Agent States', () => {
     it('should upsert agent state', async () => {
       // First call for checking existing version
-      mockSupabaseClient.single
+      mockChain.single
         .mockResolvedValueOnce({ data: null, error: { code: 'PGRST116' } })
         .mockResolvedValueOnce({
           data: {
@@ -277,14 +298,15 @@ describe('DatabaseService - New Schema', () => {
     });
 
     it('should get context agent states', async () => {
-      mockSupabaseClient.select.mockReturnValueOnce({
-        eq: jest.fn().mockResolvedValueOnce({
+      // Override the then method for this specific test  
+      mockChain.then = jest.fn((resolve) => {
+        resolve({
           data: [
             { id: 'state-1', agent_role: 'orchestrator' },
             { id: 'state-2', agent_role: 'legal_compliance' }
           ],
           error: null
-        })
+        });
       });
 
       const states = await dbService.getContextAgentStates('ctx-123');
@@ -296,7 +318,7 @@ describe('DatabaseService - New Schema', () => {
 
   describe('Audit Operations', () => {
     it('should create audit log entry', async () => {
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: {
           id: 'audit-123',
           action: 'context_created',
@@ -318,33 +340,26 @@ describe('DatabaseService - New Schema', () => {
 
   describe('Legacy Compatibility', () => {
     it('should create task using legacy method', async () => {
-      // Mock for business lookup
-      mockSupabaseClient.select.mockReturnValueOnce({
-        eq: jest.fn().mockReturnValueOnce({
-          eq: jest.fn().mockReturnValueOnce({
-            single: jest.fn().mockResolvedValueOnce({ data: null, error: null })
-          })
-        })
-      });
+      // Mock for business lookup (returns null - no existing business)
+      mockChain.single.mockResolvedValueOnce({ data: null, error: null });
       
       // Mock for business creation
-      mockSupabaseClient.insert.mockReturnValueOnce({
-        select: jest.fn().mockReturnValueOnce({
-          single: jest.fn().mockResolvedValueOnce({
-            data: { id: 'biz-123', name: 'My Business' },
-            error: null
-          })
-        })
-      });
-      
-      // Mock for business_users insert
-      mockSupabaseClient.insert.mockReturnValueOnce({
-        data: null,
+      mockChain.single.mockResolvedValueOnce({
+        data: { id: 'biz-123', name: 'My Business' },
         error: null
       });
       
+      // Mock for business_users insert (uses then, not single)
+      mockChain.then = jest.fn((resolve) => {
+        resolve({ data: null, error: null });
+        // Reset for next call
+        mockChain.then = jest.fn((resolve) => {
+          resolve({ data: [], error: null });
+        });
+      });
+      
       // Mock for context creation
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: {
           id: 'ctx-123',
           business_id: 'biz-123',
@@ -368,7 +383,7 @@ describe('DatabaseService - New Schema', () => {
     });
 
     it('should get task using legacy method', async () => {
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: {
           id: 'ctx-123',
           user_id: 'test-user-123',
@@ -401,7 +416,7 @@ describe('DatabaseService - New Schema', () => {
     });
 
     it('should handle database errors', async () => {
-      mockSupabaseClient.single.mockRejectedValueOnce(
+      mockChain.single.mockRejectedValueOnce(
         new Error('Database error')
       );
 

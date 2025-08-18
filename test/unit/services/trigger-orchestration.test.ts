@@ -25,16 +25,19 @@ describe('Trigger-Based Task Orchestration', () => {
     jest.clearAllMocks();
     
     // Setup mocks
+    const mockClient = {
+      from: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      single: jest.fn(),
+      insert: jest.fn().mockReturnThis(),
+      update: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis()
+    };
+    
     mockDb = {
-      getUserClient: jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn(),
-        insert: jest.fn().mockReturnThis(),
-        update: jest.fn().mockReturnThis(),
-        order: jest.fn().mockReturnThis()
-      }),
+      getUserClient: jest.fn().mockReturnValue(mockClient),
+      getServiceClient: jest.fn().mockReturnValue(mockClient),
       query: jest.fn()
     } as any;
     
@@ -104,7 +107,7 @@ describe('Trigger-Based Task Orchestration', () => {
       }];
 
       // Mock database responses
-      const mockClient = mockDb.getUserClient('');
+      const mockClient = mockDb.getServiceClient();
       (mockClient.from as jest.Mock).mockImplementation((table: string) => {
         if (table === 'task_contexts') {
           return {
@@ -194,7 +197,7 @@ describe('Trigger-Based Task Orchestration', () => {
           created_at: '2025-01-12T10:00:00Z'
         };
 
-        const mockClient = mockDb.getUserClient('');
+        const mockClient = mockDb.getServiceClient();
         (mockClient.from as jest.Mock).mockImplementation(() => ({
           select: jest.fn().mockReturnThis(),
           eq: jest.fn().mockReturnThis(),
