@@ -1031,14 +1031,24 @@ export class OrchestratorAgent extends BaseAgent {
     try {
       logger.info(`🤖 Creating agent via DI: ${agentId} for task: ${taskId}`);
       
-      // Use Dependency Injection to get agent instance
-      const { DIContainer } = await import('../services/dependency-injection');
+      // Use Agent DI Registry to create task-scoped agent
+      const { AgentDIRegistry } = await import('../services/agent-di-registry');
       
-      // Request agent instance from DI container
-      const agent = DIContainer.resolve(agentId);
-      
-      if (!agent) {
-        // Fallback to agentDiscovery if not in DI container
+      // Check if agent is registered in DI
+      if (AgentDIRegistry.isAgentRegistered(agentId)) {
+        // Create agent with SSE subscriptions already configured
+        const agent = await AgentDIRegistry.resolveAgentForTask(agentId, taskId);
+        
+        // Track active subscription
+        if (!this.activeTaskSubscriptions.has(taskId)) {
+          this.activeTaskSubscriptions.set(taskId, new Set());
+        }
+        this.activeTaskSubscriptions.get(taskId)!.add(agentId);
+        
+        logger.info(`✅ Agent created via DI and subscribed to task: ${agentId}`);
+        return agent;
+      } else {
+        // Fallback to agentDiscovery if not in DI registry
         const { agentDiscovery } = await import('../services/agent-discovery');
         const agent = await agentDiscovery.instantiateAgent(agentId, taskId);
         
@@ -1046,12 +1056,7 @@ export class OrchestratorAgent extends BaseAgent {
         await this.configureAgentForTask(agent, taskId);
         return agent;
       }
-      
-      // Configure agent to subscribe to task-centered message bus
-      await this.configureAgentForTask(agent, taskId);
-      
-      logger.info(`✅ Agent created and subscribed to task: ${agentId}`);
-      return agent;
+    
     } catch (error) {
       logger.error(`❌ Failed to create agent: ${agentId}`, {
         error: error instanceof Error ? error.message : String(error)

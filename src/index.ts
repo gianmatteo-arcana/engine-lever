@@ -311,6 +311,11 @@ async function startServer() {
     initializeServices();
     logger.info('✅ Dependency injection container initialized');
     
+    // Initialize agent DI registry for task-scoped agent creation
+    const { AgentDIRegistry } = await import('./services/agent-di-registry');
+    await AgentDIRegistry.initialize();
+    logger.info('✅ Agent DI Registry initialized - agents ready for task-scoped creation');
+    
     // Initialize task events service
     initializeTaskEvents();
     logger.info('✅ Task Events service initialized');
