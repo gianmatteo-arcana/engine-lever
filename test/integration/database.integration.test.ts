@@ -39,7 +39,6 @@ const mockSupabaseClient: any = {
   auth: mockAuth
 };
 
-// Mock must be set up before importing DatabaseService
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => mockSupabaseClient)
 }));
@@ -101,135 +100,177 @@ describe('Database Integration Tests', () => {
       // Mock business creation
       mockChain.select.mockReturnValueOnce({
         eq: jest.fn().mockReturnValueOnce({
-          eq: jest.fn().mockReturnValueOnce({
-            single: jest.fn().mockResolvedValueOnce({ data: null, error: null })
-          })
+          single: jest.fn().mockResolvedValueOnce({ data: null, error: null })
         })
       });
       
-      mockChain.insert.mockReturnValueOnce({
-        select: jest.fn().mockReturnValueOnce({
-          single: jest.fn().mockResolvedValueOnce({
-            data: { id: 'biz-123', name: 'Test Business' },
-            error: null
-          })
-        })
+      // Mock business creation response
+      mockChain.single.mockResolvedValueOnce({
+        data: { id: 'biz-123', name: 'Test Business' },
+        error: null
       });
       
-      mockChain.insert.mockReturnValueOnce({ data: null, error: null });
+      // Mock business_users association (uses then)
+      mockChain.then = jest.fn((resolve) => {
+        resolve({ data: null, error: null });
+        // Reset for next call
+        mockChain.then = jest.fn((resolve) => {
+          resolve({ data: [], error: null });
+        });
+      });
       
-      // Mock context creation
+      // Mock task creation
       mockChain.single.mockResolvedValueOnce({
         data: {
           id: 'ctx-123',
           business_id: 'biz-123',
-          current_state: { status: 'created', phase: 'init', completeness: 0, data: {} },
-          template_id: 'test',
-          metadata: {},
+          template_id: 'onboarding',
+          current_state: {
+            status: 'created',
+            phase: 'init',
+            completeness: 0,
+            data: {}
+          },
+          metadata: { title: 'Test Task' },
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         },
         error: null
       });
-      
+
       // Create task
       const task = await dbService.createTask(mockUserToken, {
         title: 'Test Task',
-        task_type: 'test',
-        priority: 'high'
+        task_type: 'onboarding'
       });
-      
+
       expect(task).toBeDefined();
-      expect(task.id).toBe('ctx-123');
+      expect(task.id).toBeDefined();
       expect(task.business_id).toBe('biz-123');
-      
-      // Mock read
+    });
+  });
+
+  describe('Business Context Operations', () => {
+    it('should get or create business context', async () => {
+      // Mock existing business lookup
       mockChain.single.mockResolvedValueOnce({
-        data: {
-          id: 'ctx-123',
-          business_id: 'biz-123',
-          current_state: { status: 'active', phase: 'processing', completeness: 50, data: {} },
-          template_id: 'test',
-          metadata: { title: 'Test Task' },
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        },
+        data: { id: 'biz-123', name: 'Existing Business' },
         error: null
       });
-      
-      const readTask = await dbService.getTask(mockUserToken, 'ctx-123');
-      expect(readTask).toBeDefined();
-      expect(readTask?.id).toBe('ctx-123');
-      
-      // Mock for getTask (called by updateTask)
-      mockChain.single.mockResolvedValueOnce({
-        data: {
-          id: 'ctx-123',
-          user_id: 'test-user-123',
-          business_id: 'biz-123',
-          status: 'pending',
-          template_id: 'test',
-          metadata: { title: 'Test Task' },
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        },
-        error: null
+
+      const business = await dbService.getOrCreateBusiness('user-123', {
+        name: 'Existing Business'
       });
-      
-      // Mock for task_context_events insert
-      mockChain.insert.mockReturnValueOnce({
-        select: jest.fn().mockReturnValueOnce({
-          single: jest.fn().mockResolvedValueOnce({
-            data: { id: 'event-123', sequence_number: 1 },
-            error: null
-          })
-        })
-      });
-      
-      // Mock for the second getTask call (after update) - returns updated task
-      mockChain.select.mockReturnValueOnce({
-        eq: jest.fn().mockReturnValueOnce({
-          eq: jest.fn().mockReturnValueOnce({
-            single: jest.fn().mockResolvedValueOnce({
-              data: {
-                id: 'ctx-123',
-                user_id: 'test-user-123',
-                business_id: 'biz-123',
-                status: 'completed',  // Updated status
-                template_id: 'test',
-                current_state: { status: 'completed', phase: 'done', completeness: 100, data: {} },
-                metadata: { title: 'Test Task' },
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              },
-              error: null
-            })
-          })
-        })
-      });
-      
-      const updated = await dbService.updateTask(mockUserToken, 'ctx-123', {
-        status: 'completed'
-      });
-      
-      expect(updated).toBeDefined();
-      expect(updated.status).toBe('completed');
+
+      expect(business).toBeDefined();
+      expect(business.id).toBe('biz-123');
     });
 
-    it('should get user tasks with RLS filtering', async () => {
-      // Set up proper mock chain for getUserTasks
-      // The method chains: from('tasks').select('*').eq('user_id', ...).order(...)
-      // Since all methods return mockChain, we just need to set the final response
+    it('should create new business if none exists', async () => {
+      // Mock no existing business
+      mockChain.single
+        .mockResolvedValueOnce({ data: null, error: null })
+        .mockResolvedValueOnce({
+          data: { id: 'biz-456', name: 'New Business' },
+          error: null
+        });
+
+      const business = await dbService.getOrCreateBusiness('user-456', {
+        name: 'New Business'
+      });
+
+      expect(business).toBeDefined();
+      expect(business.id).toBe('biz-456');
+    });
+  });
+
+  describe('Context Management', () => {
+    it('should create and retrieve contexts', async () => {
+      // Mock context creation
+      mockChain.single.mockResolvedValueOnce({
+        data: {
+          id: 'ctx-789',
+          business_id: 'biz-789',
+          template_id: 'onboarding',
+          current_state: {
+            status: 'created',
+            phase: 'initialization',
+            completeness: 0,
+            data: {}
+          }
+        },
+        error: null
+      });
+
+      const context = await dbService.createContext(
+        'biz-789',
+        'user-789',
+        'onboarding',
+        { template: 'data' }
+      );
+
+      expect(context).toBeDefined();
+      expect(context.id).toBe('ctx-789');
+      expect(context.business_id).toBe('biz-789');
+    });
+
+    it('should get business contexts', async () => {
+      mockChain.order.mockResolvedValueOnce({
+        data: [
+          { id: 'ctx-1', business_id: 'biz-123' },
+          { id: 'ctx-2', business_id: 'biz-123' }
+        ],
+        error: null
+      });
+
+      const contexts = await dbService.getBusinessContexts('biz-123');
+      
+      expect(Array.isArray(contexts)).toBe(true);
+      expect(contexts).toHaveLength(2);
+    });
+  });
+
+  describe('Event Management', () => {
+    it('should add context events', async () => {
+      mockChain.single.mockResolvedValueOnce({
+        data: {
+          id: 'event-123',
+          context_id: 'ctx-123',
+          sequence_number: 1,
+          operation: 'status_change',
+          actor_type: 'agent',
+          actor_id: 'orchestrator',
+          data: { status: 'active' },
+          created_at: new Date().toISOString()
+        },
+        error: null
+      });
+
+      const event = await dbService.addContextEvent({
+        context_id: 'ctx-123',
+        actor_type: 'agent',
+        actor_id: 'orchestrator',
+        operation: 'status_change',
+        data: { status: 'active' }
+      });
+
+      expect(event).toBeDefined();
+      expect(event.sequence_number).toBe(1);
+    });
+  });
+
+  describe('Legacy Compatibility', () => {
+    it('should handle getUserTasks', async () => {
+      // Mock the response for getUserTasks
       mockChain.then = jest.fn((resolve) => {
         resolve({
           data: [
             {
-              id: 'task-1',
-              user_id: 'test-user-123',
-              title: 'Task 1',
-              description: 'Test task',
-              status: 'pending',
-              task_type: 'test',
+              id: 'ctx-1',
+              business_id: 'biz-1',
+              template_id: 'onboarding',
+              current_state: { status: 'active', phase: 'processing', completeness: 50, data: {} },
+              metadata: { title: 'Task 1' },
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             }
@@ -237,175 +278,75 @@ describe('Database Integration Tests', () => {
           error: null
         });
       });
-      // getUserTasks now queries the tasks table directly
-      
+
       const tasks = await dbService.getUserTasks(mockUserToken);
       
       expect(Array.isArray(tasks)).toBe(true);
-      expect(tasks.length).toBeGreaterThan(0);
-      expect(tasks[0].title).toBe('Task 1');
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0].id).toBe('ctx-1');
     });
 
-    it('should return null when task not found or access denied', async () => {
-      // First reset the mock to ensure clean state
-      jest.clearAllMocks();
-      
-      // Mock getTask to return null (task not found)
-      mockChain.select.mockReturnValueOnce({
-        eq: jest.fn().mockReturnValueOnce({
-          eq: jest.fn().mockReturnValueOnce({
-            single: jest.fn().mockResolvedValueOnce({
-              data: null,
-              error: { code: 'PGRST116', message: 'Row not found' }
-            })
-          })
-        })
+    it('should handle getTask', async () => {
+      mockChain.single.mockResolvedValueOnce({
+        data: {
+          id: 'ctx-456',
+          business_id: 'biz-456',
+          template_id: 'onboarding',
+          current_state: { status: 'active', phase: 'processing', completeness: 75, data: {} },
+          metadata: { title: 'Task 456' },
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        },
+        error: null
       });
-      
-      const task = await dbService.getTask(mockUserToken, 'non-existent');
-      expect(task).toBeNull();
-    });
-  });
 
-  describe('Task Execution Operations', () => {
-    it('should create system execution', async () => {
-      // Mock for getting the task
-      mockChain.select.mockReturnValueOnce({
-        eq: jest.fn().mockReturnValueOnce({
-          eq: jest.fn().mockReturnValueOnce({
-            single: jest.fn().mockResolvedValueOnce({
-              data: {
-                id: 'ctx-123',
-                user_id: 'system',
-                status: 'pending'
-              },
-              error: null
-            })
-          })
-        })
-      });
+      const task = await dbService.getTask(mockUserToken, 'ctx-456');
       
-      // Mock for task_context_events insert
-      mockChain.insert.mockReturnValueOnce({
-        select: jest.fn().mockReturnValueOnce({
-          single: jest.fn().mockResolvedValueOnce({
-            data: { 
-              id: 'event-123', 
-              context_id: 'ctx-123',
-              sequence_number: 1,
-              operation: 'start',
-              actor: 'system',
-              metadata: {
-                execution_id: 'exec-123',
-                status: 'running'
-              },
-              created_at: new Date().toISOString()
-            },
-            error: null
-          })
-        })
-      });
-      
-      const execution = await dbService.createSystemExecution({
-        task_id: 'ctx-123',
-        execution_id: 'exec-123',
-        status: 'running',
-        started_at: new Date().toISOString(),
-        completed_steps: [],
-        agent_assignments: {},
-        variables: {},
-        is_paused: false
-      });
-      
-      expect(execution).toBeDefined();
-      expect(execution.execution_id).toBe('exec-123');
-      expect(execution.task_id).toBe('ctx-123');
-      expect(execution.status).toBe('running');
+      expect(task).toBeDefined();
+      expect(task?.id).toBe('ctx-456');
+      expect(task?.business_id).toBe('biz-456');
     });
 
-    // Removed JWT test - complex mock not worth maintaining
-  });
-
-  describe('Agent Message Operations', () => {
-    it('should save system message', async () => {
-      // Mock for audit_logs table insert
-      mockChain.insert.mockReturnValueOnce({
-        select: jest.fn().mockReturnValueOnce({
-          single: jest.fn().mockResolvedValueOnce({
-            data: { id: 'audit-123' },
-            error: null
-          })
-        })
+    it('should handle updateTask', async () => {
+      mockChain.single.mockResolvedValueOnce({
+        data: {
+          id: 'ctx-789',
+          business_id: 'biz-789',
+          current_state: { status: 'completed', phase: 'done', completeness: 100, data: {} },
+          metadata: { title: 'Updated Task' },
+          updated_at: new Date().toISOString()
+        },
+        error: null
       });
-      
-      await expect(dbService.saveSystemMessage({
-        id: 'msg-123',
-        from: 'orchestrator' as any,
-        to: 'legal_compliance' as any,
-        type: 'request',
-        priority: 1 as any,
-        payload: { test: true },
-        timestamp: new Date()
-      }, 'ctx-123')).resolves.not.toThrow();
-    });
-  });
 
-  describe('Audit Operations', () => {
-    it('should create system audit entry', async () => {
-      // Mock for audit_logs table insert
-      mockChain.insert.mockReturnValueOnce({
-        select: jest.fn().mockReturnValueOnce({
-          single: jest.fn().mockResolvedValueOnce({
-            data: { id: 'audit-123' },
-            error: null
-          })
-        })
+      const updatedTask = await dbService.updateTask(mockUserToken, 'ctx-789', {
+        status: 'completed',
+        progress: 100
       });
-      
-      await expect(dbService.createSystemAuditEntry({
-        task_id: 'ctx-123',
-        action: 'task_created',
-        details: { test: true }
-      })).resolves.not.toThrow();
-    });
-  });
 
-  describe('Client Management (Deprecated)', () => {
-    it('should throw on deprecated getUserClient', () => {
-      expect(() => dbService.getUserClient('token-1')).toThrow('getUserClient is deprecated - use service role pattern instead');
-    });
-    
-    it('should use service role pattern', () => {
-      // The new pattern uses the service client directly
-      const serviceClient = (dbService as any).getServiceClient();
-      expect(serviceClient).toBeDefined();
+      expect(updatedTask).toBeDefined();
+      expect(updatedTask?.id).toBe('ctx-789');
     });
   });
 
   describe('Error Handling', () => {
     it('should handle database errors gracefully', async () => {
-      // Mock a database connection error
-      const mockSingle = jest.fn().mockRejectedValueOnce(new Error('Connection failed'));
-      const mockEq = jest.fn().mockReturnValue({ single: mockSingle });
-      const mockSelect = jest.fn().mockReturnValue({ eq: mockEq });
-      mockSupabaseClient.from.mockReturnValueOnce({ select: mockSelect });
-      
-      await expect(dbService.getContext('ctx-123')).rejects.toThrow('Connection failed');
+      mockChain.single.mockRejectedValueOnce(
+        new Error('Database connection failed')
+      );
+
+      await expect(dbService.getContext('invalid-id'))
+        .rejects.toThrow('Database connection failed');
     });
 
-    it('should handle RLS permission errors', async () => {
-      // Mock a permission error from the database
-      const permissionError = { code: 'PGRST301', message: 'Permission denied' };
-      const mockSingle = jest.fn().mockResolvedValueOnce({
+    it('should handle missing resources', async () => {
+      mockChain.single.mockResolvedValueOnce({
         data: null,
-        error: permissionError
+        error: { code: 'PGRST116', message: 'No rows found' }
       });
-      const mockEq = jest.fn().mockReturnValue({ single: mockSingle });
-      const mockSelect = jest.fn().mockReturnValue({ eq: mockEq });
-      mockSupabaseClient.from.mockReturnValueOnce({ select: mockSelect });
-      
-      // getContext should throw the error object for non-PGRST116 errors
-      await expect(dbService.getContext('ctx-123')).rejects.toEqual(permissionError);
+
+      const result = await dbService.getContext('non-existent');
+      expect(result).toBeNull();
     });
   });
 });

@@ -1,14 +1,16 @@
 /**
- * LLM Provider Service
+ * LLM Provider Service - Legacy wrapper for backward compatibility
  * 
- * Provides access to Claude LLM for orchestration and agent reasoning.
- * This service abstracts the LLM integration to allow for easy switching
- * between providers (Claude, GPT-4, etc.) in the future.
+ * This file now wraps the UnifiedLLMProvider to maintain backward compatibility
+ * while providing the new generic, model-agnostic implementation.
+ * 
+ * @deprecated Use UnifiedLLMProvider directly for new code
  */
 
 import { logger } from '../utils/logger';
+import { UnifiedLLMProvider, LLMRequest as UnifiedRequest } from './unified-llm-provider';
 
-// LLM request/response types
+// Legacy request/response types for backward compatibility
 export interface LLMRequest {
   model?: string;
   messages: Array<{
@@ -45,23 +47,24 @@ export interface LLMConfig {
   timeout?: number;
 }
 
+/**
+ * Legacy LLMProvider class
+ * Wraps UnifiedLLMProvider for backward compatibility
+ */
 export class LLMProvider {
-  private config: LLMConfig;
+  private unifiedProvider: UnifiedLLMProvider;
   private static instance: LLMProvider;
 
   private constructor(config?: Partial<LLMConfig>) {
-    // Initialize with environment variables or provided config
-    this.config = {
-      provider: (process.env.LLM_PROVIDER as 'anthropic' | 'openai') || 'anthropic',
-      apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
-      defaultModel: process.env.LLM_MODEL || 'claude-3-sonnet-20240229',
-      maxRetries: 3,
-      timeout: 30000, // 30 seconds
-      ...config
-    };
-
-    if (!this.config.apiKey) {
-      logger.warn('LLM Provider initialized without API key. Set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable.');
+    this.unifiedProvider = UnifiedLLMProvider.getInstance();
+    
+    // Set default model if provided in config
+    if (config?.defaultModel) {
+      try {
+        this.unifiedProvider.setDefaultModel(config.defaultModel);
+      } catch (error) {
+        logger.warn(`Failed to set default model: ${config.defaultModel}`, error);
+      }
     }
   }
 
@@ -74,41 +77,45 @@ export class LLMProvider {
 
   /**
    * Send a request to the LLM
+   * Converts legacy format to unified format
    */
   async complete(request: LLMRequest): Promise<LLMResponse> {
-    const startTime = Date.now();
-    
     try {
-      // Log the request (without sensitive content)
-      logger.info('LLM request initiated', {
-        model: request.model || this.config.defaultModel,
-        messageCount: request.messages.length,
-        metadata: request.metadata
-      });
-
-      // Route to appropriate provider
-      let response: LLMResponse;
+      // Convert to unified request format
+      const unifiedRequest: UnifiedRequest = {
+        prompt: '', // Will be overridden by messages
+        model: request.model,
+        temperature: request.temperature,
+        maxTokens: request.maxTokens,
+        systemPrompt: request.systemPrompt,
+        messages: request.messages,
+        metadata: request.metadata,
+        responseFormat: 'text'
+      };
       
-      if (this.config.provider === 'anthropic') {
-        response = await this.completeWithAnthropic(request);
-      } else {
-        response = await this.completeWithOpenAI(request);
+      // If there are messages, extract the last user message as the prompt
+      if (request.messages && request.messages.length > 0) {
+        const lastUserMessage = [...request.messages].reverse().find(m => m.role === 'user');
+        if (lastUserMessage) {
+          unifiedRequest.prompt = lastUserMessage.content;
+        }
       }
-
-      // Log success
-      logger.info('LLM request completed', {
+      
+      // Call unified provider
+      const response = await this.unifiedProvider.complete(unifiedRequest);
+      
+      // Convert response to legacy format
+      return {
+        content: response.content,
         model: response.model,
         usage: response.usage,
-        duration: Date.now() - startTime,
+        finishReason: response.finishReason,
         metadata: request.metadata
-      });
-
-      return response;
-
+      };
+      
     } catch (error) {
       logger.error('LLM request failed', {
         error,
-        duration: Date.now() - startTime,
         metadata: request.metadata
       });
       throw error;
@@ -116,68 +123,50 @@ export class LLMProvider {
   }
 
   /**
-   * Complete request using Anthropic's Claude API
+   * Backward compatibility method
+   * @deprecated Use complete() instead
    */
-  private async completeWithAnthropic(_request: LLMRequest): Promise<LLMResponse> {
-    if (!this.config.apiKey) {
-      throw new Error('Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable.');
-    }
-
-    // Anthropic API implementation would go here
-    // Example using the Anthropic SDK:
-    /*
-    const anthropic = new Anthropic({
-      apiKey: this.config.apiKey,
+  async completeWithAnthropic(request: LLMRequest): Promise<LLMResponse> {
+    return this.complete({
+      ...request,
+      model: request.model || 'claude-3-sonnet-20240229'
     });
-
-    const response = await anthropic.messages.create({
-      model: request.model || this.config.defaultModel,
-      messages: request.messages,
-      max_tokens: request.maxTokens || 1000,
-      temperature: request.temperature || 0.7,
-      system: request.systemPrompt,
-    });
-
-    return {
-      content: response.content[0].text,
-      model: response.model,
-      usage: {
-        promptTokens: response.usage.input_tokens,
-        completionTokens: response.usage.output_tokens,
-        totalTokens: response.usage.input_tokens + response.usage.output_tokens,
-      },
-      finishReason: response.stop_reason,
-    };
-    */
-
-    throw new Error('Anthropic API integration not yet implemented.');
   }
 
   /**
-   * Complete request using OpenAI's API
+   * Backward compatibility method
+   * @deprecated Use complete() instead
    */
-  private async completeWithOpenAI(_request: LLMRequest): Promise<LLMResponse> {
-    // TODO: Implement actual OpenAI API integration
-    throw new Error('OpenAI API integration not yet implemented');
+  async completeWithOpenAI(request: LLMRequest): Promise<LLMResponse> {
+    return this.complete({
+      ...request,
+      model: request.model || 'gpt-4'
+    });
   }
 
   /**
-   * Validate configuration
+   * Check if the LLM provider is configured with an API key
    */
   isConfigured(): boolean {
-    return !!this.config.apiKey && this.config.apiKey !== '';
+    return this.unifiedProvider.isConfigured();
   }
 
   /**
-   * Get current configuration (without sensitive data)
+   * Get the current configuration (without exposing API keys)
    */
-  getConfig(): Omit<LLMConfig, 'apiKey'> & { hasApiKey: boolean } {
+  getConfig(): Record<string, any> {
+    const provider = this.unifiedProvider.getCurrentProvider();
+    const defaultModel = this.unifiedProvider.getDefaultModel();
+    
     return {
-      provider: this.config.provider,
-      defaultModel: this.config.defaultModel,
-      maxRetries: this.config.maxRetries,
-      timeout: this.config.timeout,
-      hasApiKey: !!this.config.apiKey
+      provider,
+      defaultModel,
+      hasApiKey: this.isConfigured(),
+      maxRetries: 3,
+      timeout: 30000
     };
   }
 }
+
+// Export singleton for backward compatibility
+export const llmProvider = LLMProvider.getInstance();
