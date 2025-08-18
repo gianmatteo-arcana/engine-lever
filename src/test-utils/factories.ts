@@ -106,10 +106,10 @@ export class TaskTemplateFactory {
 
   static createOnboardingTemplate(): TaskTemplate {
     return this.create({
-      id: 'user_onboarding',
+      id: 'onboarding',
       metadata: {
-        name: 'User Onboarding',
-        description: 'User onboarding flow',
+        name: 'Business Profile Onboarding',
+        description: 'Business profile onboarding flow',
         category: 'onboarding'
       },
       phases: [

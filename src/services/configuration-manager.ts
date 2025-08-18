@@ -8,14 +8,19 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';
 import { TaskTemplate, AgentConfig } from '../types/engine-types';
+import { DeclarativeTemplateParser } from '../templates/declarative-parser';
 
 export class ConfigurationManager {
   private configCache = new Map<string, any>();
   private watchers = new Map<string, fs.FSWatcher>();
   private configPath: string;
+  private templateParser: DeclarativeTemplateParser;
 
   constructor(configPath?: string) {
     this.configPath = configPath || path.join(__dirname, '../../config');
+    
+    // Initialize declarative template parser
+    this.templateParser = new DeclarativeTemplateParser();
     
     // Enable hot-reload in development
     if (process.env.NODE_ENV === 'development') {
@@ -24,7 +29,7 @@ export class ConfigurationManager {
   }
 
   /**
-   * Load a task template from YAML
+   * Load a task template from YAML using declarative parser
    */
   async loadTemplate(templateId: string): Promise<TaskTemplate> {
     const cacheKey = `template:${templateId}`;
@@ -34,21 +39,9 @@ export class ConfigurationManager {
       return this.configCache.get(cacheKey);
     }
     
-    const templatePath = path.join(this.configPath, 'templates', `${templateId}.yaml`);
-    
-    if (!fs.existsSync(templatePath)) {
-      throw new Error(`Template not found: ${templateId} at ${templatePath}`);
-    }
-    
     try {
-      const content = await fs.promises.readFile(templatePath, 'utf8');
-      const parsed = yaml.parse(content);
-      const template = parsed.task_template as TaskTemplate;
-      
-      // Validate required fields
-      if (!template.id || !template.version) {
-        throw new Error(`Invalid template: missing id or version in ${templateId}`);
-      }
+      // Use declarative parser to load template
+      const template = await this.templateParser.loadTemplate(templateId);
       
       // Cache the template
       this.configCache.set(cacheKey, template);

@@ -1,0 +1,138 @@
+# Business Profile Onboarding Task Template
+# Follows Engine Architecture: Goals-driven, not prescriptive
+# The OrchestratorAgent will create execution plans dynamically
+
+id: onboarding
+name: Business Profile Onboarding
+description: Set up your business profile and get started with SmallBizAlly
+category: onboarding
+priority: critical
+estimatedDuration: 30  # minutes
+
+# WHAT we want to achieve (not HOW)
+goals:
+  primary:
+    - id: verify_identity
+      description: Establish user and business identity
+      required: true
+    - id: determine_structure
+      description: Understand business entity type and jurisdiction
+      required: true
+    - id: gather_identifiers
+      description: Collect tax IDs and registration numbers
+      required: true
+    - id: assess_compliance
+      description: Identify applicable regulations and requirements
+      required: true
+    - id: enable_features
+      description: Unlock immediate value for the user
+      required: true
+  
+  secondary:
+    - id: understand_operations
+      description: Learn about business activities and industry
+      required: false
+    - id: identify_stakeholders
+      description: Collect info on partners, officers, employees
+      required: false
+    - id: setup_integrations
+      description: Connect relevant external services
+      required: false
+
+# What information we need (not how to get it)
+requiredInputs:
+  minimal:
+    - user_email
+    - business_name
+    - entity_type
+    - formation_state
+  
+  recommended:
+    - ein
+    - business_address
+    - industry_classification
+    - employee_count
+  
+  optional:
+    - annual_revenue
+    - business_licenses
+    - team_members
+    - integration_preferences
+
+# Success criteria for completion
+completionCriteria:
+  - User authenticated
+  - Business name confirmed
+  - Entity type determined
+  - Primary jurisdiction identified
+  - Core features enabled
+
+# High-level phases (agent will determine specifics)
+phases:
+  - id: discovery
+    name: Background Research
+    description: Gather available information from public sources
+    estimatedMinutes: 2
+    canRunInBackground: true
+    
+  - id: confirmation
+    name: Identity Confirmation
+    description: Confirm or collect business identity
+    estimatedMinutes: 5
+    requiresUserInteraction: maybe  # Depends on what's found
+    
+  - id: structure
+    name: Structure Determination
+    description: Determine entity type and jurisdiction
+    estimatedMinutes: 3
+    requiresUserInteraction: maybe
+    
+  - id: compliance
+    name: Compliance Assessment
+    description: Identify applicable requirements
+    estimatedMinutes: 5
+    canRunInBackground: true
+    
+  - id: activation
+    name: Feature Activation
+    description: Enable dashboard features and show value
+    estimatedMinutes: 1
+    canRunInBackground: false
+
+# Fallback strategies if things go wrong
+fallbackStrategies:
+  - trigger: no_public_records_found
+    action: request_user_input
+    message: We couldn't find your business records, but that's OK - we'll set it up together
+    
+  - trigger: agent_unavailable
+    action: defer_or_manual
+    message: Some automated features are temporarily unavailable
+    
+  - trigger: user_abandonment
+    action: save_progress
+    message: Your progress has been saved - you can continue anytime
+
+# Metadata for tracking and optimization
+metadata:
+  trackingEnabled: true
+  allowSkipAndReturn: true
+  celebrateProgress: true
+  mobileOptimized: true
+  targetCompletionTime: 3  # minutes of active user time
+
+# Agent hints (suggestions, not requirements)
+agentHints:
+  - profile_collector    # Good at gathering user info
+  - business_discovery   # Can search public records
+  - compliance_analyzer  # Knows regulations
+  - data_enrichment     # Can infer from limited data
+
+# Data sources available (for agent consideration)
+availableDataSources:
+  - google_oauth        # User's Google profile
+  - email_domain        # Company inference from email
+  - secretary_of_state  # Business registrations
+  - irs_databases       # Tax ID lookups
+  - clearbit_api        # Company enrichment
+  - google_places       # Business locations

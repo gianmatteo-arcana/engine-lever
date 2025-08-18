@@ -85,7 +85,7 @@ const UIResponseSchema = z.object({
  * Engine PRD Lines 847-881
  * 
  * Creates ANY task type using identical flow:
- * - User onboarding → templateId: "user_onboarding"
+ * - Business profile onboarding → templateId: "onboarding"
  * - SOI filing → templateId: "soi_filing"  
  * - Any future task → templateId: "any_template"
  */
@@ -702,6 +702,37 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
       actorType: 'user',
       reasoning: 'Universal task creation'
     });
+    
+    // 🚀 CRITICAL: Send NOTIFY for EventListener to trigger orchestration
+    try {
+      // Use the RPC function directly to send to task_creation_events channel
+      const { error: notifyError } = await dbService.getServiceClient().rpc('notify_task_update', {
+        channel_name: 'task_creation_events',
+        payload: JSON.stringify({
+          eventType: 'TASK_CREATED',
+          taskId: taskRecord.id,
+          userId: userId,
+          taskType: taskType,
+          templateId: templateId,
+          status: 'pending',
+          priority: 'medium',
+          title: taskRecord.title,
+          timestamp: new Date().toISOString()
+        })
+      });
+      
+      if (notifyError) {
+        logger.error('⚠️ NOTIFY RPC failed', { taskId: taskRecord.id, error: notifyError });
+      } else {
+        logger.info('✅ Task creation notification sent to EventListener', { taskId: taskRecord.id });
+      }
+    } catch (notifyError) {
+      logger.error('⚠️ Failed to send task creation notification', { 
+        taskId: taskRecord.id, 
+        error: notifyError 
+      });
+      // Don't fail the request if notification fails
+    }
     
     logger.info('Universal task created', { taskId: taskRecord.id, taskType });
     

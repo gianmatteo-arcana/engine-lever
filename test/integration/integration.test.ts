@@ -141,8 +141,15 @@ describe('Service Integration Tests', () => {
         }
       };
       
-      const templatePath = path.join(testConfigPath, 'templates', 'test_template.yaml');
-      fs.writeFileSync(templatePath, JSON.stringify(testTemplate));
+      // Ensure templates directory exists
+      const templatesDir = path.join(testConfigPath, 'templates');
+      if (!fs.existsSync(templatesDir)) {
+        fs.mkdirSync(templatesDir, { recursive: true });
+      }
+      
+      const templatePath = path.join(templatesDir, 'test_template.yaml');
+      const yaml = require('yaml');
+      fs.writeFileSync(templatePath, yaml.stringify(testTemplate));
       
       // Load template twice
       const template1 = await configManager.loadTemplate('test_template');
