@@ -71,6 +71,26 @@ router.get('/agents', (req, res) => {
   });
 });
 
+/**
+ * A2A Protocol Discovery Endpoints
+ * 
+ * ARCHITECTURAL DECISION: Why REST APIs for agent discovery?
+ * 
+ * These endpoints are NOT for internal agent-to-agent communication.
+ * Internal agents communicate directly through AgentManager.
+ * 
+ * These REST endpoints serve:
+ * 1. **Frontend UI** - Dashboard can display agent capabilities
+ * 2. **Dev Toolkit** - Developers can inspect agent routing
+ * 3. **External Services** - Future MCP tools or external systems
+ * 4. **Monitoring** - Health checks and observability tools
+ * 
+ * Internal agent communication uses:
+ * - AgentManager.getDiscoveredCapabilities() - Direct method calls
+ * - BaseAgent.discoverPeerAgents() - Service class access
+ * - No HTTP overhead for internal operations
+ */
+
 // A2A Protocol Discovery Endpoints
 router.get('/agents/capabilities', (req, res) => {
   const capabilities = AgentManager.getDiscoveredCapabilities();

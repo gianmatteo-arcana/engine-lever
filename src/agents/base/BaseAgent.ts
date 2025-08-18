@@ -76,6 +76,8 @@ import {
   BaseAgentResponse,
   ContextEntry
 } from '../../types/base-agent-types';
+import { TaskContext } from '../../types/engine-types';
+import { DatabaseService } from '../../services/database';
 import { logger } from '../../utils/logger';
 import {
   AgentExecutor,
@@ -493,6 +495,7 @@ Remember: You are an autonomous agent following the universal principles while a
       trigger: {
         type: 'orchestrator_request',
         source: 'orchestrator',
+        details: { requestId: request.parameters?.requestId },
         requestId: request.parameters?.requestId
       }
     };
@@ -619,12 +622,73 @@ Remember: You are an autonomous agent following the universal principles while a
   /**
    * Get A2A protocol routing information
    * Allows other agents to discover communication capabilities
+   * 
+   * ## How A2A Routing Works:
+   * 
+   * The A2A (Agent-to-Agent) protocol defines which agents can communicate
+   * with each other through explicit routing rules in their YAML configs.
+   * 
+   * ### Routing Configuration:
+   * Each agent's YAML file contains an `a2a.routing` section that defines:
+   * - `canReceiveFrom`: List of agent IDs that can send messages to this agent
+   * - `canSendTo`: List of agent IDs this agent can send messages to
+   * 
+   * ### Example YAML Configuration:
+   * ```yaml
+   * agent:
+   *   id: business_discovery
+   *   a2a:
+   *     routing:
+   *       canReceiveFrom: 
+   *         - orchestrator
+   *         - profile_collector
+   *       canSendTo:
+   *         - data_enrichment_agent
+   *         - entity_compliance_agent
+   * ```
+   * 
+   * ### Communication Flow Example:
+   * 1. OrchestratorAgent wants to send task to BusinessDiscoveryAgent
+   * 2. Orchestrator calls: `canCommunicateWith('business_discovery')` → true
+   * 3. BusinessDiscovery calls: `canReceiveFrom('orchestrator')` → true
+   * 4. Message is allowed and processed
+   * 
+   * ### Routing Table Visualization:
+   * ```
+   * orchestrator ──────► business_discovery ──────► data_enrichment
+   *      │                      │                         │
+   *      ▼                      ▼                         ▼
+   * profile_collector    entity_compliance       task_coordinator
+   * ```
+   * 
+   * @returns Object with arrays of agent IDs for inbound and outbound routing
    */
   getA2ARouting(): { canReceiveFrom: string[], canSendTo: string[] } {
     const a2a = this.specializedTemplate.agent.a2a || {};
+    
+    // Start with static routing from YAML config
+    let canReceiveFrom = a2a.routing?.canReceiveFrom || [];
+    let canSendTo = a2a.routing?.canSendTo || [];
+    
+    // ARCHITECTURAL DECISION: Dynamic routing for orchestrator
+    // Only the OrchestratorAgent should be able to send to ALL agents
+    // This prevents chaotic inter-agent communication while allowing
+    // the orchestrator to coordinate all agents dynamically
+    if (this.specializedTemplate.agent.id === 'orchestrator') {
+      // Orchestrator can send to any agent discovered in the system
+      // This will be populated dynamically by AgentManager
+      canSendTo = ['*']; // Special value meaning "all agents"
+    }
+    
+    // All agents can receive from orchestrator by default
+    // This ensures new agents are automatically reachable
+    if (!canReceiveFrom.includes('orchestrator')) {
+      canReceiveFrom.push('orchestrator');
+    }
+    
     return {
-      canReceiveFrom: a2a.routing?.canReceiveFrom || [],
-      canSendTo: a2a.routing?.canSendTo || []
+      canReceiveFrom,
+      canSendTo
     };
   }
   
@@ -633,6 +697,10 @@ Remember: You are an autonomous agent following the universal principles while a
    */
   canCommunicateWith(targetAgentId: string): boolean {
     const routing = this.getA2ARouting();
+    // Check for wildcard permission (orchestrator can send to all)
+    if (routing.canSendTo.includes('*')) {
+      return true;
+    }
     return routing.canSendTo.includes(targetAgentId);
   }
   
@@ -901,6 +969,89 @@ Remember: You are an autonomous agent following the universal principles while a
   protected cleanupTask(taskId: string): void {
     // Default implementation - subclasses can override
     logger.debug('Cleaning up task resources', { taskId });
+  }
+
+  /**
+   * Record entry in task context
+   * CRITICAL: Persists to database for durability
+   * 
+   * This is a base functionality that all agents can use to record their
+   * operations in the task context with full event sourcing support.
+   * 
+   * @param context - The task context to update
+   * @param entry - Partial context entry (will be completed with defaults)
+   * @protected - Available to all child agents
+   */
+  protected async recordContextEntry(
+    context: TaskContext,
+    entry: Partial<ContextEntry>
+  ): Promise<void> {
+    const fullEntry: ContextEntry = {
+      entryId: `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      sequenceNumber: context.history.length + 1,
+      actor: {
+        type: 'agent',
+        id: this.specializedTemplate.agent.id,
+        version: this.specializedTemplate.agent.version
+      },
+      operation: entry.operation || 'agent_operation',
+      data: entry.data || {},
+      reasoning: entry.reasoning || `Operation by ${this.specializedTemplate.agent.name}`,
+      confidence: entry.confidence || 0.8,
+      trigger: entry.trigger || {
+        type: 'orchestrator_request',
+        source: 'orchestrator',
+        details: { requestId: `req_${Date.now()}` },
+        requestId: `req_${Date.now()}`
+      },
+      ...entry
+    };
+    
+    // Append to in-memory history (for immediate access)
+    context.history.push(fullEntry);
+    
+    // CRITICAL: Persist to database for durability
+    // Using the unified task_context_events table (event sourcing architecture)
+    try {
+      const dbService = DatabaseService.getInstance();
+      
+      // In the TaskContext, the contextId IS the taskId
+      // This is part of the universal engine architecture
+      const taskId = context.contextId;
+      
+      // Use the agent's userId if available, otherwise fall back to system
+      const userId = this.userId || context.tenantId || 'system';
+      
+      await dbService.createTaskContextEvent(userId, taskId, {
+        contextId: context.contextId,
+        actorType: fullEntry.actor.type,
+        actorId: fullEntry.actor.id,
+        operation: fullEntry.operation,
+        data: fullEntry.data,
+        reasoning: fullEntry.reasoning || '',
+        trigger: { 
+          source: this.specializedTemplate.agent.id, 
+          timestamp: fullEntry.timestamp 
+        }
+      });
+      
+      logger.debug('Context entry persisted to task_context_events table', {
+        agentId: this.specializedTemplate.agent.id,
+        contextId: context.contextId,
+        operation: fullEntry.operation,
+        sequenceNumber: fullEntry.sequenceNumber
+      });
+    } catch (error) {
+      logger.error('Failed to persist context entry to database', {
+        agentId: this.specializedTemplate.agent.id,
+        contextId: context.contextId,
+        operation: fullEntry.operation,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't throw - we've updated in-memory, persistence failure shouldn't stop execution
+      // But this should be monitored and handled via retry mechanism
+    }
   }
 
 }

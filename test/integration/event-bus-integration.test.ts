@@ -62,6 +62,7 @@ class ComplianceAgent extends BaseAgent {
         trigger: {
           type: 'orchestrator_request' as const,
           source: 'orchestrator',
+          details: { requestId: request.parameters?.requestId },
           requestId: request.parameters?.requestId
         }
       },
@@ -404,6 +405,7 @@ describe('Event Bus Integration', () => {
               trigger: {
                 type: 'orchestrator_request' as const,
                 source: 'orchestrator',
+                details: { requestId: request.parameters?.requestId },
                 requestId: request.parameters?.requestId
               }
             },

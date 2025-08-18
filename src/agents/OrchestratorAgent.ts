@@ -26,7 +26,6 @@ import { logger } from '../utils/logger';
 import {
   TaskContext,
   TaskTemplate,
-  ContextEntry,
   ExecutionPlan,
   ExecutionPhase,
   AgentRequest,
@@ -910,69 +909,7 @@ export class OrchestratorAgent extends BaseAgent {
     return null;
   }
   
-  /**
-   * Record entry in task context
-   * CRITICAL: Persists to database for durability
-   */
-  private async recordContextEntry(
-    context: TaskContext,
-    entry: Partial<ContextEntry>
-  ): Promise<void> {
-    const fullEntry: ContextEntry = {
-      entryId: `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      sequenceNumber: context.history.length + 1,
-      actor: {
-        type: 'agent',
-        id: 'orchestrator_agent',
-        version: this.config.version
-      },
-      operation: entry.operation || 'orchestration',
-      data: entry.data || {},
-      reasoning: entry.reasoning || 'Orchestration decision',
-      ...entry
-    };
-    
-    // Append to in-memory history (for immediate access)
-    context.history.push(fullEntry);
-    
-    // CRITICAL: Persist to database for durability
-    // Using the unified task_context_events table (event sourcing architecture)
-    try {
-      const dbService = DatabaseService.getInstance();
-      
-      // In the TaskContext, the contextId IS the taskId
-      // This is part of the universal engine architecture
-      const taskId = context.contextId;
-      
-      // For now, we'll use a system-level write that doesn't require userId
-      // In production, the TaskContext should include tenantId/userId for proper scoping
-      const userId = context.tenantId || 'system'; // tenantId is the userId in current implementation
-      
-      await dbService.createTaskContextEvent(userId, taskId, {
-        contextId: context.contextId,
-        actorType: fullEntry.actor.type,
-        actorId: fullEntry.actor.id,
-        operation: fullEntry.operation,
-        data: fullEntry.data,
-        reasoning: fullEntry.reasoning || '',
-        trigger: { source: 'orchestrator', timestamp: fullEntry.timestamp }
-      });
-      
-      logger.debug('Context entry persisted to task_context_events table', {
-        contextId: context.contextId,
-        operation: fullEntry.operation,
-        sequenceNumber: fullEntry.sequenceNumber
-      });
-    } catch (error) {
-      logger.error('Failed to persist context entry to database', {
-        contextId: context.contextId,
-        operation: fullEntry.operation,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      // Don't throw - we've updated in-memory, persistence failure shouldn't stop orchestration
-      // But this should be monitored and handled via retry mechanism
-    }
-  }
+  // recordContextEntry method moved to BaseAgent as protected method
+  // Now all agents including OrchestratorAgent can use this.recordContextEntry()
   
 }

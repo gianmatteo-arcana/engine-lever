@@ -70,20 +70,33 @@ class AgentManagerClass {
       // STEP 2: Create OrchestratorAgent (special case - singleton)
       logger.info('🎯 Creating OrchestratorAgent (singleton)...');
       const orchestrator = OrchestratorAgent.getInstance();
+      // NOTE: OrchestratorAgent knows its role from orchestrator.yaml (id: 'orchestrator')
+      // The AgentRole.ORCHESTRATOR is just for AgentManager's internal routing map
+      // This separation allows the agent to be self-contained while AgentManager handles routing
       this.agents.set(AgentRole.ORCHESTRATOR, orchestrator);
       
       // STEP 3: Map discovered agents to AgentRoles and instantiate
+      // ARCHITECTURAL DECISION: Multiple specialized agents can map to the same role
+      // This allows us to have multiple implementations of the same capability
+      // The AgentManager can select the best agent for a specific task
       const agentIdToRole: Record<string, AgentRole> = {
+        // Primary role mappings
         'legal_compliance_agent': AgentRole.LEGAL_COMPLIANCE,
         'data_collection_agent': AgentRole.DATA_COLLECTION,
         'payment_agent': AgentRole.PAYMENT,
         'agency_interaction_agent': AgentRole.AGENCY_INTERACTION,
         'monitoring_agent': AgentRole.MONITORING,
         'communication_agent': AgentRole.COMMUNICATION,
-        'profile_collection_agent': AgentRole.DATA_COLLECTION, // Maps to same role
-        'entity_compliance_agent': AgentRole.LEGAL_COMPLIANCE,  // Maps to same role
-        'celebration_agent': AgentRole.COMMUNICATION,           // Maps to communication
-        'ux_optimization_agent': AgentRole.COMMUNICATION        // Maps to communication
+        
+        // Specialized agents that fulfill the same roles
+        // These provide specialized implementations of the core roles
+        'profile_collection_agent': AgentRole.DATA_COLLECTION,  // Specialized data collector
+        'entity_compliance_agent': AgentRole.LEGAL_COMPLIANCE,  // Specialized for entity law
+        'celebration_agent': AgentRole.COMMUNICATION,           // Specialized for celebrations
+        'ux_optimization_agent': AgentRole.COMMUNICATION        // Specialized for UX messages
+        
+        // TODO: Consider creating a multi-agent selection strategy
+        // where AgentManager can choose the best specialist for each task
       };
       
       // STEP 4: Instantiate DefaultAgent for each discovered agent
@@ -117,9 +130,9 @@ class AgentManagerClass {
         }
       }
       
-      // STEP 5: Update OrchestratorAgent's registry with discovered agents
-      // The orchestrator needs to know about available agents for task delegation
-      this.updateOrchestratorRegistry(orchestrator);
+      // NOTE: OrchestratorAgent can discover agents dynamically through AgentDiscoveryService
+      // No need to manually update its registry - it uses agentDiscovery service directly
+      // when it needs to find agents for task delegation
 
       // Agents now communicate through A2A protocol
       // Routing is defined in YAML configurations
@@ -134,21 +147,6 @@ class AgentManagerClass {
       logger.error('💥 Failed to initialize Agent Manager', error);
       throw error;
     }
-  }
-  
-  /**
-   * Update OrchestratorAgent's internal registry with discovered agents
-   */
-  private updateOrchestratorRegistry(_orchestrator: OrchestratorAgent): void {
-    // The orchestrator needs to know about available agents
-    // This would update its internal agentRegistry Map
-    // For now, we'll log what would be updated
-    logger.info('📋 Updating OrchestratorAgent registry with discovered agents:', {
-      agents: Array.from(this.agentInstances.keys())
-    });
-    
-    // TODO: Add method to OrchestratorAgent to accept discovered agents
-    // orchestrator.updateAgentRegistry(this.agentCapabilities);
   }
 
 
@@ -313,6 +311,23 @@ class AgentManagerClass {
   public getAgentCount(): number {
     return this.agents.size;
   }
+  
+  /**
+   * A2A Protocol Discovery Methods
+   * 
+   * These methods delegate to the AgentDiscoveryService which is the
+   * authoritative source for agent capabilities and routing.
+   * 
+   * ARCHITECTURAL DECISION: AgentManager acts as the public interface
+   * for agent discovery while AgentDiscoveryService handles the implementation.
+   * This separation allows us to:
+   * 1. Keep discovery logic centralized in the service
+   * 2. Provide a clean API through AgentManager
+   * 3. Allow BaseAgent to focus on agent behavior, not discovery
+   * 
+   * Individual agents can discover peers through BaseAgent.discoverPeerAgents()
+   * which internally calls back to AgentManager/AgentDiscoveryService
+   */
   
   /**
    * Get all discovered agent capabilities (A2A Protocol)

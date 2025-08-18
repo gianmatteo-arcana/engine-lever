@@ -25,6 +25,7 @@ export interface ContextEntry {
   trigger: {
     type: 'orchestrator_request' | 'user_request' | 'system_event';
     source: string; // Requesting agent or system
+    details: Record<string, any>; // Additional trigger details
     requestId?: string; // Optional request ID
   };
 }
