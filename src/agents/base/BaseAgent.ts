@@ -67,7 +67,7 @@
 import * as fs from 'fs';
 import * as yaml from 'yaml';
 import * as path from 'path';
-import { UnifiedLLMProvider } from '../../services/unified-llm-provider';
+import { LLMProvider } from '../../services/llm-provider';
 import type { ToolChain } from '../../services/tool-chain';
 import { 
   BaseAgentTemplate,
@@ -101,7 +101,7 @@ import {
 export abstract class BaseAgent implements AgentExecutor {
   protected baseTemplate: BaseAgentTemplate;
   protected specializedTemplate: SpecializedAgentConfig;
-  protected llmProvider!: UnifiedLLMProvider;
+  protected llmProvider!: LLMProvider;
   protected toolChain!: ToolChain;
   protected businessId: string;
   protected userId?: string;
@@ -148,10 +148,10 @@ export abstract class BaseAgent implements AgentExecutor {
       } as any;
     } else {
       // Import the actual implementations
-      const { UnifiedLLMProvider: UnifiedLLMProviderImpl } = require('../../services/unified-llm-provider');
+      const { LLMProvider: LLMProviderImpl } = require('../../services/llm-provider');
       
-      // Use getInstance for UnifiedLLMProvider (singleton pattern)
-      this.llmProvider = UnifiedLLMProviderImpl.getInstance();
+      // Use getInstance for LLMProvider (singleton pattern)
+      this.llmProvider = LLMProviderImpl.getInstance();
       
       // ToolChain requires Supabase - let CredentialVault handle validation
       // The validation happens at the actual point of connection

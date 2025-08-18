@@ -3,7 +3,7 @@
  * This file contains mock responses for LLM calls used in tests
  */
 
-import { LLMRequest, LLMResponse } from '../unified-llm-provider';
+import { LLMRequest, LLMResponse } from '../../../src/services/llm-provider';
 
 export class MockLLMProvider {
   /**

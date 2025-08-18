@@ -2,20 +2,20 @@
  * Tests for LLM Provider Service
  */
 
-import { UnifiedLLMProvider, LLMRequest, LLMResponse } from '../../../src/services/unified-llm-provider';
+import { LLMProvider, LLMRequest, LLMResponse } from '../../../src/services/llm-provider';
 
 // Mock the complete method to avoid actual API calls
 const mockComplete = jest.fn();
 
-describe('UnifiedLLMProvider', () => {
-  let provider: UnifiedLLMProvider;
+describe('LLMProvider', () => {
+  let provider: LLMProvider;
   const originalEnv = process.env;
 
   beforeEach(() => {
     // Reset environment
     process.env = { ...originalEnv };
     // Clear singleton instances
-    UnifiedLLMProvider.resetInstance();
+    LLMProvider.resetInstance();
     
     // Reset mock
     mockComplete.mockClear();
@@ -24,12 +24,12 @@ describe('UnifiedLLMProvider', () => {
   afterEach(() => {
     process.env = originalEnv;
     // Clear singleton instances
-    UnifiedLLMProvider.resetInstance();
+    LLMProvider.resetInstance();
   });
 
   describe('initialization', () => {
     it('should initialize with default configuration', () => {
-      provider = UnifiedLLMProvider.getInstance();
+      provider = LLMProvider.getInstance();
       const config = provider.getConfig();
 
       // Default provider is determined by the default model
@@ -42,10 +42,10 @@ describe('UnifiedLLMProvider', () => {
       process.env.OPENAI_API_KEY = 'test-key';
       process.env.LLM_DEFAULT_MODEL = 'gpt-4';
 
-      provider = UnifiedLLMProvider.getInstance();
+      provider = LLMProvider.getInstance();
       const config = provider.getConfig();
 
-      // The provider is determined by the default model in UnifiedProvider
+      // The provider is determined by the default model
       expect(config.provider).toBe('openai');
       expect(config.defaultModel).toBe('gpt-4');
       expect(config.hasApiKey).toBe(true);
@@ -79,7 +79,7 @@ describe('UnifiedLLMProvider', () => {
   describe('complete (mocked)', () => {
     beforeEach(() => {
       process.env.ANTHROPIC_API_KEY = 'test-key';
-      provider = UnifiedLLMProvider.getInstance();
+      provider = LLMProvider.getInstance();
       
       // Mock the complete method to avoid actual API calls
       provider.complete = mockComplete.mockImplementation(async (request: LLMRequest): Promise<LLMResponse> => {
@@ -229,7 +229,7 @@ describe('UnifiedLLMProvider', () => {
     it('should return false without API key', () => {
       delete process.env.ANTHROPIC_API_KEY;
       delete process.env.OPENAI_API_KEY;
-      provider = UnifiedLLMProvider.getInstance();
+      provider = LLMProvider.getInstance();
       expect(provider.isConfigured()).toBe(false);
     });
 
@@ -237,8 +237,8 @@ describe('UnifiedLLMProvider', () => {
       process.env.ANTHROPIC_API_KEY = 'test-key';
       // Reset singletons to pick up new env var
       (LLMProvider as any).instance = null;
-      (UnifiedLLMProvider as any).instance = null;
-      provider = UnifiedLLMProvider.getInstance();
+      (LLMProvider as any).instance = null;
+      provider = LLMProvider.getInstance();
       expect(provider.isConfigured()).toBe(true);
     });
   });
@@ -248,8 +248,8 @@ describe('UnifiedLLMProvider', () => {
       process.env.ANTHROPIC_API_KEY = 'secret-key';
       // Reset singletons to pick up new env var
       (LLMProvider as any).instance = null;
-      (UnifiedLLMProvider as any).instance = null;
-      provider = UnifiedLLMProvider.getInstance();
+      (LLMProvider as any).instance = null;
+      provider = LLMProvider.getInstance();
       const config = provider.getConfig();
 
       expect(config.hasApiKey).toBe(true);
@@ -265,8 +265,8 @@ describe('UnifiedLLMProvider', () => {
       delete process.env.LLM_DEFAULT_MODEL;
       // Reset singletons to clear any cached instance
       (LLMProvider as any).instance = null;
-      (UnifiedLLMProvider as any).instance = null;
-      provider = UnifiedLLMProvider.getInstance();
+      (LLMProvider as any).instance = null;
+      provider = LLMProvider.getInstance();
       
       const request: LLMRequest = {
         messages: [
@@ -284,8 +284,8 @@ describe('UnifiedLLMProvider', () => {
       process.env.LLM_DEFAULT_MODEL = 'gpt-4';
       // Reset singletons to pick up new settings
       (LLMProvider as any).instance = null;
-      (UnifiedLLMProvider as any).instance = null;
-      provider = UnifiedLLMProvider.getInstance();
+      (LLMProvider as any).instance = null;
+      provider = LLMProvider.getInstance();
 
       const request: LLMRequest = {
         messages: [

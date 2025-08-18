@@ -17,9 +17,9 @@ async function testLLMIntegration() {
   console.log('🧪 Testing LLM Integration...\n');
   
   try {
-    // Import the unified provider
-    const { UnifiedLLMProvider } = require('./dist/services/unified-llm-provider');
-    const provider = UnifiedLLMProvider.getInstance();
+    // Import the LLM provider
+    const { LLMProvider } = require('./dist/services/llm-provider');
+    const provider = LLMProvider.getInstance();
     
     console.log('✅ LLM Provider initialized');
     console.log(`📋 Default model: ${provider.getDefaultModel()}`);

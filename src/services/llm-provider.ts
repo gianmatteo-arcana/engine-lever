@@ -1,7 +1,7 @@
 /**
- * Unified LLM Provider Service
+ * LLM Provider Service
  * 
- * Generic, model-agnostic LLM provider that supports multiple models and providers.
+ * Model-agnostic LLM provider that supports multiple models and providers.
  * Defaults to Claude 3 Sonnet but allows specifying any model.
  * 
  * Supported providers:
@@ -111,8 +111,8 @@ const MODEL_REGISTRY: Record<string, ModelConfig> = {
   }
 };
 
-export class UnifiedLLMProvider {
-  private static instance: UnifiedLLMProvider;
+export class LLMProvider {
+  private static instance: LLMProvider;
   private anthropicClient?: Anthropic;
   private openaiClient?: OpenAI;
   private defaultModel: string;
@@ -142,11 +142,11 @@ export class UnifiedLLMProvider {
     }
   }
 
-  public static getInstance(): UnifiedLLMProvider {
-    if (!UnifiedLLMProvider.instance) {
-      UnifiedLLMProvider.instance = new UnifiedLLMProvider();
+  public static getInstance(): LLMProvider {
+    if (!LLMProvider.instance) {
+      LLMProvider.instance = new LLMProvider();
     }
-    return UnifiedLLMProvider.instance;
+    return LLMProvider.instance;
   }
 
   /**
@@ -154,7 +154,7 @@ export class UnifiedLLMProvider {
    * @internal
    */
   public static resetInstance(): void {
-    UnifiedLLMProvider.instance = undefined as any;
+    LLMProvider.instance = undefined as any;
   }
 
   /**
@@ -485,4 +485,4 @@ export class UnifiedLLMProvider {
 }
 
 // Export singleton instance for backward compatibility
-export const unifiedLLMProvider = UnifiedLLMProvider.getInstance();
+export const llmProvider = LLMProvider.getInstance();
