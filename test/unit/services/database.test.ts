@@ -53,6 +53,21 @@ describe('DatabaseService - New Schema', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset all mock functions
+    mockChain.single.mockReset();
+    mockChain.then.mockReset();
+    mockChain.order.mockReset();
+    mockChain.select.mockReturnThis();
+    mockChain.insert.mockReturnThis();
+    mockChain.update.mockReturnThis();
+    mockChain.upsert.mockReturnThis();
+    mockChain.eq.mockReturnThis();
+    mockChain.limit.mockReturnThis();
+    // Reset then to default behavior
+    mockChain.then = jest.fn((resolve) => {
+      resolve({ data: [], error: null });
+    });
+    
     process.env.SUPABASE_URL = 'https://test.supabase.co';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
     process.env.SUPABASE_ANON_KEY = 'test-anon-key';
@@ -185,17 +200,10 @@ describe('DatabaseService - New Schema', () => {
 
   describe('Event Sourcing', () => {
     it('should add a context event', async () => {
-      // Mock for getting the task (first single call)
-      mockChain.single.mockResolvedValueOnce({
-        data: {
-          id: 'ctx-123',
-          user_id: 'system',
-          status: 'pending'
-        },
-        error: null
-      });
+      // addContextEvent redirects to createTaskContextEvent which doesn't check task ownership
+      // for system/agent operations, so no getTask call is made
       
-      // Mock for task_context_events insert (second single call)
+      // Mock for task_context_events insert (only single call needed)
       mockChain.single.mockResolvedValueOnce({
         data: {
           id: 'event-123',
@@ -204,7 +212,10 @@ describe('DatabaseService - New Schema', () => {
           task_id: 'ctx-123',
           operation: 'status_update',
           actor_id: 'agent-1',
-          actor_type: 'agent'
+          actor_type: 'agent',
+          data: { status: 'active' },
+          reasoning: 'Legacy event migration',
+          created_at: new Date().toISOString()
         },
         error: null
       });

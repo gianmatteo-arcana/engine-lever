@@ -148,7 +148,7 @@ describe('Database Integration Tests', () => {
       });
       
       // Mock for getTask (called by updateTask)
-      mockChain.from.mockReturnValueOnce({
+      mockSupabaseClient.from.mockReturnValueOnce({
         select: jest.fn().mockReturnValueOnce({
           eq: jest.fn().mockReturnValueOnce({
             eq: jest.fn().mockReturnValueOnce({
@@ -242,7 +242,7 @@ describe('Database Integration Tests', () => {
   describe('Task Execution Operations', () => {
     it('should create system execution', async () => {
       // First mock - for getting the task
-      mockChain.from.mockReturnValueOnce({
+      mockSupabaseClient.from.mockReturnValueOnce({
         select: jest.fn().mockReturnValueOnce({
           eq: jest.fn().mockReturnValueOnce({
             eq: jest.fn().mockReturnValueOnce({
@@ -260,7 +260,7 @@ describe('Database Integration Tests', () => {
       });
       
       // Second mock - for task_context_events table
-      mockChain.from.mockReturnValueOnce({
+      mockSupabaseClient.from.mockReturnValueOnce({
         insert: jest.fn().mockReturnValueOnce({
           select: jest.fn().mockReturnValueOnce({
             single: jest.fn().mockResolvedValueOnce({
@@ -354,7 +354,7 @@ describe('Database Integration Tests', () => {
       const mockSingle = jest.fn().mockRejectedValueOnce(new Error('Connection failed'));
       const mockEq = jest.fn().mockReturnValue({ single: mockSingle });
       const mockSelect = jest.fn().mockReturnValue({ eq: mockEq });
-      mockChain.from.mockReturnValueOnce({ select: mockSelect });
+      mockSupabaseClient.from.mockReturnValueOnce({ select: mockSelect });
       
       await expect(dbService.getContext('ctx-123')).rejects.toThrow('Connection failed');
     });
@@ -368,7 +368,7 @@ describe('Database Integration Tests', () => {
       });
       const mockEq = jest.fn().mockReturnValue({ single: mockSingle });
       const mockSelect = jest.fn().mockReturnValue({ eq: mockEq });
-      mockChain.from.mockReturnValueOnce({ select: mockSelect });
+      mockSupabaseClient.from.mockReturnValueOnce({ select: mockSelect });
       
       // getContext should throw the error object for non-PGRST116 errors
       await expect(dbService.getContext('ctx-123')).rejects.toEqual(permissionError);
