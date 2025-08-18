@@ -3,8 +3,6 @@
  * Tests database operations with the new business-centric schema
  */
 
-import { DatabaseService } from '../../src/services/database';
-
 // Mock Supabase with proper chaining
 const mockAuth = {
   getUser: jest.fn().mockResolvedValue({
@@ -13,28 +11,41 @@ const mockAuth = {
   })
 };
 
-// Create a chainable mock that always returns itself except for terminal methods
-const mockSupabaseClient: any = {
+// Create the mock response chain
+const mockChain = {
+  select: jest.fn().mockReturnThis(),
+  insert: jest.fn().mockReturnThis(),
+  update: jest.fn().mockReturnThis(),
+  upsert: jest.fn().mockReturnThis(),
+  eq: jest.fn().mockReturnThis(),
+  order: jest.fn().mockReturnThis(),
+  limit: jest.fn().mockReturnThis(),
+  gte: jest.fn().mockReturnThis(),
+  lte: jest.fn().mockReturnThis(),
+  in: jest.fn().mockReturnThis(),
+  contains: jest.fn().mockReturnThis(),
+  containedBy: jest.fn().mockReturnThis(),
+  range: jest.fn().mockReturnThis(),
+  filter: jest.fn().mockReturnThis(),
+  single: jest.fn(),
+  then: jest.fn((resolve) => {
+    resolve({ data: [], error: null });
+  })
+};
+
+// Create mock client with from() that returns the chain
+const mockChain: any = {
+  from: jest.fn(() => mockChain),
   auth: mockAuth
 };
 
-// Setup chainable methods
-const chainableMethods = ['from', 'select', 'insert', 'update', 'upsert', 'eq', 'order', 'limit', 'gte', 'lte', 'in', 'contains', 'containedBy', 'range', 'filter'];
-chainableMethods.forEach(method => {
-  mockSupabaseClient[method] = jest.fn().mockReturnValue(mockSupabaseClient);
-});
-
-// Terminal method that returns data
-mockSupabaseClient.single = jest.fn();
-
-// Default response for queries that don't use .single()
-mockSupabaseClient.then = jest.fn((resolve) => {
-  resolve({ data: [], error: null });
-});
-
+// Mock must be set up before importing DatabaseService
 jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => mockSupabaseClient)
+  createClient: jest.fn(() => mockChain)
 }));
+
+// Import after mock is set up
+import { DatabaseService } from '../../src/services/database';
 
 describe('Database Integration Tests', () => {
   let dbService: DatabaseService;
@@ -52,6 +63,11 @@ describe('Database Integration Tests', () => {
     // Reset singleton
     (DatabaseService as any).instance = undefined;
     dbService = DatabaseService.getInstance();
+    
+    // Mock getServiceClient to return our mock client
+    (dbService as any).getServiceClient = jest.fn(() => mockSupabaseClient);
+    // Also set the serviceClient property directly
+    (dbService as any).serviceClient = mockSupabaseClient;
   });
 
   afterEach(() => {
@@ -63,7 +79,7 @@ describe('Database Integration Tests', () => {
   describe('Task Operations', () => {
     it('should create, read, update a task with JWT', async () => {
       // Mock business creation
-      mockSupabaseClient.select.mockReturnValueOnce({
+      mockChain.select.mockReturnValueOnce({
         eq: jest.fn().mockReturnValueOnce({
           eq: jest.fn().mockReturnValueOnce({
             single: jest.fn().mockResolvedValueOnce({ data: null, error: null })
@@ -71,7 +87,7 @@ describe('Database Integration Tests', () => {
         })
       });
       
-      mockSupabaseClient.insert.mockReturnValueOnce({
+      mockChain.insert.mockReturnValueOnce({
         select: jest.fn().mockReturnValueOnce({
           single: jest.fn().mockResolvedValueOnce({
             data: { id: 'biz-123', name: 'Test Business' },
@@ -80,10 +96,10 @@ describe('Database Integration Tests', () => {
         })
       });
       
-      mockSupabaseClient.insert.mockReturnValueOnce({ data: null, error: null });
+      mockChain.insert.mockReturnValueOnce({ data: null, error: null });
       
       // Mock context creation
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: {
           id: 'ctx-123',
           business_id: 'biz-123',
@@ -108,7 +124,7 @@ describe('Database Integration Tests', () => {
       expect(task.business_id).toBe('biz-123');
       
       // Mock read
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: {
           id: 'ctx-123',
           business_id: 'biz-123',
@@ -126,13 +142,13 @@ describe('Database Integration Tests', () => {
       expect(readTask?.id).toBe('ctx-123');
       
       // Mock update (via event)
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: { id: 'event-123', sequence_number: 1 },
         error: null
       });
       
       // Mock for getTask (called by updateTask)
-      mockSupabaseClient.from.mockReturnValueOnce({
+      mockChain.from.mockReturnValueOnce({
         select: jest.fn().mockReturnValueOnce({
           eq: jest.fn().mockReturnValueOnce({
             eq: jest.fn().mockReturnValueOnce({
@@ -155,7 +171,7 @@ describe('Database Integration Tests', () => {
       });
       
       // Mock for the actual update
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: {
           id: 'ctx-123',
           user_id: 'test-user-123',
@@ -181,8 +197,8 @@ describe('Database Integration Tests', () => {
     it('should get user tasks with RLS filtering', async () => {
       // Set up proper mock chain for getUserTasks
       // The method chains: from('tasks').select('*').eq('user_id', ...).order(...)
-      // Since all methods return mockSupabaseClient, we just need to set the final response
-      mockSupabaseClient.then = jest.fn((resolve) => {
+      // Since all methods return mockChain, we just need to set the final response
+      mockChain.then = jest.fn((resolve) => {
         resolve({
           data: [
             {
@@ -213,7 +229,7 @@ describe('Database Integration Tests', () => {
       jest.clearAllMocks();
       
       // Mock getTask to return null (task not found)
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: null,
         error: { code: 'PGRST116', message: 'Row not found' }
       });
@@ -226,7 +242,7 @@ describe('Database Integration Tests', () => {
   describe('Task Execution Operations', () => {
     it('should create system execution', async () => {
       // First mock - for getting the task
-      mockSupabaseClient.from.mockReturnValueOnce({
+      mockChain.from.mockReturnValueOnce({
         select: jest.fn().mockReturnValueOnce({
           eq: jest.fn().mockReturnValueOnce({
             eq: jest.fn().mockReturnValueOnce({
@@ -244,7 +260,7 @@ describe('Database Integration Tests', () => {
       });
       
       // Second mock - for task_context_events table
-      mockSupabaseClient.from.mockReturnValueOnce({
+      mockChain.from.mockReturnValueOnce({
         insert: jest.fn().mockReturnValueOnce({
           select: jest.fn().mockReturnValueOnce({
             single: jest.fn().mockResolvedValueOnce({
@@ -288,7 +304,7 @@ describe('Database Integration Tests', () => {
 
   describe('Agent Message Operations', () => {
     it('should save system message', async () => {
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: { id: 'audit-123' },
         error: null
       });
@@ -307,7 +323,7 @@ describe('Database Integration Tests', () => {
 
   describe('Audit Operations', () => {
     it('should create system audit entry', async () => {
-      mockSupabaseClient.single.mockResolvedValueOnce({
+      mockChain.single.mockResolvedValueOnce({
         data: { id: 'audit-123' },
         error: null
       });
@@ -338,7 +354,7 @@ describe('Database Integration Tests', () => {
       const mockSingle = jest.fn().mockRejectedValueOnce(new Error('Connection failed'));
       const mockEq = jest.fn().mockReturnValue({ single: mockSingle });
       const mockSelect = jest.fn().mockReturnValue({ eq: mockEq });
-      mockSupabaseClient.from.mockReturnValueOnce({ select: mockSelect });
+      mockChain.from.mockReturnValueOnce({ select: mockSelect });
       
       await expect(dbService.getContext('ctx-123')).rejects.toThrow('Connection failed');
     });
@@ -352,7 +368,7 @@ describe('Database Integration Tests', () => {
       });
       const mockEq = jest.fn().mockReturnValue({ single: mockSingle });
       const mockSelect = jest.fn().mockReturnValue({ eq: mockEq });
-      mockSupabaseClient.from.mockReturnValueOnce({ select: mockSelect });
+      mockChain.from.mockReturnValueOnce({ select: mockSelect });
       
       // getContext should throw the error object for non-PGRST116 errors
       await expect(dbService.getContext('ctx-123')).rejects.toEqual(permissionError);
