@@ -23,7 +23,7 @@ import { ConfigurationManager } from '../services/configuration-manager';
 import { DatabaseService } from '../services/database';
 import { StateComputer } from '../services/state-computer';
 import { logger } from '../utils/logger';
-import { agentDiscovery, AgentCapability } from '../services/agent-discovery';
+// import { agentDiscovery } from '../services/agent-discovery'; // Will be used in executePhase
 import {
   TaskContext,
   TaskTemplate,
@@ -36,6 +36,65 @@ import {
   OrchestratorRequest,
   OrchestratorResponse
 } from '../types/engine-types';
+
+/**
+ * JSON Schema templates for consistent LLM responses
+ */
+const _EXECUTION_PLAN_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    reasoning: {
+      type: "object",
+      properties: {
+        task_analysis: { type: "string" },
+        subtask_decomposition: { 
+          type: "array", 
+          items: { 
+            type: "object",
+            properties: {
+              subtask: { type: "string" },
+              required_capabilities: { type: "array", items: { type: "string" } },
+              assigned_agent: { type: "string" },
+              rationale: { type: "string" }
+            }
+          }
+        },
+        coordination_strategy: { type: "string" }
+      },
+      required: ["task_analysis", "subtask_decomposition", "coordination_strategy"]
+    },
+    phases: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          subtasks: {
+            type: "array",
+            items: {
+              type: "object", 
+              properties: {
+                description: { type: "string" },
+                agent: { type: "string" },
+                specific_instruction: { type: "string" },
+                input_data: { type: "object" },
+                expected_output: { type: "string" },
+                success_criteria: { type: "array", items: { type: "string" } }
+              },
+              required: ["description", "agent", "specific_instruction"]
+            }
+          },
+          parallel_execution: { type: "boolean" },
+          dependencies: { type: "array", items: { type: "string" } }
+        },
+        required: ["name", "subtasks"]
+      }
+    },
+    estimated_duration: { type: "string" },
+    user_interactions: { type: "string", enum: ["none", "minimal", "guided", "extensive"] }
+  },
+  required: ["reasoning", "phases"]
+};
 
 /**
  * Orchestration configuration
@@ -58,110 +117,19 @@ interface OrchestratorConfig {
   };
 }
 
-// REMOVED: EnhancedAgentCapability interface - using AgentCapability directly
-// This eliminates the enterprise over-engineering pattern that was violating MVP principles
-
 /**
- * Enhanced JSON Schema for LLM execution plan responses
- * Ensures structured reasoning and proper task decomposition
+ * Agent capability definition with detailed specialization information
+ * Used by the Orchestrator to understand what each agent can accomplish
+ * and how to decompose complex tasks into appropriate subtasks
  */
-const EXECUTION_PLAN_JSON_SCHEMA = {
-  type: "object",
-  properties: {
-    reasoning: {
-      type: "object",
-      properties: {
-        task_analysis: { 
-          type: "string",
-          description: "Analysis of the task requirements and complexity"
-        },
-        subtask_decomposition: { 
-          type: "array",
-          description: "Breakdown of the main task into specific subtasks",
-          items: { 
-            type: "object",
-            properties: {
-              subtask: { type: "string", description: "Specific subtask to be completed" },
-              required_capabilities: { 
-                type: "array", 
-                items: { type: "string" },
-                description: "List of agent capabilities needed for this subtask"
-              },
-              assigned_agent: { 
-                type: "string",
-                description: "ID of the agent best suited for this subtask"
-              },
-              rationale: { 
-                type: "string",
-                description: "Why this agent was selected for this subtask"
-              },
-              estimated_duration: {
-                type: "string",
-                description: "Expected time to complete this subtask"
-              },
-              dependencies: {
-                type: "array",
-                items: { type: "string" },
-                description: "Other subtasks that must complete before this one"
-              }
-            },
-            required: ["subtask", "required_capabilities", "assigned_agent", "rationale"]
-          }
-        },
-        coordination_strategy: { 
-          type: "string",
-          description: "How subtasks will be coordinated and data will flow between agents"
-        },
-        fallback_plans: {
-          type: "array",
-          items: {
-            type: "object", 
-            properties: {
-              scenario: { type: "string" },
-              fallback_action: { type: "string" }
-            }
-          },
-          description: "Contingency plans if agents are unavailable or tasks fail"
-        }
-      },
-      required: ["task_analysis", "subtask_decomposition", "coordination_strategy"]
-    },
-    execution_plan: {
-      type: "object",
-      properties: {
-        phases: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string" },
-              name: { type: "string" },
-              description: { type: "string" },
-              agent_instructions: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    agent_id: { type: "string" },
-                    instruction: { type: "string" },
-                    context_data: { type: "object" },
-                    expected_output: { type: "string" }
-                  }
-                }
-              },
-              success_criteria: { type: "array", items: { type: "string" } },
-              estimated_duration: { type: "string" }
-            }
-          }
-        },
-        overall_timeline: { type: "string" },
-        risk_assessment: { type: "string" }
-      },
-      required: ["phases"]
-    }
-  },
-  required: ["reasoning", "execution_plan"]
-};
+interface AgentCapability {
+  agentId: string;
+  role: string;
+  capabilities: string[];
+  availability: 'available' | 'busy' | 'offline' | 'not_implemented';
+  specialization: string; // Human-readable description of what this agent specializes in
+  fallbackStrategy?: 'user_input' | 'alternative_agent' | 'defer';
+}
 
 /**
  * Universal OrchestratorAgent
@@ -178,14 +146,15 @@ export class OrchestratorAgent extends BaseAgent {
   private dbService: DatabaseService;
   private stateComputer: StateComputer;
   
-  // Simplified agent coordination - pure YAML discovery
+  // Agent registry and coordination
+  private agentRegistry: Map<string, AgentCapability>;
   private activeExecutions: Map<string, ExecutionPlan>;
   private pendingUIRequests: Map<string, UIRequest[]>;
   
-  // Simplified A2A System - Message-based coordination
+  // Pure A2A System - Agent Lifecycle Management via DI
+  // NO AGENT INSTANCES STORED - Using DI and task-centered message bus
   private agentCapabilities: Map<string, any> = new Map();
   private activeTaskSubscriptions: Map<string, Set<string>> = new Map(); // taskId -> Set of agentIds
-  private messageQueue: Array<{taskId: string, message: any, timestamp: string}> = []; // Simple message queue
   
   private constructor() {
     try {
@@ -202,6 +171,7 @@ export class OrchestratorAgent extends BaseAgent {
       logger.info('✅ Orchestrator config loaded successfully');
       
       logger.info('🗃️ Initializing data structures...');
+      this.agentRegistry = new Map();
       this.activeExecutions = new Map();
       this.pendingUIRequests = new Map();
       logger.info('✅ Data structures initialized');
@@ -212,6 +182,10 @@ export class OrchestratorAgent extends BaseAgent {
       this.dbService = null as any;
       this.stateComputer = null as any;
       logger.info('✅ Lazy initialization configured');
+      
+      logger.info('📋 Initializing agent registry...');
+      this.initializeAgentRegistry();
+      logger.info('✅ Agent registry initialized');
       
       logger.info('🎉 OrchestratorAgent constructor completed successfully!');
     } catch (error) {
@@ -351,606 +325,170 @@ export class OrchestratorAgent extends BaseAgent {
     }
   }
   
-  // REMOVED: ensureAgentRegistryInitialized - no longer needed with pure YAML discovery
-
-  // REMOVED: initializeAgentRegistry - replaced with direct YAML discovery
-
   /**
-   * Handle requests from agents for additional assistance (MVP message-passing)
-   * 
-   * This implements the core capability where agents can dynamically request
-   * additional resources, capabilities, or guidance from the orchestrator.
-   * The orchestrator analyzes each request and provides intelligent responses.
-   * 
-   * @param taskId - The task context
-   * @param fromAgentId - The requesting agent
-   * @param request - Structured request following OrchestratorRequest schema
+   * Initialize agent registry with available agents
    */
-  async handleAgentRequest(
-    taskId: string, 
-    fromAgentId: string, 
-    request: OrchestratorRequest
-  ): Promise<OrchestratorResponse> {
-    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+  private initializeAgentRegistry(): void {
     try {
-      logger.info('🤖 AGENT REQUEST: Processing agent assistance request', {
-        taskId,
-        fromAgent: fromAgentId,
-        requestType: request.type,
-        priority: request.priority,
-        requestId
-      });
-
-      // Analyze the request and determine response
-      const response = await this.analyzeAgentRequest(taskId, fromAgentId, request, requestId);
-
-      // Record the orchestrator's decision process
-      await this.recordContextEntry(
-        { contextId: taskId } as TaskContext,
+      logger.info('🤖 Initializing agent registry with available agents...');
+      
+      // Discover available agents with detailed capabilities for task decomposition
+      // These are the orchestrator's internal understanding of agent capabilities
+      // for decomposing tasks into specific subtasks with appropriate agent assignments
+      const agents: AgentCapability[] = [
         {
-          operation: 'agent_request_processed',
-          data: {
-            fromAgent: fromAgentId,
-            requestType: request.type,
-            priority: request.priority,
-            responseStatus: response.status,
-            reasoning: response.message
-          },
-          reasoning: `Processed ${request.type} request from ${fromAgentId}: ${response.status}`
+          agentId: 'BusinessDiscoveryAgent',
+          role: 'data_enrichment',
+          capabilities: [
+            'business_entity_lookup',
+            'ein_validation_verification', 
+            'business_address_verification',
+            'entity_type_detection',
+            'formation_date_discovery',
+            'business_status_verification',
+            'corporate_officer_identification'
+          ],
+          availability: 'available',
+          specialization: 'Discovers and validates business entity information from multiple sources including state registries and business databases'
+        },
+        {
+          agentId: 'ProfileCollector',
+          role: 'data_collection',
+          capabilities: [
+            'user_profile_collection',
+            'guided_form_generation',
+            'data_validation_rules',
+            'document_parsing_extraction',
+            'progressive_disclosure_forms',
+            'smart_field_pre_filling',
+            'validation_error_handling'
+          ],
+          availability: 'available',
+          specialization: 'Collects and validates user information through intelligent forms with progressive disclosure and smart defaults'
+        },
+        {
+          agentId: 'ComplianceVerificationAgent',
+          role: 'legal_compliance',
+          capabilities: [
+            'regulatory_requirement_analysis',
+            'deadline_tracking_monitoring',
+            'compliance_form_preparation',
+            'legal_document_generation',
+            'penalty_risk_assessment',
+            'filing_status_verification',
+            'jurisdiction_specific_rules'
+          ],
+          availability: 'available',
+          specialization: 'Ensures legal compliance and manages regulatory requirements across multiple jurisdictions and business types'
+        },
+        {
+          agentId: 'FormOptimizerAgent',
+          role: 'form_processing',
+          capabilities: [
+            'form_field_optimization',
+            'data_pre_filling_automation',
+            'form_completion_assistance',
+            'error_prevention_validation',
+            'submission_preparation',
+            'document_formatting',
+            'regulatory_form_compliance'
+          ],
+          availability: 'available',
+          specialization: 'Optimizes and automates form completion processes with intelligent pre-filling and validation'
+        },
+        {
+          agentId: 'DataEnrichmentAgent',
+          role: 'data_enhancement',
+          capabilities: [
+            'external_data_source_integration',
+            'business_data_enrichment',
+            'address_standardization',
+            'contact_information_validation',
+            'financial_data_integration',
+            'industry_classification',
+            'data_quality_scoring'
+          ],
+          availability: 'available',
+          specialization: 'Enriches collected data with external sources for completeness and accuracy validation'
+        },
+        {
+          agentId: 'TaskCoordinatorAgent',
+          role: 'workflow_coordination',
+          capabilities: [
+            'task_dependency_management',
+            'workflow_sequencing',
+            'resource_allocation',
+            'timeline_optimization',
+            'bottleneck_identification',
+            'parallel_processing_coordination',
+            'milestone_tracking'
+          ],
+          availability: 'available',
+          specialization: 'Coordinates complex multi-step workflows and manages task dependencies for optimal execution'
+        },
+        {
+          agentId: 'CommunicationAgent',
+          role: 'user_communication',
+          capabilities: [
+            'notification_delivery',
+            'status_update_messaging',
+            'approval_request_handling',
+            'escalation_management',
+            'multi_channel_communication',
+            'personalized_messaging',
+            'urgency_level_assessment'
+          ],
+          availability: 'available',
+          specialization: 'Manages all user communications and notifications with personalized messaging and multi-channel delivery'
+        },
+        {
+          agentId: 'CelebrationAgent',
+          role: 'achievement_recognition',
+          capabilities: [
+            'milestone_detection',
+            'achievement_recognition',
+            'progress_celebration',
+            'user_motivation_enhancement',
+            'completion_ceremonies',
+            'success_story_creation',
+            'badge_award_management'
+          ],
+          availability: 'available',
+          specialization: 'Recognizes achievements and celebrates user progress to maintain motivation and engagement'
+        },
+        {
+          agentId: 'MonitoringAgent',
+          role: 'system_monitoring',
+          capabilities: [
+            'task_progress_monitoring',
+            'performance_metrics_tracking',
+            'error_detection_alerting',
+            'system_health_assessment',
+            'audit_trail_generation',
+            'compliance_monitoring',
+            'anomaly_detection'
+          ],
+          availability: 'available',
+          specialization: 'Monitors system performance and task execution health with comprehensive audit trail generation'
         }
-      );
-
-      // Broadcast the response to all agents listening to this task
-      await this.broadcastTaskEvent(taskId, {
-        type: 'ORCHESTRATOR_RESPONSE',
-        requestId,
-        fromAgent: fromAgentId,
-        response,
-        timestamp: new Date().toISOString()
+      ];
+      
+      logger.info(`📊 Registering ${agents.length} agents...`);
+      agents.forEach((agent, index) => {
+        logger.info(`🔧 Registering agent ${index + 1}/${agents.length}: ${agent.agentId} (${agent.role})`);
+        this.agentRegistry.set(agent.agentId, agent);
       });
-
-      logger.info('✅ AGENT REQUEST: Response provided', {
-        taskId,
-        fromAgent: fromAgentId,
-        requestId,
-        responseStatus: response.status
-      });
-
-      return response;
+      
+      logger.info(`✅ Agent registry initialized with ${this.agentRegistry.size} agents`);
     } catch (error) {
-      logger.error('❌ AGENT REQUEST: Failed to process request', {
-        taskId,
-        fromAgent: fromAgentId,
-        requestType: request.type,
-        requestId,
-        error: error instanceof Error ? error.message : String(error)
+      logger.error('💥 FATAL: Agent registry initialization failed!', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
       });
-
-      // Return error response
-      return {
-        status: 'denied',
-        requestId,
-        message: `Failed to process request: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        responseTime: new Date().toISOString(),
-        confidence: 0.0
-      };
-    }
-  }
-
-  /**
-   * Analyze agent request and determine appropriate response
-   * This is where the orchestrator's intelligence applies to agent requests
-   */
-  private async analyzeAgentRequest(
-    taskId: string,
-    fromAgentId: string, 
-    request: OrchestratorRequest,
-    requestId: string
-  ): Promise<OrchestratorResponse> {
-    const _startTime = Date.now();
-
-    // Get current capabilities from YAML discovery
-    const capabilities = await agentDiscovery.discoverAgents();
-    const availableAgents = Array.from(capabilities.values());
-
-    logger.info('🧠 ORCHESTRATOR REASONING: Analyzing agent request', {
-      taskId,
-      fromAgent: fromAgentId,
-      requestType: request.type,
-      availableAgents: availableAgents.length
-    });
-
-    // Analyze based on request type
-    switch (request.type) {
-      case 'agent_capabilities':
-        return await this.handleAgentCapabilityRequest(taskId, fromAgentId, request, requestId, availableAgents);
-      
-      case 'tool_access':
-        return await this.handleToolAccessRequest(taskId, fromAgentId, request, requestId);
-      
-      case 'user_interaction':
-        return await this.handleUserInteractionRequest(taskId, fromAgentId, request, requestId);
-      
-      case 'constraint_resolution':
-        return await this.handleConstraintResolutionRequest(taskId, fromAgentId, request, requestId);
-      
-      case 'resource_allocation':
-        return await this.handleResourceAllocationRequest(taskId, fromAgentId, request, requestId);
-      
-      default:
-        return {
-          status: 'denied',
-          requestId,
-          message: `Unknown request type: ${request.type}`,
-          responseTime: new Date().toISOString(),
-          confidence: 0.0
-        };
-    }
-  }
-
-  /**
-   * Handle agent capability requests (other agents needed)
-   */
-  private async handleAgentCapabilityRequest(
-    taskId: string,
-    fromAgentId: string,
-    request: OrchestratorRequest,
-    requestId: string,
-    availableAgents: any[]
-  ): Promise<OrchestratorResponse> {
-    logger.info('🤖 AGENT CAPABILITY REQUEST: Processing request for additional agents', {
-      taskId,
-      fromAgent: fromAgentId,
-      requestedAgents: request.capabilities?.map(c => c.agentId) || []
-    });
-
-    const approvedAgents: string[] = [];
-    const unavailableAgents: string[] = [];
-
-    // Check if requested agents are available
-    for (const capReq of request.capabilities || []) {
-      const agent = availableAgents.find(a => a.agentId === capReq.agentId);
-      if (agent && agent.availability === 'available') {
-        approvedAgents.push(capReq.agentId);
-      } else {
-        unavailableAgents.push(capReq.agentId);
-      }
-    }
-
-    if (approvedAgents.length === request.capabilities?.length) {
-      // All requested agents available
-      return {
-        status: 'approved',
-        requestId,
-        message: `Approved request for ${approvedAgents.length} additional agent(s): ${approvedAgents.join(', ')}`,
-        provided: {
-          agents: approvedAgents
-        },
-        nextSteps: [
-          {
-            action: 'agents_will_be_notified',
-            expectedCompletion: new Date(Date.now() + 30000).toISOString() // 30 seconds
-          }
-        ],
-        responseTime: new Date().toISOString(),
-        confidence: 0.9
-      };
-    } else if (approvedAgents.length > 0) {
-      // Partial approval
-      return {
-        status: 'modified',
-        requestId,
-        message: `Partial approval: ${approvedAgents.length}/${request.capabilities?.length} agents available`,
-        provided: {
-          agents: approvedAgents
-        },
-        alternatives: unavailableAgents.map(agentId => ({
-          option: `Alternative to ${agentId}`,
-          description: `Consider using agents with similar skills: ${this.suggestAlternativeAgents(agentId, availableAgents).join(', ')}`,
-          tradeoffs: ['May require additional coordination', 'Capabilities might not be identical']
-        })),
-        responseTime: new Date().toISOString(),
-        confidence: 0.7
-      };
-    } else {
-      // No agents available
-      return {
-        status: 'denied',
-        requestId,
-        message: `No requested agents currently available: ${unavailableAgents.join(', ')}`,
-        alternatives: [
-          {
-            option: 'Wait for agents to become available',
-            description: 'Agents may become available as other tasks complete',
-            tradeoffs: ['Increased task completion time']
-          },
-          {
-            option: 'Use alternative approaches',
-            description: 'Consider manual steps or different task decomposition',
-            tradeoffs: ['May require user interaction', 'Reduced automation']
-          }
-        ],
-        responseTime: new Date().toISOString(),
-        confidence: 0.8
-      };
-    }
-  }
-
-  /**
-   * Handle tool access requests
-   */
-  private async handleToolAccessRequest(
-    taskId: string,
-    fromAgentId: string,
-    request: OrchestratorRequest,
-    requestId: string
-  ): Promise<OrchestratorResponse> {
-    // For MVP, approve most tool requests with user confirmation if needed
-    return {
-      status: 'approved',
-      requestId,
-      message: `Tool access request approved for ${request.tools?.length || 0} tool(s)`,
-      provided: {
-        tools: request.tools?.map(t => t.toolId) || []
-      },
-      nextSteps: [
-        {
-          action: 'tools_will_be_configured',
-          dependencies: ['user_credentials_may_be_required']
-        }
-      ],
-      responseTime: new Date().toISOString(),
-      confidence: 0.8
-    };
-  }
-
-  /**
-   * Handle user interaction requests
-   */
-  private async handleUserInteractionRequest(
-    taskId: string,
-    fromAgentId: string,
-    request: OrchestratorRequest,
-    requestId: string
-  ): Promise<OrchestratorResponse> {
-    return {
-      status: 'approved',
-      requestId,
-      message: `User interaction scheduled: ${request.userInteraction?.type}`,
-      provided: {
-        userInteractionScheduled: true
-      },
-      nextSteps: [
-        {
-          action: 'user_notification_sent',
-          expectedCompletion: new Date(Date.now() + 60000).toISOString() // 1 minute
-        }
-      ],
-      responseTime: new Date().toISOString(),
-      confidence: 0.9
-    };
-  }
-
-  /**
-   * Handle constraint resolution requests
-   */
-  private async handleConstraintResolutionRequest(
-    taskId: string,
-    fromAgentId: string,
-    request: OrchestratorRequest,
-    requestId: string
-  ): Promise<OrchestratorResponse> {
-    const addressedConstraints = request.constraints?.map(c => c.description) || [];
-
-    return {
-      status: 'approved',
-      requestId,
-      message: `Constraint resolution plan created for ${addressedConstraints.length} constraint(s)`,
-      provided: {
-        constraintsAddressed: addressedConstraints
-      },
-      nextSteps: request.constraints?.map(c => ({
-        action: c.suggestedResolution || 'manual_resolution_required',
-        dependencies: ['user_approval_may_be_required']
-      })) || [],
-      responseTime: new Date().toISOString(),
-      confidence: 0.7
-    };
-  }
-
-  /**
-   * Handle resource allocation requests
-   */
-  private async handleResourceAllocationRequest(
-    taskId: string,
-    fromAgentId: string,
-    request: OrchestratorRequest,
-    requestId: string
-  ): Promise<OrchestratorResponse> {
-    return {
-      status: 'approved',
-      requestId,
-      message: `Resource allocation approved for ${request.resources?.length || 0} resource(s)`,
-      provided: {
-        resourcesAllocated: request.resources?.map(r => ({ type: r.type, amount: r.amount })) || []
-      },
-      responseTime: new Date().toISOString(),
-      confidence: 0.8
-    };
-  }
-
-  /**
-   * Suggest alternative agents when requested agent is unavailable
-   */
-  private suggestAlternativeAgents(unavailableAgentId: string, availableAgents: any[]): string[] {
-    // Simple heuristic: find agents with overlapping skills
-    const alternatives: string[] = [];
-    
-    for (const agent of availableAgents) {
-      if (agent.availability === 'available' && agent.agentId !== unavailableAgentId) {
-        // For MVP, suggest any available agent
-        alternatives.push(agent.agentId);
-        if (alternatives.length >= 2) break; // Limit suggestions
-      }
-    }
-    
-    return alternatives;
-  }
-
-  /**
-   * Override shouldHandleEvent to recognize agent requests for assistance
-   * This is where the orchestrator "listens" for agent requests and schedules them
-   */
-  protected shouldHandleEvent(event: any): boolean {
-    // Always handle orchestrator-specific events
-    if (event.type === 'ORCHESTRATOR_REQUEST') {
-      logger.info('🎯 ORCHESTRATOR: Recognized agent assistance request', {
-        fromAgent: event.fromAgent,
-        requestType: event.request?.type,
-        priority: event.request?.priority
-      });
-      return true;
-    }
-
-    // Handle other orchestration-relevant events
-    if (event.type === 'AGENT_BLOCKED' || 
-        event.type === 'TASK_CONTEXT_UPDATE' ||
-        event.type === 'AGENT_COMPLETED') {
-      return true;
-    }
-
-    // Let parent handle other event types
-    return super.shouldHandleEvent(event);
-  }
-
-  /**
-   * Handle orchestrator-specific events (called by subscribeToTaskEvents)
-   * This is where requests get scheduled and processed with reasoning
-   */
-  private async handleOrchestratorEvent(event: any): Promise<void> {
-    try {
-      switch (event.type) {
-        case 'ORCHESTRATOR_REQUEST':
-          await this.processAgentRequestEvent(event);
-          break;
-          
-        case 'AGENT_BLOCKED':
-          await this.processAgentBlockageEvent(event);
-          break;
-          
-        case 'TASK_CONTEXT_UPDATE':
-          await this.processTaskContextUpdate(event);
-          break;
-          
-        case 'AGENT_COMPLETED':
-          await this.processAgentCompletionEvent(event);
-          break;
-          
-        default:
-          logger.debug('Orchestrator received unhandled event', {
-            eventType: event.type,
-            hasData: !!event.data
-          });
-      }
-    } catch (error) {
-      logger.error('Failed to handle orchestrator event', {
-        eventType: event.type,
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
-  }
-
-  /**
-   * Process agent request events and schedule appropriate responses
-   */
-  private async processAgentRequestEvent(event: any): Promise<void> {
-    const { fromAgent, request, taskId } = event;
-    
-    logger.info('📋 ORCHESTRATOR SCHEDULING: Processing agent request', {
-      fromAgent,
-      requestType: request?.type,
-      priority: request?.priority,
-      taskId: event.taskId
-    });
-
-    // Record the request reception for complete audit trail
-    await this.recordContextEntry(
-      { contextId: taskId } as TaskContext,
-      {
-        operation: 'agent_request_received',
-        data: {
-          fromAgent,
-          requestType: request?.type,
-          priority: request?.priority,
-          receivedAt: new Date().toISOString(),
-          eventSource: 'sse_message_bus'
-        },
-        reasoning: `Orchestrator received agent request via SSE from ${fromAgent}`
-      }
-    );
-
-    // Schedule request processing based on priority
-    const urgency = request?.priority || 'normal';
-    const delay = this.calculateRequestDelay(urgency);
-
-    if (delay === 0) {
-      // Process immediately for urgent requests
-      await this.handleAgentRequest(taskId, fromAgent, request);
-    } else {
-      // Record the scheduling decision for audit trail
-      await this.recordContextEntry(
-        { contextId: taskId } as TaskContext,
-        {
-          operation: 'agent_request_scheduled',
-          data: {
-            fromAgent,
-            requestType: request?.type,
-            priority: request?.priority,
-            scheduledDelay: delay,
-            urgencyLevel: urgency,
-            scheduledFor: new Date(Date.now() + delay).toISOString()
-          },
-          reasoning: `Request scheduled for ${delay}ms delay based on ${urgency} priority`
-        }
-      );
-
-      // Schedule for later processing
-      setTimeout(async () => {
-        try {
-          await this.handleAgentRequest(taskId, fromAgent, request);
-        } catch (error) {
-          logger.error('Scheduled request processing failed', {
-            fromAgent,
-            requestType: request?.type,
-            error: error instanceof Error ? error.message : String(error)
-          });
-          
-          // Record the failure for audit trail
-          await this.recordContextEntry(
-            { contextId: taskId } as TaskContext,
-            {
-              operation: 'scheduled_request_failed',
-              data: {
-                fromAgent,
-                requestType: request?.type,
-                error: error instanceof Error ? error.message : String(error),
-                failedAt: new Date().toISOString()
-              },
-              reasoning: `Scheduled request processing failed: ${error instanceof Error ? error.message : String(error)}`
-            }
-          );
-        }
-      }, delay);
-
-      logger.info(`📅 ORCHESTRATOR SCHEDULING: Request scheduled for ${delay}ms delay`, {
-        fromAgent,
-        urgency,
-        requestType: request?.type
-      });
-    }
-  }
-
-  /**
-   * Process agent blockage events
-   */
-  private async processAgentBlockageEvent(event: any): Promise<void> {
-    logger.info('🚫 ORCHESTRATOR: Agent reported blockage', {
-      agentId: event.agentId,
-      reason: event.blockage?.reason,
-      needs: event.blockage?.needs
-    });
-
-    // Auto-generate assistance request from blockage
-    if (event.blockage?.needs && Array.isArray(event.blockage.needs)) {
-      const assistanceRequest: OrchestratorRequest = {
-        type: 'constraint_resolution',
-        priority: 'high', // Blockages are high priority
-        reason: event.blockage.reason || 'Agent reported blockage',
-        constraints: event.blockage.needs.map((need: string) => ({
-          type: 'external_dependency' as const,
-          description: need,
-          impact: 'Agent cannot proceed without this',
-          suggestedResolution: 'Provide required resource or alternative approach'
-        }))
-      };
-
-      await this.handleAgentRequest(event.taskId, event.agentId, assistanceRequest);
-    }
-  }
-
-  /**
-   * Process task context updates to identify orchestration opportunities
-   */
-  private async processTaskContextUpdate(event: any): Promise<void> {
-    logger.debug('📝 ORCHESTRATOR: Task context updated', {
-      taskId: event.taskId,
-      operation: event.operation,
-      agentId: event.agentId
-    });
-
-    // Look for patterns that might require orchestration intervention
-    // This is where intelligent scheduling happens
-  }
-
-  /**
-   * Process agent completion events
-   */
-  private async processAgentCompletionEvent(event: any): Promise<void> {
-    logger.info('✅ ORCHESTRATOR: Agent completed work', {
-      agentId: event.agentId,
-      taskId: event.taskId
-    });
-
-    // Update orchestration state and consider next steps
-  }
-
-  /**
-   * Calculate delay for request processing based on priority
-   */
-  private calculateRequestDelay(priority: string): number {
-    switch (priority) {
-      case 'urgent': return 0; // Immediate
-      case 'high': return 1000; // 1 second
-      case 'normal': return 5000; // 5 seconds  
-      case 'low': return 15000; // 15 seconds
-      default: return 5000;
+      throw error;
     }
   }
   
-  /**
-   * Setup orchestrator event listening for a task
-   * This ensures the orchestrator can respond to agent requests dynamically
-   */
-  private async setupOrchestratorListening(taskId: string): Promise<() => void> {
-    logger.info('📡 ORCHESTRATOR: Setting up event listening for task', { taskId });
-    
-    // Record the listening setup for complete audit trail
-    await this.recordContextEntry(
-      { contextId: taskId } as TaskContext,
-      {
-        operation: 'orchestrator_listening_started',
-        data: {
-          taskId,
-          listeningFor: ['ORCHESTRATOR_REQUEST', 'AGENT_BLOCKED', 'TASK_CONTEXT_UPDATE', 'AGENT_COMPLETED'],
-          startedAt: new Date().toISOString(),
-          subscriptionType: 'sse_postgresql_notify'
-        },
-        reasoning: 'Orchestrator began listening for agent requests and events via SSE message bus'
-      }
-    );
-    
-    // Subscribe to task events using the inherited subscription method
-    const unsubscribe = await this.subscribeToTaskEvents(taskId, async (event) => {
-      // This will only be called for events where shouldHandleEvent returns true
-      await this.handleOrchestratorEvent(event);
-    });
-
-    logger.info('✅ ORCHESTRATOR: Now listening for agent requests and events', { taskId });
-    
-    return unsubscribe;
-  }
-
   /**
    * Main orchestration entry point
    * Handles ANY task type through universal flow
@@ -964,12 +502,6 @@ export class OrchestratorAgent extends BaseAgent {
         contextId: context.contextId,
         templateId: context.taskTemplateId,
         tenantId: context.tenantId
-      });
-      
-      // 0. Setup orchestrator listening for agent requests during task execution
-      await this.setupOrchestratorListening(context.contextId);
-      logger.info('✅ Orchestrator now listening for agent requests', {
-        contextId: context.contextId
       });
       
       // 1. Create execution plan from template
@@ -1030,212 +562,581 @@ export class OrchestratorAgent extends BaseAgent {
   }
   
   /**
-   * Simplified execution plan creation using pure YAML discovery
-   * MVP approach: agents communicate capabilities dynamically via message passing
+   * Create execution plan using LLM with detailed task decomposition analysis
+   * This is the core intelligence of the orchestrator - breaking down complex business
+   * tasks into specific subtasks that can be executed by specialized agents
+   * 
+   * Engine PRD Lines 915-972: Orchestrator must reason about task requirements,
+   * analyze available agent capabilities, and create a coordinated execution plan
    */
   private async createExecutionPlan(context: TaskContext): Promise<ExecutionPlan> {
-    try {
-      logger.info('🧠 ORCHESTRATOR: Starting simplified execution plan generation', {
-        contextId: context.contextId,
-        templateId: context.taskTemplateId
-      });
+    // Extract comprehensive task information from the task's own data (self-contained task)
+    const taskType = context.currentState?.task_type || 'general';
+    const taskTitle = context.currentState?.title || 'Unknown Task';
+    const taskDefinition = context.metadata?.taskDefinition || context.templateSnapshot || {};
+    const taskDescription = taskDefinition?.description || context.currentState?.description || 'No description provided';
+    
+    // Build detailed agent capability information for LLM reasoning
+    const availableAgents = Array.from(this.agentRegistry.values()).map(agent => ({
+      agentId: agent.agentId,
+      role: agent.role,
+      specialization: agent.specialization,
+      capabilities: agent.capabilities,
+      availability: agent.availability,
+      fallbackStrategy: agent.fallbackStrategy
+    }));
 
-      // Get agents directly from YAML discovery - no caching, no enhanced metadata
-      const capabilities = await agentDiscovery.discoverAgents();
-      const availableAgents = Array.from(capabilities.values());
-      
-      logger.info(`🔍 AGENT DISCOVERY: Found ${availableAgents.length} agents from YAML configs`);
+    // Create comprehensive prompt for task decomposition and agent assignment
+    const planPrompt = `You are the Master Orchestrator for SmallBizAlly, responsible for decomposing complex business tasks into executable subtasks for specialized AI agents.
 
-      const template = context.templateSnapshot;
-      
-      // Simplified LLM prompt - agents will provide their own detailed capabilities via messages
-      const simplifiedPrompt = `You are a task orchestrator. Create an execution plan for this task.
+TASK TO ORCHESTRATE:
+Title: "${taskTitle}"
+Type: ${taskType}
+Description: "${taskDescription}"
 
-## TASK
-Template: ${JSON.stringify(template, null, 2)}
-Context: ${JSON.stringify(context.currentState, null, 2)}
+TASK GOALS:
+${taskDefinition?.goals && Array.isArray(taskDefinition.goals) ? taskDefinition.goals.map((goal: string) => `- ${goal}`).join('\n') : '- Complete the task successfully'}
 
-## AVAILABLE AGENTS
+AVAILABLE SPECIALIST AGENTS:
 ${availableAgents.map(agent => `
-### ${agent.agentId} (${agent.role})
-- Skills: ${agent.skills.join(', ')}
-- Availability: ${agent.availability}
+Agent: ${agent.agentId}
+Role: ${agent.role}
+Specialization: ${agent.specialization}
+Capabilities: ${agent.capabilities.join(', ')}
+Availability: ${agent.availability}
+${agent.fallbackStrategy ? `Fallback: ${agent.fallbackStrategy}` : ''}
 `).join('\n')}
 
-## YOUR JOB
-1. Break down the task into phases
-2. Assign agents to phases based on their skills
-3. Let agents communicate their detailed capabilities and constraints via message passing
+YOUR ORCHESTRATION RESPONSIBILITIES:
+1. ANALYZE the task description and goals to understand what needs to be accomplished
+2. DECOMPOSE the task into specific, actionable subtasks 
+3. MATCH each subtask to the agent with the most appropriate capabilities
+4. CREATE specific instructions for each agent explaining exactly what they need to do
+5. COORDINATE the sequence and dependencies between subtasks
+6. ANTICIPATE what data each agent will need and what they should produce
 
-Respond with JSON only:
-${JSON.stringify(EXECUTION_PLAN_JSON_SCHEMA, null, 2)}
+ORCHESTRATION REASONING REQUIREMENTS:
+- Examine the task description thoroughly to identify all necessary subtasks
+- Consider the business context and compliance requirements
+- Match subtask requirements to agent capabilities precisely
+- Provide specific, actionable instructions for each agent
+- Consider data flow between agents (what outputs become inputs)
+- Plan for error handling and fallback strategies
 
-RESPOND WITH JSON ONLY.`;
-
-      logger.info('📋 TASK DECOMPOSITION: Sending simplified prompt to LLM', {
-        promptLength: simplifiedPrompt.length,
-        agentCount: availableAgents.length
-      });
-
-      // Use updated model for better JSON reasoning
-      const llmResponse = await this.llmProvider.complete({
-        prompt: simplifiedPrompt,
-        model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
-        temperature: 0.1, // Lower temperature for more consistent JSON responses
-        systemPrompt: `${this.config.mission}\n\nYou are an expert at task analysis and agent coordination. Always respond with valid JSON only.`
-      });
-
-      logger.info('🤖 LLM RESPONSE: Received execution plan response', {
-        responseLength: llmResponse.content.length,
-        model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022'
-      });
-
-      // JSON parsing with fallback strategy
-      let planResponse;
-      try {
-        planResponse = JSON.parse(llmResponse.content);
-        logger.info('✅ JSON PARSING: Successfully parsed LLM response');
-      } catch (parseError) {
-        logger.error('❌ JSON PARSING FAILED: Attempting fallback extraction', { 
-          error: parseError instanceof Error ? parseError.message : String(parseError),
-          responsePreview: llmResponse.content.substring(0, 200) 
-        });
-        
-        // Fallback: Try to extract JSON from response
-        const jsonMatch = llmResponse.content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          try {
-            planResponse = JSON.parse(jsonMatch[0]);
-            logger.info('✅ FALLBACK JSON EXTRACTION: Successfully extracted JSON from response');
-          } catch (fallbackError) {
-            logger.error('❌ FALLBACK FAILED: Unable to extract valid JSON', { 
-              error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError) 
-            });
-            throw new Error(`LLM response parsing failed: ${fallbackError}`);
-          }
-        } else {
-          throw new Error('No JSON content found in LLM response');
-        }
+RESPONSE FORMAT (JSON only):
+{
+  "reasoning": {
+    "task_analysis": "Your analysis of what this task requires and the business context",
+    "subtask_decomposition": [
+      {
+        "subtask": "Specific subtask description",
+        "required_capabilities": ["capability1", "capability2"],
+        "assigned_agent": "AgentName",
+        "rationale": "Why this agent is best suited for this subtask"
       }
+    ],
+    "coordination_strategy": "How the agents will work together and handle dependencies"
+  },
+  "phases": [
+    {
+      "name": "Phase Name (e.g., Data Collection, Validation, Processing)",
+      "subtasks": [
+        {
+          "description": "Detailed description of what needs to be done",
+          "agent": "AgentName",
+          "specific_instruction": "Exact instruction for the agent - what to do, how to do it, what to focus on",
+          "input_data": {"key": "Expected input data structure"},
+          "expected_output": "What this subtask should produce for the next phase",
+          "success_criteria": ["How to know this subtask succeeded", "Measurable outcome"]
+        }
+      ],
+      "parallel_execution": true/false,
+      "dependencies": ["Previous phase names that must complete first"]
+    }
+  ],
+  "estimated_duration": "Realistic time estimate (e.g., 10-15 minutes)",
+  "user_interactions": "none/minimal/guided/extensive"
+}
 
-      // Log orchestrator reasoning for audit trail
-      if (planResponse.reasoning) {
-        logger.info('🎯 ORCHESTRATOR REASONING: Basic task analysis captured', {
-          taskAnalysis: planResponse.reasoning.task_analysis,
-          subtaskCount: planResponse.reasoning.subtask_decomposition?.length || 0
-        });
+CRITICAL: Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON object matching the exact schema above.`;
+    
+    // Log the complete prompt for tracing
+    logger.info('🤖 LLM EXECUTION PLAN PROMPT', {
+      contextId: context.contextId,
+      prompt: planPrompt.substring(0, 500),
+      promptLength: planPrompt.length,
+      model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022'
+    });
 
-        // Log subtask assignments
-        planResponse.reasoning.subtask_decomposition?.forEach((subtask: any, index: number) => {
-          logger.info(`📌 SUBTASK ${index + 1}: ${subtask.subtask}`, {
-            assignedAgent: subtask.assigned_agent
+    const llmResponse = await this.llmProvider.complete({
+      prompt: planPrompt,
+      model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
+      temperature: 0.3,
+      systemPrompt: this.config.mission
+    });
+    
+    // Log the complete response for tracing
+    logger.info('🎯 LLM EXECUTION PLAN RESPONSE', {
+      contextId: context.contextId,
+      response: llmResponse.content.substring(0, 500),
+      responseLength: llmResponse.content.length,
+      isValidJSON: (() => {
+        try { JSON.parse(llmResponse.content); return true; } catch { return false; }
+      })()
+    });
+    
+    // Parse JSON response with comprehensive error handling and validation
+    let plan: ExecutionPlan;
+    try {
+      const parsedPlan = JSON.parse(llmResponse.content);
+      
+      // Validate the plan structure matches our enhanced schema
+      if (!parsedPlan.reasoning || !parsedPlan.phases) {
+        throw new Error('Invalid plan structure: missing reasoning or phases');
+      }
+      
+      // Log the orchestrator's reasoning for debugging and audit trail
+      logger.info('🧠 ORCHESTRATOR REASONING', {
+        contextId: context.contextId,
+        taskAnalysis: parsedPlan.reasoning.task_analysis,
+        subtaskCount: parsedPlan.reasoning.subtask_decomposition?.length || 0,
+        coordinationStrategy: parsedPlan.reasoning.coordination_strategy
+      });
+      
+      // Log detailed subtask decomposition for traceability
+      if (parsedPlan.reasoning.subtask_decomposition) {
+        parsedPlan.reasoning.subtask_decomposition.forEach((subtask: any, index: number) => {
+          logger.info(`📋 SUBTASK ${index + 1}: ${subtask.subtask}`, {
+            contextId: context.contextId,
+            assignedAgent: subtask.assigned_agent,
+            requiredCapabilities: subtask.required_capabilities,
+            rationale: subtask.rationale
           });
         });
       }
-
-      // Convert response to ExecutionPlan format
-      const executionPlan = this.convertToExecutionPlan(planResponse, context);
       
-      // Record orchestration event for audit trail
-      await this.recordContextEntry(context, {
-        operation: 'execution_plan_created',
-        data: { 
-          reasoning: planResponse.reasoning,
-          phaseCount: planResponse.execution_plan?.phases?.length || 0
-        },
-        reasoning: 'Created execution plan with dynamic agent coordination'
-      });
-
-      logger.info('🎉 ORCHESTRATION: Execution plan created successfully', {
-        contextId: context.contextId,
-        phaseCount: executionPlan.phases.length
-      });
-
-      return executionPlan;
-
+      plan = parsedPlan as ExecutionPlan;
+      
     } catch (error) {
-      logger.error('💥 ORCHESTRATION FAILED: Execution plan creation failed', {
-        contextId: context.contextId,
+      logger.error('Failed to parse LLM execution plan response', {
+        response: llmResponse.content.substring(0, 300),
         error: error instanceof Error ? error.message : String(error)
       });
       
-      // Record failure for audit trail
-      await this.recordContextEntry(context, {
-        operation: 'orchestration_failed',
-        data: { 
-          error: error instanceof Error ? error.message : String(error),
-          strategy: 'fallback_to_manual_mode'
+      // Create a robust fallback plan that still follows the enhanced structure
+      plan = {
+        reasoning: {
+          task_analysis: `Fallback analysis for ${taskType} task due to LLM parsing failure`,
+          subtask_decomposition: [{
+            subtask: 'Manual task completion with user guidance',
+            required_capabilities: ['user_profile_collection', 'guided_form_generation'],
+            assigned_agent: 'ProfileCollector',
+            rationale: 'ProfileCollector can handle user interaction when automation fails'
+          }],
+          coordination_strategy: 'Single-agent fallback with user guidance and manual completion'
         },
-        reasoning: 'Orchestration failed, agents will request help via message passing'
-      });
-
-      // Return basic fallback plan
-      return this.createFallbackPlan(context);
+        phases: [{
+          name: 'Manual Task Processing',
+          subtasks: [{
+            description: 'Guide user through manual task completion',
+            agent: 'ProfileCollector',
+            specific_instruction: 'Create guided forms and collect necessary information from user to complete the task manually',
+            input_data: { taskType, taskTitle, fallback: true },
+            expected_output: 'Completed task data collected from user',
+            success_criteria: ['User has provided all required information', 'Task marked as completed']
+          }],
+          parallel_execution: false,
+          dependencies: []
+        }],
+        estimated_duration: '15-20 minutes',
+        user_interactions: 'extensive'
+      } as any;
     }
+    
+    // Store the complete execution plan including reasoning for audit trail
+    await this.recordContextEntry(context, {
+      operation: 'execution_plan_reasoning_recorded',
+      data: { 
+        reasoning: (plan as any).reasoning,
+        phaseCount: plan.phases.length,
+        totalSubtasks: plan.phases.reduce((total: number, phase: any) => 
+          total + (phase.subtasks?.length || 0), 0)
+      },
+      reasoning: 'Detailed orchestrator reasoning and subtask decomposition recorded for traceability'
+    });
+    
+    // Validate and optimize plan before execution
+    return this.optimizePlan(plan, context);
   }
   
   /**
-   * Execute a phase of the plan using dynamic agent discovery
+   * Execute a phase of the plan with enhanced subtask coordination
+   * Each phase now contains specific subtasks with detailed instructions for agents
+   * This method coordinates the execution of subtasks and manages data flow between them
    */
   private async executePhase(
     context: TaskContext,
     phase: ExecutionPhase
   ): Promise<any> {
-    logger.info('Executing phase', {
+    logger.info('🚀 Executing enhanced phase with subtask coordination', {
       contextId: context.contextId,
-      phaseId: (phase as any).id || phase.name,
-      phaseName: phase.name
+      phaseName: phase.name,
+      subtaskCount: (phase as any).subtasks?.length || 0,
+      parallelExecution: (phase as any).parallel_execution || false
     });
     
     const phaseStart = Date.now();
     const results: any[] = [];
     const uiRequests: UIRequest[] = [];
+    const subtasks = (phase as any).subtasks || [];
     
-    // Execute agents for this phase using direct YAML discovery
-    for (const agentId of (phase.agents || [])) {
-      // Get agent capability directly from discovery service
-      const agent = agentDiscovery.getAgentCapability(agentId);
+    // Enhanced execution: Handle subtasks with specific instructions
+    if (subtasks.length > 0) {
+      logger.info('📋 Processing subtasks with detailed agent instructions', {
+        contextId: context.contextId,
+        subtasks: subtasks.map((st: any) => ({
+          description: st.description,
+          agent: st.agent,
+          instruction: st.specific_instruction?.substring(0, 100) + '...'
+        }))
+      });
       
-      if (!agent) {
-        logger.warn('Agent not found in YAML configs', { agentId });
-        continue;
-      }
-      
-      if (agent.availability === 'available') {
-        // Execute agent
-        const agentResult = await this.executeAgent(context, agent, phase);
-        results.push(agentResult);
+      // Execute subtasks (parallel or sequential based on phase configuration)
+      if ((phase as any).parallel_execution) {
+        // Execute all subtasks in parallel for efficiency
+        const subtaskPromises = subtasks.map((subtask: any) => 
+          this.executeSubtask(context, subtask, phase)
+        );
+        const subtaskResults = await Promise.allSettled(subtaskPromises);
         
-        // Collect any UI requests
-        if ((agentResult as any).uiRequest) {
-          uiRequests.push((agentResult as any).uiRequest);
-        } else if (agentResult.uiRequests) {
-          uiRequests.push(...agentResult.uiRequests);
-        }
+        // Process results and collect UI requests
+        subtaskResults.forEach((result: any, index: number) => {
+          if (result.status === 'fulfilled') {
+            results.push(result.value);
+            if (result.value.uiRequests) {
+              uiRequests.push(...result.value.uiRequests);
+            }
+          } else {
+            logger.error(`Subtask ${index + 1} failed`, {
+              contextId: context.contextId,
+              subtask: subtasks[index].description,
+              error: result.reason
+            });
+          }
+        });
       } else {
-        // Apply simple fallback - agent will communicate needs via message passing
-        const fallbackResult = await this.applySimpleFallback(context, agent, phase);
-        results.push(fallbackResult);
+        // Execute subtasks sequentially, passing data between them
+        let phaseData = {};
         
-        if ((fallbackResult as any).uiRequest) {
-          uiRequests.push((fallbackResult as any).uiRequest);
-        } else if (fallbackResult.uiRequests) {
-          uiRequests.push(...fallbackResult.uiRequests);
+        for (const subtask of subtasks) {
+          try {
+            const subtaskResult = await this.executeSubtask(context, subtask, phase, phaseData);
+            results.push(subtaskResult);
+            
+            // Pass output data to next subtask
+            if (subtaskResult.outputData) {
+              phaseData = { ...phaseData, ...subtaskResult.outputData };
+            }
+            
+            // Collect UI requests
+            if (subtaskResult.uiRequests) {
+              uiRequests.push(...subtaskResult.uiRequests);
+            }
+            
+          } catch (error) {
+            logger.error('Subtask execution failed', {
+              contextId: context.contextId,
+              subtask: subtask.description,
+              agent: subtask.agent,
+              error: error instanceof Error ? error.message : String(error)
+            });
+            
+            // Apply fallback strategy for failed subtask
+            const fallbackResult = await this.handleSubtaskFailure(context, subtask, error);
+            results.push(fallbackResult);
+          }
+        }
+      }
+    } else {
+      // Fallback to legacy agent execution for backward compatibility
+      logger.warn('⚠️ Phase has no subtasks, falling back to legacy agent execution', {
+        contextId: context.contextId,
+        phaseName: phase.name
+      });
+      
+      for (const agentId of (phase.agents || [])) {
+        const agent = this.agentRegistry.get(agentId);
+        
+        if (!agent) {
+          logger.warn('Agent not found in registry', { agentId });
+          continue;
+        }
+        
+        if (agent.availability === 'available') {
+          const agentResult = await this.executeAgent(context, agent, phase);
+          results.push(agentResult);
+          
+          if (agentResult.uiRequests) {
+            uiRequests.push(...agentResult.uiRequests);
+          }
+        } else {
+          const fallbackResult = await this.applyFallbackStrategy(context, agent, phase);
+          results.push(fallbackResult);
+          
+          if ((fallbackResult as any).uiRequests) {
+            uiRequests.push(...(fallbackResult as any).uiRequests);
+          }
         }
       }
     }
     
+    // Log phase completion with enhanced metrics
+    const duration = Date.now() - phaseStart;
+    logger.info('✅ Phase execution completed', {
+      contextId: context.contextId,
+      phaseName: phase.name,
+      subtaskCount: subtasks.length,
+      resultsCount: results.length,
+      uiRequestCount: uiRequests.length,
+      duration,
+      successRate: results.filter((r: any) => r.status === 'completed').length / results.length
+    });
+    
     return {
       phaseId: (phase as any).id || phase.name,
+      phaseName: phase.name,
       status: 'completed',
       results,
       uiRequests,
-      duration: Date.now() - phaseStart
+      duration,
+      subtaskResults: results
     };
   }
   
   /**
-   * Execute a specific agent
+   * Execute a specific subtask with detailed agent instructions
+   * This is where the orchestrator's decomposition gets translated into concrete agent actions
+   * 
+   * @param context - The task context
+   * @param subtask - The specific subtask with detailed instructions
+   * @param phase - The parent phase for context
+   * @param inputData - Data passed from previous subtasks
+   */
+  private async executeSubtask(
+    context: TaskContext,
+    subtask: any,
+    phase: ExecutionPhase,
+    inputData: any = {}
+  ): Promise<any> {
+    logger.info('🎯 Executing subtask with specific agent instruction', {
+      contextId: context.contextId,
+      subtaskDescription: subtask.description,
+      assignedAgent: subtask.agent,
+      specificInstruction: subtask.specific_instruction?.substring(0, 150) + '...'
+    });
+    
+    // Find the agent in our registry
+    const agent = Array.from(this.agentRegistry.values())
+      .find(a => a.agentId === subtask.agent);
+    
+    if (!agent) {
+      throw new Error(`Agent ${subtask.agent} not found in registry`);
+    }
+    
+    if (agent.availability !== 'available') {
+      throw new Error(`Agent ${subtask.agent} is not available (${agent.availability})`);
+    }
+    
+    // Create comprehensive agent request with specific instructions
+    const request: AgentRequest = {
+      requestId: `subtask_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      agentRole: agent.role,
+      instruction: subtask.specific_instruction, // This is the key enhancement - specific instructions!
+      data: {
+        // Combine expected input data structure with actual input data
+        ...subtask.input_data,
+        ...inputData,
+        taskContext: {
+          contextId: context.contextId,
+          taskType: context.currentState?.task_type,
+          taskTitle: context.currentState?.title
+        }
+      },
+      context: { 
+        urgency: 'medium' as const,
+        subtaskDescription: subtask.description,
+        expectedOutput: subtask.expected_output,
+        successCriteria: subtask.success_criteria
+      },
+      taskContext: context
+    };
+    
+    // Log the detailed agent instruction for traceability
+    logger.info('📝 AGENT INSTRUCTION DISPATCH', {
+      contextId: context.contextId,
+      agentId: agent.agentId,
+      requestId: request.requestId,
+      instruction: subtask.specific_instruction,
+      expectedOutput: subtask.expected_output,
+      successCriteria: subtask.success_criteria
+    });
+    
+    // Execute the agent with specific instructions
+    // In a real implementation, this would call the actual agent instance
+    // For now, simulate intelligent agent execution based on the instruction
+    const agentResponse = await this.simulateIntelligentAgentExecution(agent, request, subtask);
+    
+    // Record the subtask execution for audit trail
+    await this.recordContextEntry(context, {
+      operation: 'subtask_executed',
+      data: {
+        subtask: subtask.description,
+        agent: subtask.agent,
+        instruction: subtask.specific_instruction,
+        response: agentResponse.data,
+        success: agentResponse.status === 'completed'
+      },
+      reasoning: `Subtask "${subtask.description}" executed by ${subtask.agent} with specific instruction`
+    });
+    
+    return {
+      subtaskId: subtask.description,
+      agent: subtask.agent,
+      status: agentResponse.status,
+      data: agentResponse.data,
+      outputData: agentResponse.data, // Data to pass to next subtask
+      uiRequests: agentResponse.uiRequests || [],
+      reasoning: agentResponse.reasoning,
+      duration: Date.now() - Date.now() // Placeholder timing
+    };
+  }
+  
+  /**
+   * Simulate intelligent agent execution based on specific instructions
+   * In production, this would dispatch to actual agent instances
+   * 
+   * @param agent - The agent capability definition
+   * @param request - The detailed agent request
+   * @param subtask - The subtask definition
+   */
+  private async simulateIntelligentAgentExecution(
+    agent: AgentCapability,
+    request: AgentRequest,
+    subtask: any
+  ): Promise<AgentResponse> {
+    // Simulate agent processing based on the specific instruction
+    logger.info('🤖 Simulating intelligent agent execution', {
+      agentId: agent.agentId,
+      role: agent.role,
+      instructionLength: request.instruction?.length || 0,
+      hasSuccessCriteria: subtask.success_criteria?.length > 0
+    });
+    
+    // Simulate different response patterns based on agent type and instruction
+    const responseData: any = {
+      agentId: agent.agentId,
+      subtaskCompleted: subtask.description,
+      instruction_received: request.instruction,
+      processing_result: `${agent.agentId} processed the instruction: ${request.instruction?.substring(0, 100)}...`
+    };
+    
+    // Add agent-specific simulation data
+    switch (agent.role) {
+      case 'data_collection':
+        responseData.collectedData = { 
+          userProfile: 'simulated user data',
+          forms: ['form1', 'form2']
+        };
+        break;
+      case 'data_enrichment':
+        responseData.enrichedData = {
+          businessInfo: 'simulated business lookup result',
+          validation: 'completed'
+        };
+        break;
+      case 'legal_compliance':
+        responseData.complianceCheck = {
+          requirements: ['req1', 'req2'],
+          status: 'compliant'
+        };
+        break;
+      case 'form_processing':
+        responseData.optimizedForms = {
+          preFilledFields: 15,
+          validationRules: 8
+        };
+        break;
+    }
+    
+    return {
+      status: 'completed' as const,
+      data: responseData,
+      reasoning: `${agent.agentId} completed subtask "${subtask.description}" following specific instruction: ${request.instruction?.substring(0, 100)}...`
+    };
+  }
+  
+  /**
+   * Handle subtask execution failure with appropriate fallback strategies
+   * 
+   * @param context - The task context
+   * @param subtask - The failed subtask
+   * @param error - The error that occurred
+   */
+  private async handleSubtaskFailure(
+    context: TaskContext,
+    subtask: any,
+    error: any
+  ): Promise<any> {
+    logger.error('🚨 Subtask execution failed, applying fallback strategy', {
+      contextId: context.contextId,
+      subtask: subtask.description,
+      agent: subtask.agent,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    
+    // Record the failure for audit trail
+    await this.recordContextEntry(context, {
+      operation: 'subtask_failed',
+      data: {
+        subtask: subtask.description,
+        agent: subtask.agent,
+        error: error instanceof Error ? error.message : String(error),
+        fallback_applied: true
+      },
+      reasoning: `Subtask "${subtask.description}" failed, applying fallback strategy`
+    });
+    
+    // Return a fallback result that allows the process to continue
+    return {
+      subtaskId: subtask.description,
+      agent: subtask.agent,
+      status: 'needs_input' as const,
+      data: {
+        error: error instanceof Error ? error.message : String(error),
+        fallback: true,
+        manual_completion_required: true
+      },
+      uiRequests: [{
+        requestId: `fallback_${Date.now()}`,
+        templateType: 'smart_text_input' as any,
+        semanticData: {
+          title: `Manual Input Required: ${subtask.description}`,
+          description: `We encountered an issue with automated processing. Please provide the required information manually.`,
+          instruction: subtask.specific_instruction,
+          expectedOutput: subtask.expected_output
+        },
+        context: {
+          fallback: true,
+          originalSubtask: subtask.description,
+          agent: subtask.agent
+        }
+      }],
+      reasoning: `Subtask failed, requesting manual user input as fallback`
+    };
+  }
+
+  /**
+   * Execute a specific agent (legacy method for backward compatibility)
    */
   private async executeAgent(
     context: TaskContext,
@@ -1254,7 +1155,7 @@ RESPOND WITH JSON ONLY.`;
     
     // In real implementation, this would call the actual agent
     // For now, simulate agent execution
-    logger.info('Executing agent', {
+    logger.info('Executing agent (legacy mode)', {
       agentId: agent.agentId,
       requestId: request.requestId
     });
@@ -1271,29 +1172,55 @@ RESPOND WITH JSON ONLY.`;
   }
   
   /**
-   * Apply simple fallback when agent unavailable
-   * Agents will communicate their constraints via message passing
+   * Apply fallback strategy when agent unavailable
+   * Implements resilient degradation pattern
    */
-  private async applySimpleFallback(
+  private async applyFallbackStrategy(
     context: TaskContext,
     agent: AgentCapability,
     phase: ExecutionPhase
   ): Promise<AgentResponse> {
-    logger.warn('Agent unavailable, deferring to message passing', {
+    logger.warn('Applying fallback strategy', {
       agentId: agent.agentId,
-      phase: phase.name
+      strategy: agent.fallbackStrategy || this.config.resilience.fallbackStrategy
     });
     
-    // Simple fallback - agent will send messages about what it needs
-    return {
-      status: 'delegated' as const,
-      data: {
-        message: `Agent ${agent.agentId} will communicate requirements via message passing`,
-        agentId: agent.agentId,
-        phase: phase.name
-      },
-      reasoning: `Agent will send messages about constraints and requirements`
-    };
+    const strategy = agent.fallbackStrategy || this.config.resilience.fallbackStrategy;
+    
+    switch (strategy) {
+      case 'user_input':
+        // Request data from user
+        return {
+          status: 'needs_input' as const,
+          data: {
+            agentId: agent.agentId
+          },
+          uiRequests: [this.createUserInputRequest(agent, phase)],
+          reasoning: `Agent ${agent.agentId} unavailable, requesting user input`
+        };
+        
+      case 'alternative_agent': {
+        // Find alternative agent with similar capabilities
+        const alternative = this.findAlternativeAgent(agent);
+        if (alternative) {
+          return this.executeAgent(context, alternative, phase);
+        }
+        // Fall through to defer if no alternative
+      }
+        
+      case 'defer':
+      default:
+        // Defer this step for later
+        return {
+          status: 'delegated' as const,
+          data: {
+            message: `Step deferred: ${agent.role} unavailable`,
+            canProceed: true,
+            agentId: agent.agentId
+          },
+          reasoning: `Deferring ${agent.role} due to unavailability`
+        };
+    }
   }
   
   /**
@@ -1380,7 +1307,7 @@ RESPOND WITH JSON ONLY.`;
     try {
       const response = await this.llmProvider.complete({
         prompt: optimizationPrompt,
-        model: process.env.LLM_DEFAULT_MODEL || 'claude-3-sonnet-20240229',
+        model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
         temperature: 0.3,
         systemPrompt: 'You optimize UI request ordering for minimal user interruption.'
       });
@@ -1605,7 +1532,7 @@ RESPOND WITH JSON ONLY.`;
     
     const response = await this.llmProvider.complete({
       prompt: prompt,
-      model: process.env.LLM_DEFAULT_MODEL || 'claude-3-sonnet-20240229',
+      model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
       temperature: 0.5,
       systemPrompt: 'You provide clear, helpful guidance for manual task completion.'
     });
@@ -1613,190 +1540,6 @@ RESPOND WITH JSON ONLY.`;
     return response.content.split('\n').filter((line: string) => line.trim());
   }
   
-  /**
-   * Convert enhanced LLM response to ExecutionPlan format
-   * Implements agent instruction generation with subtask coordination
-   */
-  private convertToExecutionPlan(planResponse: any, context: TaskContext): ExecutionPlan {
-    try {
-      logger.info('🔄 PLAN CONVERSION: Converting enhanced response to ExecutionPlan format', {
-        contextId: context.contextId,
-        hasReasoning: !!planResponse.reasoning,
-        hasExecutionPlan: !!planResponse.execution_plan
-      });
-
-      const phases: ExecutionPhase[] = [];
-      
-      if (planResponse.execution_plan?.phases) {
-        phases.push(...planResponse.execution_plan.phases.map((phase: any, index: number) => ({
-          id: phase.id || `phase_${index + 1}`,
-          name: phase.name || `Phase ${index + 1}`,
-          description: phase.description || 'Generated phase',
-          agents: phase.agent_instructions?.map((instr: any) => instr.agent_id) || [],
-          dependencies: [],
-          operation: 'execute',
-          input: {
-            agentInstructions: phase.agent_instructions || [],
-            successCriteria: phase.success_criteria || [],
-            estimatedDuration: phase.estimated_duration
-          }
-        })));
-      }
-
-      // If no phases provided, create default phases from subtask decomposition
-      if (phases.length === 0 && planResponse.reasoning?.subtask_decomposition) {
-        logger.info('📋 PHASE GENERATION: Creating phases from subtask decomposition');
-        
-        const groupedTasks = this.groupSubtasksByPhase(planResponse.reasoning.subtask_decomposition);
-        
-        groupedTasks.forEach((tasks, phaseIndex) => {
-          phases.push({
-            id: `generated_phase_${phaseIndex + 1}`,
-            name: `${tasks[0]?.subtask || 'Task Execution'} Phase`,
-            description: `Execute subtasks: ${tasks.map(t => t.subtask).join(', ')}`,
-            agents: tasks.map(t => t.assigned_agent),
-            dependencies: [],
-            operation: 'execute',
-            input: {
-              agentInstructions: tasks.map(task => ({
-                agent_id: task.assigned_agent,
-                instruction: task.subtask,
-                context_data: { capabilities: task.required_capabilities },
-                expected_output: `Completion of: ${task.subtask}`
-              })),
-              successCriteria: tasks.map(t => `${t.subtask} completed successfully`),
-              estimatedDuration: tasks[0]?.estimated_duration || '5-10 minutes'
-            }
-          });
-        });
-      }
-
-      const executionPlan: ExecutionPlan = {
-        id: `plan_${context.contextId}`,
-        phases,
-        metadata: {
-          reasoning: planResponse.reasoning,
-          generatedAt: new Date().toISOString(),
-          totalSubtasks: planResponse.reasoning?.subtask_decomposition?.length || 0,
-          estimatedDuration: planResponse.execution_plan?.overall_timeline || 'Variable'
-        }
-      };
-
-      logger.info('✅ PLAN CONVERSION: Successfully converted to ExecutionPlan', {
-        phaseCount: phases.length,
-        totalAgentInstructions: phases.reduce((sum, phase) => sum + (phase.input?.agentInstructions?.length || 0), 0)
-      });
-
-      return executionPlan;
-
-    } catch (error) {
-      logger.error('❌ PLAN CONVERSION FAILED: Error converting response to ExecutionPlan', {
-        error: error instanceof Error ? error.message : String(error)
-      });
-
-      // Return minimal fallback plan
-      return {
-        id: `fallback_plan_${context.contextId}`,
-        phases: [{
-          id: 'fallback_phase',
-          name: 'Manual Task Completion',
-          description: 'Complete task manually due to orchestration failure',
-          agents: [],
-          dependencies: [],
-          operation: 'user_input',
-          input: { message: 'Please complete this task manually' }
-        }],
-        metadata: {
-          isFallback: true,
-          reason: 'Plan conversion failed'
-        }
-      };
-    }
-  }
-
-  /**
-   * Group subtasks into logical phases for execution
-   * Implements intelligent batching and dependency management
-   */
-  private groupSubtasksByPhase(subtasks: any[]): any[][] {
-    const phases: any[][] = [];
-    const processed = new Set<number>();
-
-    // Simple grouping strategy - can be enhanced with dependency analysis
-    subtasks.forEach((subtask, index) => {
-      if (!processed.has(index)) {
-        const phase = [subtask];
-        processed.add(index);
-        
-        // Look for related subtasks that can be executed in parallel
-        subtasks.forEach((otherSubtask, otherIndex) => {
-          if (!processed.has(otherIndex) && 
-              this.canExecuteInParallel(subtask, otherSubtask)) {
-            phase.push(otherSubtask);
-            processed.add(otherIndex);
-          }
-        });
-        
-        phases.push(phase);
-      }
-    });
-
-    return phases;
-  }
-
-  /**
-   * Determine if two subtasks can be executed in parallel
-   * Based on agent capabilities and dependencies
-   */
-  private canExecuteInParallel(task1: any, task2: any): boolean {
-    // Don't parallelize if same agent is assigned
-    if (task1.assigned_agent === task2.assigned_agent) {
-      return false;
-    }
-
-    // Don't parallelize if one depends on the other
-    if (task1.dependencies?.includes(task2.subtask) || 
-        task2.dependencies?.includes(task1.subtask)) {
-      return false;
-    }
-
-    // Can parallelize if different agents with no dependencies
-    return true;
-  }
-
-  /**
-   * Create fallback execution plan when LLM orchestration fails
-   * Provides graceful degradation - agents will communicate needs via messages
-   */
-  private createFallbackPlan(context: TaskContext): ExecutionPlan {
-    logger.info('🔄 FALLBACK PLAN: Creating message-passing execution plan', {
-      contextId: context.contextId
-    });
-
-    return {
-      id: `fallback_plan_${context.contextId}`,
-      phases: [
-        {
-          id: 'message_passing_phase',
-          name: 'Agent Message Coordination',
-          description: 'Agents will communicate their capabilities and requirements via messages',
-          agents: [],
-          dependencies: [],
-          operation: 'message_passing',
-          input: {
-            message: 'Agents will send messages about what they can do and what they need'
-          }
-        }
-      ],
-      metadata: {
-        isFallback: true,
-        reason: 'LLM orchestration failed',
-        fallbackStrategy: 'dynamic_message_passing',
-        createdAt: new Date().toISOString()
-      }
-    };
-  }
-
   /**
    * Optimize execution plan
    */
@@ -1806,42 +1549,24 @@ RESPOND WITH JSON ONLY.`;
     return plan;
   }
   
-  // REMOVED: findAlternativeAgent - agents will communicate alternative solutions via messages
-  
   /**
-   * Override broadcastTaskEvent for simplified message queue approach
-   * Agents communicate what they need dynamically instead of pre-computed constraints
+   * Find alternative agent with similar capabilities
    */
-  protected async broadcastTaskEvent(taskId: string, event: any): Promise<void> {
-    try {
-      // Add to simple message queue
-      this.messageQueue.push({
-        taskId,
-        message: event,
-        timestamp: new Date().toISOString()
-      });
+  private findAlternativeAgent(agent: AgentCapability): AgentCapability | null {
+    for (const [id, candidate] of this.agentRegistry) {
+      if (id === agent.agentId) continue;
       
-      // Keep only recent messages (simple cleanup)
-      if (this.messageQueue.length > 1000) {
-        this.messageQueue = this.messageQueue.slice(-500);
+      // Check for capability overlap
+      const overlap = candidate.capabilities.filter(c => 
+        agent.capabilities.includes(c)
+      );
+      
+      if (overlap.length > 0 && candidate.availability === 'available') {
+        return candidate;
       }
-      
-      logger.debug('📡 Message broadcast', {
-        taskId,
-        eventType: event.type,
-        queueSize: this.messageQueue.length
-      });
-      
-      // For MVP, we use simple message queue instead of complex SSE
-      // Call parent implementation for any additional functionality
-      await super.broadcastTaskEvent(taskId, event);
-      
-    } catch (error) {
-      logger.error('❌ Message broadcast failed', {
-        taskId,
-        error: error instanceof Error ? error.message : String(error)
-      });
     }
+    
+    return null;
   }
   
   // recordContextEntry method moved to BaseAgent as protected method
@@ -1895,9 +1620,8 @@ RESPOND WITH JSON ONLY.`;
    * 
    * @param plan - The execution plan with agent requirements
    * @param taskId - The task ID for the message bus
-   * @param userId - The user ID for proper tenant isolation
    */
-  private async configureAgentsForExecution(plan: ExecutionPlan, taskId: string, userId?: string): Promise<void> {
+  private async configureAgentsForExecution(plan: ExecutionPlan, taskId: string): Promise<void> {
     // Extract all unique agents from all phases
     const requiredAgents = new Set<string>();
     for (const phase of plan.phases) {
@@ -1915,8 +1639,8 @@ RESPOND WITH JSON ONLY.`;
     
     for (const agentId of requiredAgents) {
       try {
-        // Create agent via DI and configure for task with user context
-        await this.createAgentForTask(agentId, taskId, userId);
+        // Create agent via DI and configure for task
+        await this.createAgentForTask(agentId, taskId);
         subscribedAgents.add(agentId);
         
         logger.info(`Agent ${agentId} configured for task ${taskId}`);
@@ -1954,20 +1678,13 @@ RESPOND WITH JSON ONLY.`;
    * to subscribe to the task-centered message bus. Agents remain active listening
    * for updates and analyze each event to determine if they can proceed.
    * 
-   * Addresses PR feedback: "Sub-Agents should be requested for a Task and User-ID"
-   * 
    * @param agentId - The agent type to create
    * @param taskId - The task to subscribe the agent to
-   * @param userId - The user ID for proper tenant isolation
    * @returns The configured agent instance
    */
-  public async createAgentForTask(agentId: string, taskId: string, userId?: string): Promise<any> {
+  public async createAgentForTask(agentId: string, taskId: string): Promise<any> {
     try {
-      logger.info(`🤖 Creating agent via DI: ${agentId} for task: ${taskId}`, {
-        userId: userId || 'system',
-        agentId,
-        taskId
-      });
+      logger.info(`🤖 Creating agent via DI: ${agentId} for task: ${taskId}`);
       
       // Use Dependency Injection Container directly
       const { DIContainer } = await import('../services/dependency-injection');
@@ -1975,7 +1692,6 @@ RESPOND WITH JSON ONLY.`;
       // Check if agent is registered in DI
       if (DIContainer.isAgentRegistered(agentId)) {
         // Create agent with SSE subscriptions already configured
-        // The DI factory will handle task-specific and user-specific configuration
         const agent = await DIContainer.resolveAgent(agentId, taskId);
         
         // Track active subscription
@@ -1984,15 +1700,12 @@ RESPOND WITH JSON ONLY.`;
         }
         this.activeTaskSubscriptions.get(taskId)!.add(agentId);
         
-        logger.info(`✅ Agent created via DI and subscribed to task: ${agentId}`, {
-          userId: userId || 'system',
-          subscriptionTracked: true
-        });
+        logger.info(`✅ Agent created via DI and subscribed to task: ${agentId}`);
         return agent;
       } else {
-        // Fallback to agentDiscovery for agents not yet in DI container
-        logger.warn(`Agent not in DI container, using fallback: ${agentId}`);
-        const agent = await agentDiscovery.instantiateAgent(agentId, 'system', userId);
+        // Fallback to agentDiscovery if not in DI container
+        const { agentDiscovery } = await import('../services/agent-discovery');
+        const agent = await agentDiscovery.instantiateAgent(agentId, taskId);
         
         // Configure agent to subscribe to task message bus
         await this.configureAgentForTask(agent, taskId);
@@ -2084,6 +1797,214 @@ RESPOND WITH JSON ONLY.`;
   }
   
   /**
+   * Handle agent-to-orchestrator requests for assistance
+   * This enables agents to communicate needs back to the orchestrator
+   * Engine PRD Lines 975-982: Agents can request help from orchestrator
+   */
+  public async handleAgentRequest(
+    taskId: string, 
+    fromAgentId: string, 
+    request: OrchestratorRequest
+  ): Promise<OrchestratorResponse> {
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    try {
+      logger.info('🤖 AGENT REQUEST: Processing agent assistance request', {
+        taskId,
+        fromAgent: fromAgentId,
+        requestType: request.type,
+        priority: request.priority,
+        requestId
+      });
+
+      // Analyze the request and determine response
+      const response = await this.analyzeAgentRequest(taskId, fromAgentId, request, requestId);
+
+      // Record the orchestrator's decision process
+      // For now, we'll skip recording if we can't get context easily
+      // This would normally fetch from database
+      try {
+        await this.recordContextEntry(
+          { contextId: taskId } as TaskContext,
+          {
+            operation: 'agent_request_processed',
+            data: {
+              fromAgent: fromAgentId,
+              requestType: request.type,
+              priority: request.priority,
+              responseStatus: response.status,
+              reasoning: response.message
+            },
+            reasoning: `Processed ${request.type} request from ${fromAgentId}: ${response.status}`
+          }
+        );
+      } catch (recordError) {
+        logger.warn('Failed to record context entry', { 
+          error: recordError instanceof Error ? recordError.message : String(recordError) 
+        });
+      }
+
+      return response;
+    } catch (error) {
+      logger.error('Failed to process agent request', {
+        taskId,
+        fromAgent: fromAgentId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      return {
+        status: 'denied',
+        requestId,
+        message: `Failed to process request: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
+        alternatives: [
+          {
+            option: 'Retry request',
+            description: 'Resubmit the request after a brief delay'
+          },
+          {
+            option: 'Escalate to user',
+            description: 'Request user intervention for this issue'
+          }
+        ],
+        responseTime: new Date().toISOString(),
+        confidence: 0.3
+      };
+    }
+  }
+
+  /**
+   * Analyze an agent's request and provide orchestration guidance
+   */
+  private async analyzeAgentRequest(
+    taskId: string,
+    fromAgentId: string,
+    request: OrchestratorRequest,
+    requestId: string
+  ): Promise<OrchestratorResponse> {
+    try {
+      // Use LLM to analyze the request and provide guidance
+      const analysisPrompt = `You are the orchestrator for a multi-agent system.
+An agent needs assistance with a task.
+
+AGENT: ${fromAgentId}
+REQUEST TYPE: ${request.type}
+PRIORITY: ${request.priority}
+CONTEXT: ${JSON.stringify(request.context, null, 2)}
+
+Analyze this request and provide appropriate guidance.
+Consider:
+1. The urgency and priority of the request
+2. What resources or other agents might help
+3. Any specific instructions or data needed
+
+Respond with JSON only:
+{
+  "status": "approved" | "denied" | "deferred" | "modified" | "escalated",
+  "message": "Brief explanation of the response",
+  "provided": {
+    "agents": ["array of agent IDs if provided"],
+    "tools": ["array of tool names if provided"],
+    "resourcesAllocated": [{"type": "resource type", "amount": "resource amount"}]
+  },
+  "nextSteps": [
+    {
+      "action": "description of action",
+      "expectedCompletion": "time estimate",
+      "dependencies": ["array of dependencies"]
+    }
+  ],
+  "alternatives": [
+    {
+      "option": "alternative approach",
+      "description": "description of alternative",
+      "tradeoffs": ["array of tradeoffs"]
+    }
+  ]
+}`;
+
+      const llmResponse = await this.llmProvider.complete({
+        prompt: analysisPrompt,
+        model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
+        temperature: 0.3,
+        systemPrompt: this.config.mission
+      });
+
+      // Parse response with fallback
+      let response: OrchestratorResponse;
+      try {
+        const parsed = JSON.parse(llmResponse.content);
+        response = {
+          status: parsed.status || 'approved',
+          requestId,
+          message: parsed.message || 'Request received and being processed',
+          provided: parsed.provided,
+          nextSteps: parsed.nextSteps,
+          alternatives: parsed.alternatives,
+          responseTime: new Date().toISOString(),
+          confidence: parsed.confidence || 0.8
+        };
+      } catch (error) {
+        logger.warn('Failed to parse LLM response for agent request', { error });
+        response = {
+          status: 'approved',
+          requestId,
+          message: 'Request approved with fallback logic',
+          nextSteps: [
+            {
+              action: 'Continue with your current approach',
+              expectedCompletion: '5 minutes'
+            },
+            {
+              action: 'Report any issues to orchestrator',
+              expectedCompletion: 'As needed'
+            }
+          ],
+          responseTime: new Date().toISOString(),
+          confidence: 0.5
+        };
+      }
+
+      return response;
+    } catch (error) {
+      logger.error('Failed to analyze agent request', {
+        taskId,
+        fromAgentId,
+        requestId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      return {
+        status: 'denied',
+        requestId,
+        message: 'Failed to analyze request due to internal error',
+        alternatives: [
+          {
+            option: 'Retry request',
+            description: 'Resubmit the request after a brief delay'
+          }
+        ],
+        responseTime: new Date().toISOString(),
+        confidence: 0.2
+      };
+    }
+  }
+
+  /**
+   * Convert ComputedState to TaskContext for compatibility
+   */
+  private convertComputedStateToTaskContext(state: any, taskId: string): TaskContext {
+    return {
+      contextId: taskId,
+      taskTemplateId: state.metadata?.templateId || 'unknown',
+      tenantId: state.metadata?.userId || 'system',
+      createdAt: state.metadata?.createdAt || new Date().toISOString(),
+      currentState: state,
+      history: state.history || [],
+      templateSnapshot: state.metadata?.template || {}
+    };
+  }
+
+  /**
    * Create task using pure A2A system
    */
   public async createTask(taskRequest: any): Promise<string> {
@@ -2132,8 +2053,8 @@ RESPOND WITH JSON ONLY.`;
     // Create execution plan with agent requirements
     const executionPlan = await this.createExecutionPlan(taskContext as any);
     
-    // Configure agents via DI for this task's message bus with user context
-    await this.configureAgentsForExecution(executionPlan, taskContext.contextId, taskContext.tenantId);
+    // Configure agents via DI for this task's message bus
+    await this.configureAgentsForExecution(executionPlan, taskContext.contextId);
     
     // Start orchestration - agents work autonomously via SSE
     await this.orchestrateTask(taskContext as any);
@@ -2240,16 +2161,12 @@ RESPOND WITH JSON ONLY.`;
   }
   
   /**
-   * System health check for simplified A2A system
+   * System health check for pure A2A system
    */
   public isSystemHealthy(): boolean {
-    // System is healthy if we can discover agents from YAML
-    try {
-      const capabilities = agentDiscovery.getCapabilities();
-      return capabilities.length > 0;
-    } catch {
-      return false;
-    }
+    // In pure A2A system, health means orchestrator is running
+    // and can discover agents on-demand
+    return this.agentCapabilities.size > 0;
   }
   
   /**
@@ -2274,6 +2191,7 @@ RESPOND WITH JSON ONLY.`;
     // Clear all task subscriptions
     this.activeTaskSubscriptions.clear();
     this.agentCapabilities.clear();
+    this.agentRegistry.clear();
 
     logger.info('Pure A2A Agent System shut down');
   }

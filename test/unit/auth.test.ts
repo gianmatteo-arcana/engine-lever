@@ -35,7 +35,7 @@ describe('Authentication Middleware', () => {
   });
 
   describe('extractUserContext', () => {
-    it('should extract JWT token from Authorization header', () => {
+    it('should extract JWT token from Authorization header', async () => {
       const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.signature';
       const userId = '123e4567-e89b-12d3-a456-426614174000';
       mockRequest.headers = {
@@ -43,7 +43,7 @@ describe('Authentication Middleware', () => {
         'x-user-id': userId
       };
 
-      extractUserContext(mockRequest as AuthenticatedRequest, mockResponse as Response, mockNext);
+      await extractUserContext(mockRequest as AuthenticatedRequest, mockResponse as Response, mockNext);
 
       expect(mockRequest.userToken).toBe(token);
       expect(mockNext).toHaveBeenCalled();
@@ -109,7 +109,7 @@ describe('Authentication Middleware', () => {
       expect(mockRequest.userToken).toBeUndefined();
       expect(mockNext).toHaveBeenCalled();
       expect(logger.debug).toHaveBeenCalledWith(
-        'Request without user context (likely health check or public endpoint)'
+        'Request without authentication (public endpoint or health check)'
       );
     });
   });
@@ -126,7 +126,8 @@ describe('Authentication Middleware', () => {
       expect(mockResponse.status).toHaveBeenCalledWith(401);
       expect(mockResponse.json).toHaveBeenCalledWith({
         error: 'Authentication required',
-        message: 'You must provide a valid JWT token to access this resource'
+        message: 'You must provide a valid JWT token to access this resource',
+        hint: 'Include Authorization: Bearer <token> header'
       });
     });
 
@@ -142,32 +143,34 @@ describe('Authentication Middleware', () => {
       expect(mockResponse.status).not.toHaveBeenCalled();
     });
 
-    it('should reject request without user ID even with token', async () => {
+    it('should reject request without user ID even with token', () => {
       mockRequest.userToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.signature';
       // No userId set
 
-      await requireAuth(mockRequest as AuthenticatedRequest, mockResponse as Response, mockNext);
+      requireAuth(mockRequest as AuthenticatedRequest, mockResponse as Response, mockNext);
 
       expect(mockNext).not.toHaveBeenCalled();
       expect(mockResponse.status).toHaveBeenCalledWith(401);
       expect(mockResponse.json).toHaveBeenCalledWith({
         error: 'Authentication required',
-        message: 'You must be logged in to access this resource'
+        message: 'You must be logged in to access this resource',
+        hint: 'Include a valid JWT token in the Authorization header'
       });
       expect(logger.warn).toHaveBeenCalled();
     });
 
-    it('should reject request with invalid user ID format', async () => {
+    it('should reject request with invalid user ID format', () => {
       mockRequest.userId = 'invalid-user-id';
       mockRequest.userToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.signature';
 
-      await requireAuth(mockRequest as AuthenticatedRequest, mockResponse as Response, mockNext);
+      requireAuth(mockRequest as AuthenticatedRequest, mockResponse as Response, mockNext);
 
       expect(mockNext).not.toHaveBeenCalled();
       expect(mockResponse.status).toHaveBeenCalledWith(401);
       expect(mockResponse.json).toHaveBeenCalledWith({
         error: 'Invalid authentication',
-        message: 'Invalid user ID format'
+        message: 'Invalid user ID format',
+        userId: 'invalid-user-id'
       });
       expect(logger.warn).toHaveBeenCalledWith('Invalid user ID format: invalid-user-id');
     });
