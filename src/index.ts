@@ -30,6 +30,8 @@ const PORT = process.env.PORT || 3001;
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
+  'http://localhost:8081',  // Dev Toolkit
+  'http://localhost:8082',  // Dev Toolkit alternate port
   'https://raenkewzlvrdqufwxjpl.supabase.co',
   'https://lovable.dev',
   'https://c8eb2d86-d79d-470d-b29c-7a82d220346b.lovableproject.com'

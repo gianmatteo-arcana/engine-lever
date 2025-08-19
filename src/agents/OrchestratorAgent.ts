@@ -23,6 +23,19 @@ import { ConfigurationManager } from '../services/configuration-manager';
 import { DatabaseService } from '../services/database';
 import { StateComputer } from '../services/state-computer';
 import { logger } from '../utils/logger';
+// import { agentDiscovery } from '../services/agent-discovery'; // Will be used in executePhase
+import {
+  TaskContext,
+  TaskTemplate,
+  ExecutionPlan,
+  ExecutionPhase,
+  AgentRequest,
+  AgentResponse,
+  UIRequest,
+  UITemplateType,
+  OrchestratorRequest,
+  OrchestratorResponse
+} from '../types/engine-types';
 
 /**
  * JSON Schema templates for consistent LLM responses
@@ -82,16 +95,6 @@ const _EXECUTION_PLAN_JSON_SCHEMA = {
   },
   required: ["reasoning", "phases"]
 };
-import {
-  TaskContext,
-  TaskTemplate,
-  ExecutionPlan,
-  ExecutionPhase,
-  AgentRequest,
-  AgentResponse,
-  UIRequest,
-  UITemplateType
-} from '../types/engine-types';
 
 /**
  * Orchestration configuration
@@ -1793,6 +1796,214 @@ CRITICAL: Respond ONLY with valid JSON. No explanatory text, no markdown, just t
     }
   }
   
+  /**
+   * Handle agent-to-orchestrator requests for assistance
+   * This enables agents to communicate needs back to the orchestrator
+   * Engine PRD Lines 975-982: Agents can request help from orchestrator
+   */
+  public async handleAgentRequest(
+    taskId: string, 
+    fromAgentId: string, 
+    request: OrchestratorRequest
+  ): Promise<OrchestratorResponse> {
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    try {
+      logger.info('🤖 AGENT REQUEST: Processing agent assistance request', {
+        taskId,
+        fromAgent: fromAgentId,
+        requestType: request.type,
+        priority: request.priority,
+        requestId
+      });
+
+      // Analyze the request and determine response
+      const response = await this.analyzeAgentRequest(taskId, fromAgentId, request, requestId);
+
+      // Record the orchestrator's decision process
+      // For now, we'll skip recording if we can't get context easily
+      // This would normally fetch from database
+      try {
+        await this.recordContextEntry(
+          { contextId: taskId } as TaskContext,
+          {
+            operation: 'agent_request_processed',
+            data: {
+              fromAgent: fromAgentId,
+              requestType: request.type,
+              priority: request.priority,
+              responseStatus: response.status,
+              reasoning: response.message
+            },
+            reasoning: `Processed ${request.type} request from ${fromAgentId}: ${response.status}`
+          }
+        );
+      } catch (recordError) {
+        logger.warn('Failed to record context entry', { 
+          error: recordError instanceof Error ? recordError.message : String(recordError) 
+        });
+      }
+
+      return response;
+    } catch (error) {
+      logger.error('Failed to process agent request', {
+        taskId,
+        fromAgent: fromAgentId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      return {
+        status: 'denied',
+        requestId,
+        message: `Failed to process request: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
+        alternatives: [
+          {
+            option: 'Retry request',
+            description: 'Resubmit the request after a brief delay'
+          },
+          {
+            option: 'Escalate to user',
+            description: 'Request user intervention for this issue'
+          }
+        ],
+        responseTime: new Date().toISOString(),
+        confidence: 0.3
+      };
+    }
+  }
+
+  /**
+   * Analyze an agent's request and provide orchestration guidance
+   */
+  private async analyzeAgentRequest(
+    taskId: string,
+    fromAgentId: string,
+    request: OrchestratorRequest,
+    requestId: string
+  ): Promise<OrchestratorResponse> {
+    try {
+      // Use LLM to analyze the request and provide guidance
+      const analysisPrompt = `You are the orchestrator for a multi-agent system.
+An agent needs assistance with a task.
+
+AGENT: ${fromAgentId}
+REQUEST TYPE: ${request.type}
+PRIORITY: ${request.priority}
+CONTEXT: ${JSON.stringify(request.context, null, 2)}
+
+Analyze this request and provide appropriate guidance.
+Consider:
+1. The urgency and priority of the request
+2. What resources or other agents might help
+3. Any specific instructions or data needed
+
+Respond with JSON only:
+{
+  "status": "approved" | "denied" | "deferred" | "modified" | "escalated",
+  "message": "Brief explanation of the response",
+  "provided": {
+    "agents": ["array of agent IDs if provided"],
+    "tools": ["array of tool names if provided"],
+    "resourcesAllocated": [{"type": "resource type", "amount": "resource amount"}]
+  },
+  "nextSteps": [
+    {
+      "action": "description of action",
+      "expectedCompletion": "time estimate",
+      "dependencies": ["array of dependencies"]
+    }
+  ],
+  "alternatives": [
+    {
+      "option": "alternative approach",
+      "description": "description of alternative",
+      "tradeoffs": ["array of tradeoffs"]
+    }
+  ]
+}`;
+
+      const llmResponse = await this.llmProvider.complete({
+        prompt: analysisPrompt,
+        model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
+        temperature: 0.3,
+        systemPrompt: this.config.mission
+      });
+
+      // Parse response with fallback
+      let response: OrchestratorResponse;
+      try {
+        const parsed = JSON.parse(llmResponse.content);
+        response = {
+          status: parsed.status || 'approved',
+          requestId,
+          message: parsed.message || 'Request received and being processed',
+          provided: parsed.provided,
+          nextSteps: parsed.nextSteps,
+          alternatives: parsed.alternatives,
+          responseTime: new Date().toISOString(),
+          confidence: parsed.confidence || 0.8
+        };
+      } catch (error) {
+        logger.warn('Failed to parse LLM response for agent request', { error });
+        response = {
+          status: 'approved',
+          requestId,
+          message: 'Request approved with fallback logic',
+          nextSteps: [
+            {
+              action: 'Continue with your current approach',
+              expectedCompletion: '5 minutes'
+            },
+            {
+              action: 'Report any issues to orchestrator',
+              expectedCompletion: 'As needed'
+            }
+          ],
+          responseTime: new Date().toISOString(),
+          confidence: 0.5
+        };
+      }
+
+      return response;
+    } catch (error) {
+      logger.error('Failed to analyze agent request', {
+        taskId,
+        fromAgentId,
+        requestId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      return {
+        status: 'denied',
+        requestId,
+        message: 'Failed to analyze request due to internal error',
+        alternatives: [
+          {
+            option: 'Retry request',
+            description: 'Resubmit the request after a brief delay'
+          }
+        ],
+        responseTime: new Date().toISOString(),
+        confidence: 0.2
+      };
+    }
+  }
+
+  /**
+   * Convert ComputedState to TaskContext for compatibility
+   */
+  private convertComputedStateToTaskContext(state: any, taskId: string): TaskContext {
+    return {
+      contextId: taskId,
+      taskTemplateId: state.metadata?.templateId || 'unknown',
+      tenantId: state.metadata?.userId || 'system',
+      createdAt: state.metadata?.createdAt || new Date().toISOString(),
+      currentState: state,
+      history: state.history || [],
+      templateSnapshot: state.metadata?.template || {}
+    };
+  }
+
   /**
    * Create task using pure A2A system
    */

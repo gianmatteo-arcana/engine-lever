@@ -286,21 +286,28 @@ export interface AgentConfig {
 }
 
 /**
- * Execution plan for orchestration
+ * Enhanced execution plan for intelligent orchestration
+ * Supports detailed agent coordination and task decomposition
  */
 export interface ExecutionPlan {
+  id?: string; // Unique identifier for the execution plan
   phases: ExecutionPhase[];
   metadata?: Record<string, any>;
 }
 
 /**
- * Execution phase definition
+ * Enhanced execution phase definition with detailed agent instructions
+ * Supports the enhanced orchestration system's capabilities
  */
 export interface ExecutionPhase {
+  id?: string; // Unique identifier for the phase
   name: string;
+  description?: string; // Detailed description of what this phase accomplishes
   agents: string[];
   parallel?: boolean;
   dependencies?: string[];
+  operation?: string; // The operation type for this phase
+  input?: Record<string, any>; // Input data and agent instructions for this phase
 }
 
 /**
@@ -506,3 +513,107 @@ export type TaskStatus = TaskState['status'];
 export type Priority = ComplianceRequirement['priority'];
 
 export type EntityType = BusinessEntity['entityType'];
+
+// ============================================================================
+// AGENT-TO-ORCHESTRATOR COMMUNICATION SCHEMAS (MVP MESSAGE-PASSING)
+// ============================================================================
+
+/**
+ * Structured request schema for agents to request additional assistance
+ * from the orchestrator. This implements the MVP message-passing approach
+ * where agents communicate what they need dynamically instead of relying
+ * on pre-computed constraints and metadata.
+ */
+export interface OrchestratorRequest {
+  // Request identification
+  type: 'agent_capabilities' | 'tool_access' | 'user_interaction' | 'constraint_resolution' | 'resource_allocation';
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  reason: string; // Human-readable explanation of why this request is needed
+  
+  // Optional request data based on type
+  capabilities?: Array<{
+    agentId: string;
+    required: boolean;
+    reason?: string;
+  }>;
+  
+  tools?: Array<{
+    toolId: string;
+    required: boolean;
+    parameters?: Record<string, any>;
+  }>;
+  
+  userInteraction?: {
+    type: string;
+    details: any;
+    blocking: boolean;
+  };
+  
+  constraints?: Array<{
+    type: 'discovered_constraint' | 'performance_limit' | 'data_requirement' | 'external_dependency';
+    description: string;
+    impact: string;
+    suggestedResolution?: string;
+  }>;
+  
+  resources?: Array<{
+    type: 'memory' | 'processing' | 'storage' | 'network';
+    amount: string;
+    duration?: string;
+  }>;
+  
+  // Context for the request
+  context?: {
+    currentPhase?: string;
+    dataProcessed?: number;
+    timeElapsed?: string;
+    previousAttempts?: number;
+  };
+}
+
+/**
+ * Orchestrator response to agent requests
+ * Provides structured feedback on how the request will be handled
+ */
+export interface OrchestratorResponse {
+  // Response status
+  status: 'approved' | 'denied' | 'deferred' | 'modified' | 'escalated';
+  requestId: string;
+  
+  // Response details
+  message: string; // Human-readable explanation
+  
+  // What was actually provided (may differ from request if modified)
+  provided?: {
+    agents?: string[];
+    tools?: string[];
+    userInteractionScheduled?: boolean;
+    constraintsAddressed?: string[];
+    resourcesAllocated?: Array<{type: string, amount: string}>;
+  };
+  
+  // Next steps for the requesting agent
+  nextSteps?: Array<{
+    action: string;
+    expectedCompletion?: string;
+    dependencies?: string[];
+  }>;
+  
+  // If request was modified or denied
+  alternatives?: Array<{
+    option: string;
+    description: string;
+    tradeoffs?: string[];
+  }>;
+  
+  // Escalation information if needed
+  escalation?: {
+    reason: string;
+    escalatedTo: string;
+    expectedResolution?: string;
+  };
+  
+  // Response metadata
+  responseTime: string; // ISO timestamp
+  confidence: number; // 0.0-1.0
+}

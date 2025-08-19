@@ -76,7 +76,7 @@ import {
   BaseAgentResponse,
   ContextEntry
 } from '../../types/base-agent-types';
-import { TaskContext } from '../../types/engine-types';
+import { TaskContext, OrchestratorRequest, OrchestratorResponse } from '../../types/engine-types';
 import { DatabaseService } from '../../services/database';
 import { logger } from '../../utils/logger';
 import {
@@ -1344,6 +1344,177 @@ Remember: You are an autonomous agent following the universal principles while a
       });
       throw error;
     }
+  }
+
+  /**
+   * ===============================================================================
+   * AGENT-TO-ORCHESTRATOR DYNAMIC REQUESTS (MVP MESSAGE-PASSING ARCHITECTURE)
+   * ===============================================================================
+   * 
+   * These methods implement the core MVP principle: agents communicate what they 
+   * need dynamically instead of relying on pre-computed constraints and metadata.
+   * 
+   * This addresses the user's feedback that "agents can broadcast additional 
+   * requests to the OrchestratorAgent" with a clear JSON schema.
+   */
+
+  /**
+   * Request additional capabilities or assistance from the orchestrator
+   * 
+   * This implements the core MVP message-passing approach where agents
+   * communicate their dynamic needs instead of relying on pre-computed
+   * specializations, processing times, or dependencies.
+   * 
+   * @param taskId - The task context
+   * @param request - Structured request following OrchestratorRequest schema
+   */
+  protected async requestOrchestratorAssistance(
+    taskId: string, 
+    request: OrchestratorRequest
+  ): Promise<OrchestratorResponse> {
+    try {
+      // Record the request as a context entry for audit trail
+      await this.recordContextEntry(
+        { contextId: taskId } as TaskContext,
+        {
+          operation: 'orchestrator_assistance_requested',
+          data: {
+            requestType: request.type,
+            priority: request.priority,
+            capabilities: request.capabilities,
+            constraints: request.constraints
+          },
+          reasoning: `Agent ${this.specializedTemplate.agent.id} requested orchestrator assistance: ${request.reason}`
+        }
+      );
+
+      // Broadcast the request via the message bus
+      await this.broadcastTaskEvent(taskId, {
+        type: 'ORCHESTRATOR_REQUEST',
+        fromAgent: this.specializedTemplate.agent.id,
+        request,
+        timestamp: new Date().toISOString()
+      });
+
+      // Get orchestrator instance and submit request
+      const { OrchestratorAgent } = await import('../OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      const response = await orchestrator.handleAgentRequest(taskId, this.specializedTemplate.agent.id, request);
+
+      logger.info('Orchestrator assistance requested and received', {
+        agentId: this.specializedTemplate.agent.id,
+        taskId,
+        requestType: request.type,
+        responseStatus: response.status
+      });
+
+      return response;
+    } catch (error) {
+      logger.error('Failed to request orchestrator assistance', {
+        agentId: this.specializedTemplate.agent.id,
+        taskId,
+        requestType: request.type,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Request additional agent capabilities for the current task
+   * 
+   * Example: A data collection agent realizes it needs compliance verification
+   * and requests an entity compliance agent to be brought into the task.
+   */
+  protected async requestAdditionalAgents(
+    taskId: string,
+    agentIds: string[],
+    reason: string,
+    priority: 'low' | 'normal' | 'high' | 'urgent' = 'normal'
+  ): Promise<OrchestratorResponse> {
+    return this.requestOrchestratorAssistance(taskId, {
+      type: 'agent_capabilities',
+      priority,
+      reason,
+      capabilities: agentIds.map(id => ({
+        agentId: id,
+        required: true
+      }))
+    });
+  }
+
+  /**
+   * Request additional tools or data sources
+   * 
+   * Example: An agency interaction agent discovers it needs a new government
+   * portal tool that wasn't pre-configured.
+   */
+  protected async requestAdditionalTools(
+    taskId: string,
+    tools: string[],
+    reason: string,
+    priority: 'low' | 'normal' | 'high' | 'urgent' = 'normal'
+  ): Promise<OrchestratorResponse> {
+    return this.requestOrchestratorAssistance(taskId, {
+      type: 'tool_access',
+      priority,
+      reason,
+      tools: tools.map(tool => ({
+        toolId: tool,
+        required: true
+      }))
+    });
+  }
+
+  /**
+   * Request user input or approval
+   * 
+   * Example: A payment agent discovers unusual payment requirements
+   * and needs user confirmation before proceeding.
+   */
+  protected async requestUserInteraction(
+    taskId: string,
+    interactionType: string,
+    details: any,
+    reason: string,
+    priority: 'low' | 'normal' | 'high' | 'urgent' = 'normal'
+  ): Promise<OrchestratorResponse> {
+    return this.requestOrchestratorAssistance(taskId, {
+      type: 'user_interaction',
+      priority,
+      reason,
+      userInteraction: {
+        type: interactionType,
+        details,
+        blocking: priority === 'urgent'
+      }
+    });
+  }
+
+  /**
+   * Report constraints or blockers discovered during execution
+   * 
+   * Example: A legal compliance agent discovers the business entity type
+   * requires additional documentation not initially anticipated.
+   */
+  protected async reportConstraints(
+    taskId: string,
+    constraints: Array<{constraint: string, impact: string, suggestedResolution?: string}>,
+    reason: string,
+    priority: 'low' | 'normal' | 'high' | 'urgent' = 'normal'
+  ): Promise<OrchestratorResponse> {
+    return this.requestOrchestratorAssistance(taskId, {
+      type: 'constraint_resolution',
+      priority,
+      reason,
+      constraints: constraints.map(c => ({
+        type: 'discovered_constraint',
+        description: c.constraint,
+        impact: c.impact,
+        suggestedResolution: c.suggestedResolution
+      }))
+    });
   }
 
 }
