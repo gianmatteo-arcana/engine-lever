@@ -67,7 +67,7 @@
 import * as fs from 'fs';
 import * as yaml from 'yaml';
 import * as path from 'path';
-import { LLMProvider } from '../../services/llm-provider-interface';
+import { LLMProvider } from '../../services/llm-provider';
 import type { ToolChain } from '../../services/tool-chain';
 import { 
   BaseAgentTemplate,
@@ -893,10 +893,10 @@ Remember: You are an autonomous agent following the universal principles while a
     
     // Call LLM with merged prompt
     const llmResponse = await this.llmProvider.complete({
-      model: request.llmModel || 'gpt-4',
       prompt: fullPrompt,
-      responseFormat: 'json',
-      schema: this.specializedTemplate.schemas.output
+      model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-sonnet-20240229',
+      temperature: 0.3,
+      systemPrompt: this.specializedTemplate.agent?.mission || 'You are a helpful AI assistant that follows instructions precisely.'
     });
     
     // Validate and enforce standard schema

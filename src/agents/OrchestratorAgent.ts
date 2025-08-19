@@ -410,10 +410,10 @@ export class OrchestratorAgent extends BaseAgent {
     `;
     
     const llmResponse = await this.llmProvider.complete({
-      model: 'gpt-4',
-      prompt: `${this.config.mission}\n\n${planPrompt}`,
+      prompt: planPrompt,
+      model: process.env.LLM_DEFAULT_MODEL || 'claude-3-sonnet-20240229',
       temperature: 0.3,
-      responseFormat: 'json'
+      systemPrompt: this.config.mission
     });
     
     const plan = JSON.parse(llmResponse.content) as ExecutionPlan;
@@ -652,10 +652,10 @@ export class OrchestratorAgent extends BaseAgent {
     
     try {
       const response = await this.llmProvider.complete({
-        model: 'gpt-4',
-        prompt: `You optimize UI request ordering for minimal user interruption.\n\n${optimizationPrompt}`,
+        prompt: optimizationPrompt,
+        model: process.env.LLM_DEFAULT_MODEL || 'claude-3-sonnet-20240229',
         temperature: 0.3,
-        responseFormat: 'json'
+        systemPrompt: 'You optimize UI request ordering for minimal user interruption.'
       });
       
       const optimizedOrder = JSON.parse(response.content) as string[];
@@ -877,9 +877,10 @@ export class OrchestratorAgent extends BaseAgent {
     `;
     
     const response = await this.llmProvider.complete({
-      model: 'gpt-4',
-      prompt: `You provide clear, helpful guidance for manual task completion.\n\n${prompt}`,
-      temperature: 0.5
+      prompt: prompt,
+      model: process.env.LLM_DEFAULT_MODEL || 'claude-3-sonnet-20240229',
+      temperature: 0.5,
+      systemPrompt: 'You provide clear, helpful guidance for manual task completion.'
     });
     
     return response.content.split('\n').filter((line: string) => line.trim());

@@ -19,8 +19,13 @@ export class ConfigurationManager {
   constructor(configPath?: string) {
     this.configPath = configPath || path.join(__dirname, '../../config');
     
-    // Initialize declarative template parser
-    this.templateParser = new DeclarativeTemplateParser();
+    // Initialize declarative template parser with custom paths
+    const templateDirs = [
+      path.join(this.configPath, 'templates'),
+      path.join(__dirname, '../templates/tasks'),
+      path.join(process.cwd(), 'src', 'templates', 'tasks')
+    ];
+    this.templateParser = new DeclarativeTemplateParser(templateDirs);
     
     // Enable hot-reload in development
     if (process.env.NODE_ENV === 'development') {

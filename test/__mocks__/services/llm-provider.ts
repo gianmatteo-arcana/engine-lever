@@ -3,19 +3,20 @@
  * This file contains mock responses for LLM calls used in tests
  */
 
-import { LLMRequest, LLMResponse } from '../llm-provider';
+import { LLMRequest, LLMResponse } from '../../../src/services/llm-provider';
 
 export class MockLLMProvider {
   /**
    * Get mock response for testing
    */
   static getMockResponse(request: LLMRequest): LLMResponse {
-    const lastMessage = request.messages[request.messages.length - 1];
+    const lastMessage = request.messages ? request.messages[request.messages.length - 1] : null;
+    const promptContent = lastMessage?.content || request.prompt || '';
     
     // Provide context-aware mock responses for testing
     let content = 'Mock LLM response';
     
-    if (lastMessage.content.toLowerCase().includes('plan')) {
+    if (promptContent.toLowerCase().includes('plan')) {
       content = JSON.stringify({
         plan: {
           phases: [
@@ -27,7 +28,7 @@ export class MockLLMProvider {
           estimatedDuration: '15 minutes'
         }
       });
-    } else if (lastMessage.content.toLowerCase().includes('analyze')) {
+    } else if (promptContent.toLowerCase().includes('analyze')) {
       content = JSON.stringify({
         analysis: {
           taskType: 'onboarding',
@@ -36,14 +37,14 @@ export class MockLLMProvider {
           confidence: 0.85
         }
       });
-    } else if (lastMessage.content.toLowerCase().includes('business')) {
+    } else if (promptContent.toLowerCase().includes('business')) {
       content = JSON.stringify({
         businessName: 'Test Business LLC',
         entityType: 'LLC',
         state: 'CA',
         ein: '12-3456789'
       });
-    } else if (lastMessage.content.toLowerCase().includes('soi')) {
+    } else if (promptContent.toLowerCase().includes('soi')) {
       content = JSON.stringify({
         filingRequired: true,
         dueDate: '2024-03-15',
@@ -55,6 +56,7 @@ export class MockLLMProvider {
     return {
       content,
       model: 'claude-3-mock',
+      provider: 'anthropic',
       usage: {
         promptTokens: 100,
         completionTokens: 50,

@@ -30,7 +30,9 @@ module.exports = {
     '/node_modules/',
     // Temporarily exclude slow E2E tests from default run
     'test/e2e/api-e2e-real.test.ts',
-    'test/unit/sse-streaming-real.test.ts'
+    'test/unit/sse-streaming-real.test.ts',
+    // Exclude integration tests that require real API keys
+    'test/integration/llm-provider-real-api.test.ts'
   ],
   // Clear mocks automatically
   clearMocks: true,
