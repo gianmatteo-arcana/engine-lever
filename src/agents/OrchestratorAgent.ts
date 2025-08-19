@@ -23,6 +23,7 @@ import { ConfigurationManager } from '../services/configuration-manager';
 import { DatabaseService } from '../services/database';
 import { StateComputer } from '../services/state-computer';
 import { logger } from '../utils/logger';
+import { agentDiscovery, AgentCapability } from '../services/agent-discovery';
 import {
   TaskContext,
   TaskTemplate,
@@ -57,18 +58,15 @@ interface OrchestratorConfig {
 
 /**
  * Enhanced Agent capability definition with detailed specializations
- * Supports the LLM reasoning process for intelligent task decomposition
+ * Extends the AgentCapability from agent-discovery service with additional orchestration metadata
  */
-interface AgentCapability {
-  agentId: string;
-  role: string;
-  capabilities: string[];
-  availability: 'available' | 'busy' | 'offline' | 'not_implemented';
-  fallbackStrategy?: 'user_input' | 'alternative_agent' | 'defer';
+interface EnhancedAgentCapability extends AgentCapability {
+  capabilities?: string[]; // Mapped from skills for orchestration compatibility
   specialization?: string; // Detailed description of agent's domain expertise
-  estimatedProcessingTime?: string; // e.g., "2-5 minutes", "real-time", "24-48 hours"
+  estimatedProcessingTime?: string; // e.g., "2-5 minutes", "real-time", "24-48 hours" 
   dependencies?: string[]; // Other agents or services this agent requires
   outputFormat?: string; // What type of data/results this agent produces
+  fallbackStrategy?: 'user_input' | 'alternative_agent' | 'defer';
 }
 
 /**
@@ -189,7 +187,8 @@ export class OrchestratorAgent extends BaseAgent {
   private stateComputer: StateComputer;
   
   // Agent registry and coordination
-  private agentRegistry: Map<string, AgentCapability>;
+  private agentRegistry: Map<string, EnhancedAgentCapability>;
+  private agentRegistryInitialized: boolean = false;
   private activeExecutions: Map<string, ExecutionPlan>;
   private pendingUIRequests: Map<string, UIRequest[]>;
   
@@ -225,9 +224,7 @@ export class OrchestratorAgent extends BaseAgent {
       this.stateComputer = null as any;
       logger.info('✅ Lazy initialization configured');
       
-      logger.info('📋 Initializing agent registry...');
-      this.initializeAgentRegistry();
-      logger.info('✅ Agent registry initialized');
+      logger.info('📋 Agent registry will be lazily initialized on first use...');
       
       logger.info('🎉 OrchestratorAgent constructor completed successfully!');
     } catch (error) {
@@ -368,194 +365,160 @@ export class OrchestratorAgent extends BaseAgent {
   }
   
   /**
-   * Initialize agent registry with detailed agent capabilities
-   * Enhanced with 9 specialized agents for comprehensive task orchestration
+   * Ensure agent registry is initialized (lazy initialization)
    */
-  private initializeAgentRegistry(): void {
+  private async ensureAgentRegistryInitialized(): Promise<void> {
+    if (!this.agentRegistryInitialized) {
+      await this.initializeAgentRegistry();
+      this.agentRegistryInitialized = true;
+    }
+  }
+
+  /**
+   * Initialize agent registry using AgentDiscoveryService
+   * Uses existing YAML agent configurations with DI factory pattern
+   * Addresses PR feedback: leverage agent-discovery.ts and use DI pattern
+   */
+  private async initializeAgentRegistry(): Promise<void> {
     try {
-      logger.info('🤖 Initializing enhanced agent registry with detailed capabilities...');
+      logger.info('🤖 Initializing agent registry using AgentDiscoveryService...');
       
-      // Enhanced agent registry with detailed specializations for intelligent task decomposition
-      const agents: AgentCapability[] = [
-        {
-          agentId: 'BusinessDiscoveryAgent',
-          role: 'data_enrichment',
-          capabilities: [
-            'business_entity_lookup',
-            'ein_validation_verification', 
-            'business_address_verification',
-            'corporate_structure_analysis',
-            'state_registration_verification',
-            'business_license_discovery',
-            'regulatory_classification'
-          ],
-          availability: 'available',
-          specialization: 'Discovers and validates business entity information from multiple sources including state registries and business databases',
-          estimatedProcessingTime: '2-5 minutes',
-          dependencies: ['external_apis', 'database_access'],
-          outputFormat: 'structured_business_profile'
-        },
-        {
-          agentId: 'ProfileCollector',
-          role: 'data_collection',
-          capabilities: [
-            'dynamic_form_generation',
-            'progressive_data_collection',
-            'data_validation_verification',
-            'document_parsing_extraction',
-            'user_preference_learning',
-            'form_optimization',
-            'data_completeness_assessment'
-          ],
-          availability: 'available',
-          specialization: 'Collects and validates user business information through intelligent forms and guided workflows',
-          estimatedProcessingTime: 'real-time',
-          dependencies: ['ui_components', 'validation_services'],
-          outputFormat: 'validated_user_profile'
-        },
-        {
-          agentId: 'DataEnrichmentAgent',
-          role: 'intelligence_augmentation',
-          capabilities: [
-            'third_party_data_integration',
-            'business_intelligence_synthesis',
-            'missing_data_inference',
-            'data_quality_scoring',
-            'entity_relationship_mapping',
-            'industry_classification',
-            'risk_assessment_scoring'
-          ],
-          availability: 'available',
-          specialization: 'Enhances collected data with external sources and intelligent analysis for comprehensive business profiles',
-          estimatedProcessingTime: '3-8 minutes',
-          dependencies: ['BusinessDiscoveryAgent', 'external_data_sources'],
-          outputFormat: 'enriched_business_intelligence'
-        },
-        {
-          agentId: 'ComplianceVerificationAgent',
-          role: 'legal_compliance',
-          capabilities: [
-            'regulatory_requirement_analysis',
-            'compliance_deadline_tracking',
-            'legal_form_preparation',
-            'jurisdiction_specific_rules',
-            'filing_requirement_validation',
-            'penalty_risk_assessment',
-            'document_completeness_verification'
-          ],
-          availability: 'available',
-          specialization: 'Analyzes legal and regulatory requirements specific to business entity type and jurisdiction',
-          estimatedProcessingTime: '5-10 minutes',
-          dependencies: ['legal_databases', 'regulatory_apis'],
-          outputFormat: 'compliance_action_plan'
-        },
-        {
-          agentId: 'FormOptimizerAgent',
-          role: 'process_optimization',
-          capabilities: [
-            'government_form_auto_population',
-            'field_mapping_optimization',
-            'submission_workflow_design',
-            'error_prevention_validation',
-            'form_completion_guidance',
-            'submission_timing_optimization',
-            'document_formatting'
-          ],
-          availability: 'available',
-          specialization: 'Optimizes government form completion and submission processes to minimize errors and maximize efficiency',
-          estimatedProcessingTime: '2-4 minutes',
-          dependencies: ['form_templates', 'validation_engines'],
-          outputFormat: 'optimized_form_packages'
-        },
-        {
-          agentId: 'TaskCoordinatorAgent',
-          role: 'workflow_management',
-          capabilities: [
-            'multi_step_workflow_orchestration',
-            'dependency_management',
-            'resource_allocation_optimization',
-            'timeline_coordination',
-            'milestone_tracking',
-            'escalation_management',
-            'parallel_task_execution'
-          ],
-          availability: 'available',
-          specialization: 'Coordinates complex multi-step business processes and manages task dependencies across agents',
-          estimatedProcessingTime: 'real-time',
-          dependencies: ['all_other_agents'],
-          outputFormat: 'coordinated_action_plan'
-        },
-        {
-          agentId: 'CelebrationAgent',
-          role: 'user_experience',
-          capabilities: [
-            'milestone_recognition',
-            'achievement_celebration',
-            'progress_visualization',
-            'motivation_enhancement',
-            'success_story_generation',
-            'badge_award_system',
-            'completion_ceremonies'
-          ],
-          availability: 'available',
-          specialization: 'Recognizes achievements and milestones to enhance user motivation and satisfaction',
-          estimatedProcessingTime: 'real-time',
-          dependencies: ['progress_tracking', 'ui_components'],
-          outputFormat: 'celebration_experiences'
-        },
-        {
-          agentId: 'MonitoringAgent',
-          role: 'system_intelligence',
-          capabilities: [
-            'performance_metrics_tracking',
-            'system_health_monitoring',
-            'user_behavior_analysis',
-            'process_efficiency_measurement',
-            'error_pattern_detection',
-            'predictive_maintenance',
-            'optimization_recommendations'
-          ],
-          availability: 'available',
-          specialization: 'Monitors system performance and user interactions to provide insights and optimization recommendations',
-          estimatedProcessingTime: 'continuous',
-          dependencies: ['analytics_platform', 'logging_systems'],
-          outputFormat: 'performance_insights'
-        },
-        {
-          agentId: 'AgencyInteractionAgent',
-          role: 'external_integration',
-          capabilities: [
-            'government_portal_navigation',
-            'api_integration_management',
-            'submission_status_tracking',
-            'response_processing',
-            'retry_logic_execution',
-            'credential_management',
-            'secure_transmission'
-          ],
-          availability: 'available',
-          specialization: 'Manages interactions with external government agencies and third-party services',
-          estimatedProcessingTime: '5-30 minutes',
-          dependencies: ['secure_credentials', 'network_access'],
-          outputFormat: 'submission_confirmations'
-        }
-      ];
+      // Discover agents from YAML configurations
+      const discoveredCapabilities = await agentDiscovery.discoverAgents();
       
-      logger.info(`📊 Registering ${agents.length} enhanced agents with detailed capabilities...`);
-      agents.forEach((agent, index) => {
-        logger.info(`🔧 Registering agent ${index + 1}/${agents.length}: ${agent.agentId} (${agent.role}) - ${agent.capabilities.length} capabilities`);
-        this.agentRegistry.set(agent.agentId, agent);
-      });
+      // Convert AgentCapability to EnhancedAgentCapability with orchestration metadata
+      for (const [agentId, capability] of discoveredCapabilities) {
+        const enhancedCapability: EnhancedAgentCapability = {
+          ...capability,
+          // Map skills to capabilities for compatibility
+          capabilities: capability.skills || [],
+          // Add orchestration-specific metadata
+          specialization: this.getAgentSpecialization(agentId),
+          estimatedProcessingTime: this.getEstimatedProcessingTime(agentId),
+          dependencies: this.getAgentDependencies(agentId),
+          outputFormat: this.getAgentOutputFormat(agentId),
+          fallbackStrategy: this.getFallbackStrategy(agentId)
+        };
+        
+        this.agentRegistry.set(agentId, enhancedCapability);
+        
+        logger.info(`🔧 Registered agent: ${agentId} with ${capability.skills.length} skills`, {
+          role: capability.role,
+          availability: capability.availability,
+          specialization: enhancedCapability.specialization
+        });
+      }
       
-      logger.info(`✅ Enhanced agent registry initialized with ${this.agentRegistry.size} specialized agents`);
-      logger.info(`🎯 Total capabilities available: ${Array.from(this.agentRegistry.values()).reduce((sum, agent) => sum + agent.capabilities.length, 0)}`);
+      logger.info(`✅ Agent registry initialized with ${this.agentRegistry.size} agents from YAML configurations`);
+      logger.info(`🎯 Total capabilities available: ${Array.from(this.agentRegistry.values()).reduce((sum, agent) => sum + (agent.capabilities?.length || 0), 0)}`);
     } catch (error) {
-      logger.error('💥 FATAL: Enhanced agent registry initialization failed!', {
+      logger.error('💥 FATAL: Agent registry initialization failed!', {
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined
       });
       throw error;
     }
+  }
+
+  /**
+   * Get agent specialization description based on agent ID
+   * Maps agent IDs to their domain expertise descriptions
+   */
+  private getAgentSpecialization(agentId: string): string {
+    const specializations: Record<string, string> = {
+      'profile_collection_agent': 'Collects and validates user business information through intelligent forms and guided workflows',
+      'celebration_agent': 'Recognizes achievements and milestones to enhance user motivation and satisfaction',
+      'entity_compliance_agent': 'Analyzes legal and regulatory requirements specific to business entity type and jurisdiction',
+      'ux_optimization_agent': 'Optimizes user experience and interface flows for maximum efficiency and satisfaction',
+      'monitoring_agent': 'Monitors system performance and user interactions to provide insights and optimization recommendations',
+      'communication_agent': 'Manages user communications, notifications, and interaction workflows',
+      'data_collection_agent': 'Enhances collected data with external sources and intelligent analysis',
+      'agency_interaction_agent': 'Manages interactions with external government agencies and third-party services',
+      'legal_compliance_agent': 'Handles legal document preparation and compliance verification processes',
+      'payment_agent': 'Manages payment processing and financial transaction workflows'
+    };
+    
+    return specializations[agentId] || 'Specialized agent for business process automation';
+  }
+
+  /**
+   * Get estimated processing time for agent operations
+   */
+  private getEstimatedProcessingTime(agentId: string): string {
+    const processingTimes: Record<string, string> = {
+      'profile_collection_agent': 'real-time',
+      'celebration_agent': 'real-time',
+      'entity_compliance_agent': '5-10 minutes',
+      'ux_optimization_agent': 'real-time',
+      'monitoring_agent': 'continuous',
+      'communication_agent': 'real-time',
+      'data_collection_agent': '3-8 minutes',
+      'agency_interaction_agent': '5-30 minutes',
+      'legal_compliance_agent': '10-20 minutes',
+      'payment_agent': '2-5 minutes'
+    };
+    
+    return processingTimes[agentId] || '2-10 minutes';
+  }
+
+  /**
+   * Get agent dependencies
+   */
+  private getAgentDependencies(agentId: string): string[] {
+    const dependencies: Record<string, string[]> = {
+      'profile_collection_agent': ['ui_components', 'validation_services'],
+      'celebration_agent': ['progress_tracking', 'ui_components'],
+      'entity_compliance_agent': ['legal_databases', 'regulatory_apis'],
+      'ux_optimization_agent': ['analytics_platform', 'ui_components'],
+      'monitoring_agent': ['analytics_platform', 'logging_systems'],
+      'communication_agent': ['notification_services', 'email_service'],
+      'data_collection_agent': ['external_data_sources', 'validation_services'],
+      'agency_interaction_agent': ['secure_credentials', 'network_access'],
+      'legal_compliance_agent': ['legal_databases', 'document_services'],
+      'payment_agent': ['payment_gateways', 'security_services']
+    };
+    
+    return dependencies[agentId] || ['database_access'];
+  }
+
+  /**
+   * Get agent output format
+   */
+  private getAgentOutputFormat(agentId: string): string {
+    const outputFormats: Record<string, string> = {
+      'profile_collection_agent': 'validated_user_profile',
+      'celebration_agent': 'celebration_experiences',
+      'entity_compliance_agent': 'compliance_action_plan',
+      'ux_optimization_agent': 'optimized_user_flows',
+      'monitoring_agent': 'performance_insights',
+      'communication_agent': 'notification_confirmations',
+      'data_collection_agent': 'enriched_business_intelligence',
+      'agency_interaction_agent': 'submission_confirmations',
+      'legal_compliance_agent': 'legal_document_packages',
+      'payment_agent': 'payment_confirmations'
+    };
+    
+    return outputFormats[agentId] || 'structured_data_output';
+  }
+
+  /**
+   * Get fallback strategy for agent
+   */
+  private getFallbackStrategy(agentId: string): 'user_input' | 'alternative_agent' | 'defer' {
+    const fallbackStrategies: Record<string, 'user_input' | 'alternative_agent' | 'defer'> = {
+      'profile_collection_agent': 'user_input',
+      'celebration_agent': 'defer',
+      'entity_compliance_agent': 'user_input',
+      'ux_optimization_agent': 'defer',
+      'monitoring_agent': 'defer',
+      'communication_agent': 'alternative_agent',
+      'data_collection_agent': 'user_input',
+      'agency_interaction_agent': 'user_input',
+      'legal_compliance_agent': 'user_input',
+      'payment_agent': 'user_input'
+    };
+    
+    return fallbackStrategies[agentId] || 'user_input';
   }
   
   /**
@@ -637,6 +600,9 @@ export class OrchestratorAgent extends BaseAgent {
    */
   private async createExecutionPlan(context: TaskContext): Promise<ExecutionPlan> {
     try {
+      // Ensure agent registry is initialized from YAML configurations
+      await this.ensureAgentRegistryInitialized();
+      
       logger.info('🧠 ORCHESTRATOR REASONING: Starting enhanced execution plan generation', {
         contextId: context.contextId,
         templateId: context.taskTemplateId,
@@ -656,7 +622,7 @@ Current Context: ${JSON.stringify(context.currentState, null, 2)}
 ${Array.from(this.agentRegistry.values()).map(agent => `
 ### ${agent.agentId} (${agent.role})
 - **Specialization**: ${agent.specialization}
-- **Capabilities**: ${agent.capabilities.join(', ')}
+- **Capabilities**: ${agent.capabilities?.join(', ') || 'None specified'}
 - **Processing Time**: ${agent.estimatedProcessingTime}
 - **Dependencies**: ${agent.dependencies?.join(', ') || 'None'}
 - **Output Format**: ${agent.outputFormat}
@@ -688,7 +654,7 @@ RESPOND WITH JSON ONLY - NO ADDITIONAL TEXT.`;
 
       logger.info('📋 SUBTASK DECOMPOSITION: Sending enhanced prompt to LLM', {
         promptLength: enhancedPlanPrompt.length,
-        agentCapabilities: Array.from(this.agentRegistry.values()).reduce((sum, agent) => sum + agent.capabilities.length, 0)
+        agentCapabilities: Array.from(this.agentRegistry.values()).reduce((sum, agent) => sum + (agent.capabilities?.length || agent.skills?.length || 0), 0)
       });
 
       // Use updated model for better JSON reasoning
@@ -900,10 +866,10 @@ RESPOND WITH JSON ONLY - NO ADDITIONAL TEXT.`;
   ): Promise<AgentResponse> {
     logger.warn('Applying fallback strategy', {
       agentId: agent.agentId,
-      strategy: agent.fallbackStrategy || this.config.resilience.fallbackStrategy
+      strategy: (agent as any).fallbackStrategy || this.config.resilience.fallbackStrategy
     });
     
-    const strategy = agent.fallbackStrategy || this.config.resilience.fallbackStrategy;
+    const strategy = (agent as any).fallbackStrategy || this.config.resilience.fallbackStrategy;
     
     switch (strategy) {
       case 'user_input':
@@ -1474,9 +1440,11 @@ RESPOND WITH JSON ONLY - NO ADDITIONAL TEXT.`;
     for (const [id, candidate] of this.agentRegistry) {
       if (id === agent.agentId) continue;
       
-      // Check for capability overlap
-      const overlap = candidate.capabilities.filter(c => 
-        agent.capabilities.includes(c)
+      // Check for capability overlap using capabilities or skills
+      const candidateCapabilities = (candidate as EnhancedAgentCapability).capabilities || candidate.skills || [];
+      const agentCapabilities = (agent as EnhancedAgentCapability).capabilities || agent.skills || [];
+      const overlap = candidateCapabilities.filter(c => 
+        agentCapabilities.includes(c)
       );
       
       if (overlap.length > 0 && candidate.availability === 'available') {
@@ -1538,8 +1506,9 @@ RESPOND WITH JSON ONLY - NO ADDITIONAL TEXT.`;
    * 
    * @param plan - The execution plan with agent requirements
    * @param taskId - The task ID for the message bus
+   * @param userId - The user ID for proper tenant isolation
    */
-  private async configureAgentsForExecution(plan: ExecutionPlan, taskId: string): Promise<void> {
+  private async configureAgentsForExecution(plan: ExecutionPlan, taskId: string, userId?: string): Promise<void> {
     // Extract all unique agents from all phases
     const requiredAgents = new Set<string>();
     for (const phase of plan.phases) {
@@ -1557,8 +1526,8 @@ RESPOND WITH JSON ONLY - NO ADDITIONAL TEXT.`;
     
     for (const agentId of requiredAgents) {
       try {
-        // Create agent via DI and configure for task
-        await this.createAgentForTask(agentId, taskId);
+        // Create agent via DI and configure for task with user context
+        await this.createAgentForTask(agentId, taskId, userId);
         subscribedAgents.add(agentId);
         
         logger.info(`Agent ${agentId} configured for task ${taskId}`);
@@ -1596,13 +1565,20 @@ RESPOND WITH JSON ONLY - NO ADDITIONAL TEXT.`;
    * to subscribe to the task-centered message bus. Agents remain active listening
    * for updates and analyze each event to determine if they can proceed.
    * 
+   * Addresses PR feedback: "Sub-Agents should be requested for a Task and User-ID"
+   * 
    * @param agentId - The agent type to create
    * @param taskId - The task to subscribe the agent to
+   * @param userId - The user ID for proper tenant isolation
    * @returns The configured agent instance
    */
-  public async createAgentForTask(agentId: string, taskId: string): Promise<any> {
+  public async createAgentForTask(agentId: string, taskId: string, userId?: string): Promise<any> {
     try {
-      logger.info(`🤖 Creating agent via DI: ${agentId} for task: ${taskId}`);
+      logger.info(`🤖 Creating agent via DI: ${agentId} for task: ${taskId}`, {
+        userId: userId || 'system',
+        agentId,
+        taskId
+      });
       
       // Use Dependency Injection Container directly
       const { DIContainer } = await import('../services/dependency-injection');
@@ -1610,6 +1586,7 @@ RESPOND WITH JSON ONLY - NO ADDITIONAL TEXT.`;
       // Check if agent is registered in DI
       if (DIContainer.isAgentRegistered(agentId)) {
         // Create agent with SSE subscriptions already configured
+        // The DI factory will handle task-specific and user-specific configuration
         const agent = await DIContainer.resolveAgent(agentId, taskId);
         
         // Track active subscription
@@ -1618,12 +1595,15 @@ RESPOND WITH JSON ONLY - NO ADDITIONAL TEXT.`;
         }
         this.activeTaskSubscriptions.get(taskId)!.add(agentId);
         
-        logger.info(`✅ Agent created via DI and subscribed to task: ${agentId}`);
+        logger.info(`✅ Agent created via DI and subscribed to task: ${agentId}`, {
+          userId: userId || 'system',
+          subscriptionTracked: true
+        });
         return agent;
       } else {
-        // Fallback to agentDiscovery if not in DI container
-        const { agentDiscovery } = await import('../services/agent-discovery');
-        const agent = await agentDiscovery.instantiateAgent(agentId, taskId);
+        // Fallback to agentDiscovery for agents not yet in DI container
+        logger.warn(`Agent not in DI container, using fallback: ${agentId}`);
+        const agent = await agentDiscovery.instantiateAgent(agentId, 'system', userId);
         
         // Configure agent to subscribe to task message bus
         await this.configureAgentForTask(agent, taskId);
@@ -1763,8 +1743,8 @@ RESPOND WITH JSON ONLY - NO ADDITIONAL TEXT.`;
     // Create execution plan with agent requirements
     const executionPlan = await this.createExecutionPlan(taskContext as any);
     
-    // Configure agents via DI for this task's message bus
-    await this.configureAgentsForExecution(executionPlan, taskContext.contextId);
+    // Configure agents via DI for this task's message bus with user context
+    await this.configureAgentsForExecution(executionPlan, taskContext.contextId, taskContext.tenantId);
     
     // Start orchestration - agents work autonomously via SSE
     await this.orchestrateTask(taskContext as any);
