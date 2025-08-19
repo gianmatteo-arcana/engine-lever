@@ -56,7 +56,8 @@ interface OrchestratorConfig {
 }
 
 /**
- * Agent capability definition
+ * Enhanced Agent capability definition with detailed specializations
+ * Supports the LLM reasoning process for intelligent task decomposition
  */
 interface AgentCapability {
   agentId: string;
@@ -64,7 +65,113 @@ interface AgentCapability {
   capabilities: string[];
   availability: 'available' | 'busy' | 'offline' | 'not_implemented';
   fallbackStrategy?: 'user_input' | 'alternative_agent' | 'defer';
+  specialization?: string; // Detailed description of agent's domain expertise
+  estimatedProcessingTime?: string; // e.g., "2-5 minutes", "real-time", "24-48 hours"
+  dependencies?: string[]; // Other agents or services this agent requires
+  outputFormat?: string; // What type of data/results this agent produces
 }
+
+/**
+ * Enhanced JSON Schema for LLM execution plan responses
+ * Ensures structured reasoning and proper task decomposition
+ */
+const EXECUTION_PLAN_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    reasoning: {
+      type: "object",
+      properties: {
+        task_analysis: { 
+          type: "string",
+          description: "Analysis of the task requirements and complexity"
+        },
+        subtask_decomposition: { 
+          type: "array",
+          description: "Breakdown of the main task into specific subtasks",
+          items: { 
+            type: "object",
+            properties: {
+              subtask: { type: "string", description: "Specific subtask to be completed" },
+              required_capabilities: { 
+                type: "array", 
+                items: { type: "string" },
+                description: "List of agent capabilities needed for this subtask"
+              },
+              assigned_agent: { 
+                type: "string",
+                description: "ID of the agent best suited for this subtask"
+              },
+              rationale: { 
+                type: "string",
+                description: "Why this agent was selected for this subtask"
+              },
+              estimated_duration: {
+                type: "string",
+                description: "Expected time to complete this subtask"
+              },
+              dependencies: {
+                type: "array",
+                items: { type: "string" },
+                description: "Other subtasks that must complete before this one"
+              }
+            },
+            required: ["subtask", "required_capabilities", "assigned_agent", "rationale"]
+          }
+        },
+        coordination_strategy: { 
+          type: "string",
+          description: "How subtasks will be coordinated and data will flow between agents"
+        },
+        fallback_plans: {
+          type: "array",
+          items: {
+            type: "object", 
+            properties: {
+              scenario: { type: "string" },
+              fallback_action: { type: "string" }
+            }
+          },
+          description: "Contingency plans if agents are unavailable or tasks fail"
+        }
+      },
+      required: ["task_analysis", "subtask_decomposition", "coordination_strategy"]
+    },
+    execution_plan: {
+      type: "object",
+      properties: {
+        phases: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              name: { type: "string" },
+              description: { type: "string" },
+              agent_instructions: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    agent_id: { type: "string" },
+                    instruction: { type: "string" },
+                    context_data: { type: "object" },
+                    expected_output: { type: "string" }
+                  }
+                }
+              },
+              success_criteria: { type: "array", items: { type: "string" } },
+              estimated_duration: { type: "string" }
+            }
+          }
+        },
+        overall_timeline: { type: "string" },
+        risk_assessment: { type: "string" }
+      },
+      required: ["phases"]
+    }
+  },
+  required: ["reasoning", "execution_plan"]
+};
 
 /**
  * Universal OrchestratorAgent
@@ -261,50 +368,189 @@ export class OrchestratorAgent extends BaseAgent {
   }
   
   /**
-   * Initialize agent registry with available agents
+   * Initialize agent registry with detailed agent capabilities
+   * Enhanced with 9 specialized agents for comprehensive task orchestration
    */
   private initializeAgentRegistry(): void {
     try {
-      logger.info('🤖 Initializing agent registry with available agents...');
+      logger.info('🤖 Initializing enhanced agent registry with detailed capabilities...');
       
-      // Discover available agents
+      // Enhanced agent registry with detailed specializations for intelligent task decomposition
       const agents: AgentCapability[] = [
         {
-          agentId: 'business_discovery',
+          agentId: 'BusinessDiscoveryAgent',
           role: 'data_enrichment',
-          capabilities: ['business_lookup', 'ein_validation', 'address_verification'],
-          availability: 'available'
+          capabilities: [
+            'business_entity_lookup',
+            'ein_validation_verification', 
+            'business_address_verification',
+            'corporate_structure_analysis',
+            'state_registration_verification',
+            'business_license_discovery',
+            'regulatory_classification'
+          ],
+          availability: 'available',
+          specialization: 'Discovers and validates business entity information from multiple sources including state registries and business databases',
+          estimatedProcessingTime: '2-5 minutes',
+          dependencies: ['external_apis', 'database_access'],
+          outputFormat: 'structured_business_profile'
         },
         {
-          agentId: 'profile_collector',
+          agentId: 'ProfileCollector',
           role: 'data_collection',
-          capabilities: ['form_generation', 'data_validation', 'document_parsing'],
-          availability: 'available'
+          capabilities: [
+            'dynamic_form_generation',
+            'progressive_data_collection',
+            'data_validation_verification',
+            'document_parsing_extraction',
+            'user_preference_learning',
+            'form_optimization',
+            'data_completeness_assessment'
+          ],
+          availability: 'available',
+          specialization: 'Collects and validates user business information through intelligent forms and guided workflows',
+          estimatedProcessingTime: 'real-time',
+          dependencies: ['ui_components', 'validation_services'],
+          outputFormat: 'validated_user_profile'
         },
         {
-          agentId: 'compliance_analyzer',
+          agentId: 'DataEnrichmentAgent',
+          role: 'intelligence_augmentation',
+          capabilities: [
+            'third_party_data_integration',
+            'business_intelligence_synthesis',
+            'missing_data_inference',
+            'data_quality_scoring',
+            'entity_relationship_mapping',
+            'industry_classification',
+            'risk_assessment_scoring'
+          ],
+          availability: 'available',
+          specialization: 'Enhances collected data with external sources and intelligent analysis for comprehensive business profiles',
+          estimatedProcessingTime: '3-8 minutes',
+          dependencies: ['BusinessDiscoveryAgent', 'external_data_sources'],
+          outputFormat: 'enriched_business_intelligence'
+        },
+        {
+          agentId: 'ComplianceVerificationAgent',
           role: 'legal_compliance',
-          capabilities: ['requirement_analysis', 'deadline_tracking', 'form_preparation'],
-          availability: 'available'
+          capabilities: [
+            'regulatory_requirement_analysis',
+            'compliance_deadline_tracking',
+            'legal_form_preparation',
+            'jurisdiction_specific_rules',
+            'filing_requirement_validation',
+            'penalty_risk_assessment',
+            'document_completeness_verification'
+          ],
+          availability: 'available',
+          specialization: 'Analyzes legal and regulatory requirements specific to business entity type and jurisdiction',
+          estimatedProcessingTime: '5-10 minutes',
+          dependencies: ['legal_databases', 'regulatory_apis'],
+          outputFormat: 'compliance_action_plan'
         },
         {
-          agentId: 'payment_processor',
-          role: 'payment',
-          capabilities: ['payment_collection', 'receipt_generation'],
-          availability: 'not_implemented',
-          fallbackStrategy: 'user_input'
+          agentId: 'FormOptimizerAgent',
+          role: 'process_optimization',
+          capabilities: [
+            'government_form_auto_population',
+            'field_mapping_optimization',
+            'submission_workflow_design',
+            'error_prevention_validation',
+            'form_completion_guidance',
+            'submission_timing_optimization',
+            'document_formatting'
+          ],
+          availability: 'available',
+          specialization: 'Optimizes government form completion and submission processes to minimize errors and maximize efficiency',
+          estimatedProcessingTime: '2-4 minutes',
+          dependencies: ['form_templates', 'validation_engines'],
+          outputFormat: 'optimized_form_packages'
+        },
+        {
+          agentId: 'TaskCoordinatorAgent',
+          role: 'workflow_management',
+          capabilities: [
+            'multi_step_workflow_orchestration',
+            'dependency_management',
+            'resource_allocation_optimization',
+            'timeline_coordination',
+            'milestone_tracking',
+            'escalation_management',
+            'parallel_task_execution'
+          ],
+          availability: 'available',
+          specialization: 'Coordinates complex multi-step business processes and manages task dependencies across agents',
+          estimatedProcessingTime: 'real-time',
+          dependencies: ['all_other_agents'],
+          outputFormat: 'coordinated_action_plan'
+        },
+        {
+          agentId: 'CelebrationAgent',
+          role: 'user_experience',
+          capabilities: [
+            'milestone_recognition',
+            'achievement_celebration',
+            'progress_visualization',
+            'motivation_enhancement',
+            'success_story_generation',
+            'badge_award_system',
+            'completion_ceremonies'
+          ],
+          availability: 'available',
+          specialization: 'Recognizes achievements and milestones to enhance user motivation and satisfaction',
+          estimatedProcessingTime: 'real-time',
+          dependencies: ['progress_tracking', 'ui_components'],
+          outputFormat: 'celebration_experiences'
+        },
+        {
+          agentId: 'MonitoringAgent',
+          role: 'system_intelligence',
+          capabilities: [
+            'performance_metrics_tracking',
+            'system_health_monitoring',
+            'user_behavior_analysis',
+            'process_efficiency_measurement',
+            'error_pattern_detection',
+            'predictive_maintenance',
+            'optimization_recommendations'
+          ],
+          availability: 'available',
+          specialization: 'Monitors system performance and user interactions to provide insights and optimization recommendations',
+          estimatedProcessingTime: 'continuous',
+          dependencies: ['analytics_platform', 'logging_systems'],
+          outputFormat: 'performance_insights'
+        },
+        {
+          agentId: 'AgencyInteractionAgent',
+          role: 'external_integration',
+          capabilities: [
+            'government_portal_navigation',
+            'api_integration_management',
+            'submission_status_tracking',
+            'response_processing',
+            'retry_logic_execution',
+            'credential_management',
+            'secure_transmission'
+          ],
+          availability: 'available',
+          specialization: 'Manages interactions with external government agencies and third-party services',
+          estimatedProcessingTime: '5-30 minutes',
+          dependencies: ['secure_credentials', 'network_access'],
+          outputFormat: 'submission_confirmations'
         }
       ];
       
-      logger.info(`📊 Registering ${agents.length} agents...`);
+      logger.info(`📊 Registering ${agents.length} enhanced agents with detailed capabilities...`);
       agents.forEach((agent, index) => {
-        logger.info(`🔧 Registering agent ${index + 1}/${agents.length}: ${agent.agentId} (${agent.role})`);
+        logger.info(`🔧 Registering agent ${index + 1}/${agents.length}: ${agent.agentId} (${agent.role}) - ${agent.capabilities.length} capabilities`);
         this.agentRegistry.set(agent.agentId, agent);
       });
       
-      logger.info(`✅ Agent registry initialized with ${this.agentRegistry.size} agents`);
+      logger.info(`✅ Enhanced agent registry initialized with ${this.agentRegistry.size} specialized agents`);
+      logger.info(`🎯 Total capabilities available: ${Array.from(this.agentRegistry.values()).reduce((sum, agent) => sum + agent.capabilities.length, 0)}`);
     } catch (error) {
-      logger.error('💥 FATAL: Agent registry initialization failed!', {
+      logger.error('💥 FATAL: Enhanced agent registry initialization failed!', {
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined
       });
@@ -385,41 +631,167 @@ export class OrchestratorAgent extends BaseAgent {
   }
   
   /**
-   * Create execution plan using LLM
+   * Enhanced execution plan creation using LLM with detailed agent capabilities
+   * Implements formalized task decomposition and intelligent agent coordination
    * Engine PRD Lines 915-972
    */
   private async createExecutionPlan(context: TaskContext): Promise<ExecutionPlan> {
-    const template = context.templateSnapshot;
-    
-    // Use LLM to create dynamic plan
-    const planPrompt = `
-      You are creating an execution plan for a task.
+    try {
+      logger.info('🧠 ORCHESTRATOR REASONING: Starting enhanced execution plan generation', {
+        contextId: context.contextId,
+        templateId: context.taskTemplateId,
+        agentCount: this.agentRegistry.size
+      });
+
+      const template = context.templateSnapshot;
       
-      Task Template: ${JSON.stringify(template)}
-      Current Context: ${JSON.stringify(context.currentState)}
+      // Enhanced LLM prompt with detailed agent capabilities for intelligent task decomposition
+      const enhancedPlanPrompt = `You are an expert task orchestrator responsible for creating comprehensive execution plans.
+
+## TASK ANALYSIS
+Task Template: ${JSON.stringify(template, null, 2)}
+Current Context: ${JSON.stringify(context.currentState, null, 2)}
+
+## AVAILABLE AGENTS WITH DETAILED CAPABILITIES
+${Array.from(this.agentRegistry.values()).map(agent => `
+### ${agent.agentId} (${agent.role})
+- **Specialization**: ${agent.specialization}
+- **Capabilities**: ${agent.capabilities.join(', ')}
+- **Processing Time**: ${agent.estimatedProcessingTime}
+- **Dependencies**: ${agent.dependencies?.join(', ') || 'None'}
+- **Output Format**: ${agent.outputFormat}
+- **Availability**: ${agent.availability}
+`).join('\n')}
+
+## ORCHESTRATION REQUIREMENTS
+1. **Task Decomposition**: Analyze the task description and break it down into specific subtasks
+2. **Agent Assignment**: Match each subtask to the most appropriate agent based on capabilities
+3. **Coordination Strategy**: Define how agents will coordinate and share data
+4. **Progressive Disclosure**: Minimize user interruptions through intelligent batching
+5. **Fallback Planning**: Provide contingency plans for agent unavailability
+
+## RESPONSE FORMAT
+You MUST respond with ONLY valid JSON matching this exact schema:
+
+${JSON.stringify(EXECUTION_PLAN_JSON_SCHEMA, null, 2)}
+
+## INSTRUCTIONS
+- Provide detailed reasoning for each decision
+- Focus on the "WHY" behind agent assignments
+- Consider dependencies between subtasks
+- Plan for data flow between agents
+- Include specific agent instructions for each phase
+- Estimate realistic timelines
+- Address potential failure scenarios
+
+RESPOND WITH JSON ONLY - NO ADDITIONAL TEXT.`;
+
+      logger.info('📋 SUBTASK DECOMPOSITION: Sending enhanced prompt to LLM', {
+        promptLength: enhancedPlanPrompt.length,
+        agentCapabilities: Array.from(this.agentRegistry.values()).reduce((sum, agent) => sum + agent.capabilities.length, 0)
+      });
+
+      // Use updated model for better JSON reasoning
+      const llmResponse = await this.llmProvider.complete({
+        prompt: enhancedPlanPrompt,
+        model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
+        temperature: 0.1, // Lower temperature for more consistent JSON responses
+        systemPrompt: `${this.config.mission}\n\nYou are an expert at task analysis and agent coordination. Always respond with valid JSON only.`
+      });
+
+      logger.info('🤖 LLM RESPONSE: Received execution plan response', {
+        responseLength: llmResponse.content.length,
+        model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022'
+      });
+
+      // Enhanced JSON parsing with fallback strategy
+      let planResponse;
+      try {
+        planResponse = JSON.parse(llmResponse.content);
+        logger.info('✅ JSON PARSING: Successfully parsed LLM response');
+      } catch (parseError) {
+        logger.error('❌ JSON PARSING FAILED: Attempting fallback extraction', { 
+          error: parseError instanceof Error ? parseError.message : String(parseError),
+          responsePreview: llmResponse.content.substring(0, 200) 
+        });
+        
+        // Fallback: Try to extract JSON from response
+        const jsonMatch = llmResponse.content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            planResponse = JSON.parse(jsonMatch[0]);
+            logger.info('✅ FALLBACK JSON EXTRACTION: Successfully extracted JSON from response');
+          } catch (fallbackError) {
+            logger.error('❌ FALLBACK FAILED: Unable to extract valid JSON', { 
+              error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError) 
+            });
+            throw new Error(`LLM response parsing failed: ${fallbackError}`);
+          }
+        } else {
+          throw new Error('No JSON content found in LLM response');
+        }
+      }
+
+      // Log orchestrator reasoning for audit trail
+      if (planResponse.reasoning) {
+        logger.info('🎯 AGENT INSTRUCTION DISPATCH: Orchestrator reasoning captured', {
+          taskAnalysis: planResponse.reasoning.task_analysis,
+          subtaskCount: planResponse.reasoning.subtask_decomposition?.length || 0,
+          coordinationStrategy: planResponse.reasoning.coordination_strategy
+        });
+
+        // Log each subtask assignment with reasoning
+        planResponse.reasoning.subtask_decomposition?.forEach((subtask: any, index: number) => {
+          logger.info(`📌 SUBTASK ${index + 1}: ${subtask.subtask}`, {
+            assignedAgent: subtask.assigned_agent,
+            requiredCapabilities: subtask.required_capabilities,
+            rationale: subtask.rationale,
+            estimatedDuration: subtask.estimated_duration
+          });
+        });
+      }
+
+      // Convert enhanced response to ExecutionPlan format
+      const enhancedPlan = this.convertToExecutionPlan(planResponse, context);
       
-      Available Agents: ${JSON.stringify(Array.from(this.agentRegistry.values()))}
+      // Record orchestration event for audit trail
+      await this.recordContextEntry(context, {
+        operation: 'orchestration_reasoning_complete',
+        data: { 
+          reasoning: planResponse.reasoning,
+          agentInstructions: planResponse.execution_plan?.phases?.length || 0,
+          totalSubtasks: planResponse.reasoning?.subtask_decomposition?.length || 0
+        },
+        reasoning: 'Completed intelligent task decomposition and agent instruction generation'
+      });
+
+      logger.info('🎉 ENHANCED ORCHESTRATION: Execution plan created successfully', {
+        contextId: context.contextId,
+        phaseCount: enhancedPlan.phases.length,
+        totalSubtasks: planResponse.reasoning?.subtask_decomposition?.length || 0
+      });
+
+      return enhancedPlan;
+
+    } catch (error) {
+      logger.error('💥 ORCHESTRATION FAILED: Enhanced execution plan creation failed', {
+        contextId: context.contextId,
+        error: error instanceof Error ? error.message : String(error)
+      });
       
-      Create an execution plan with phases that:
-      1. Achieves all required goals in the template
-      2. Minimizes user interruption
-      3. Uses available agents efficiently
-      4. Has fallback strategies for unavailable services
-      
-      Return a JSON execution plan with phases, agent assignments, and dependencies.
-    `;
-    
-    const llmResponse = await this.llmProvider.complete({
-      prompt: planPrompt,
-      model: process.env.LLM_DEFAULT_MODEL || 'claude-3-sonnet-20240229',
-      temperature: 0.3,
-      systemPrompt: this.config.mission
-    });
-    
-    const plan = JSON.parse(llmResponse.content) as ExecutionPlan;
-    
-    // Validate and optimize plan
-    return this.optimizePlan(plan, context);
+      // Record failure for audit trail
+      await this.recordContextEntry(context, {
+        operation: 'orchestration_failed',
+        data: { 
+          error: error instanceof Error ? error.message : String(error),
+          strategy: 'fallback_to_manual_mode'
+        },
+        reasoning: 'LLM-powered orchestration failed, system will provide manual guidance'
+      });
+
+      // Return basic fallback plan
+      return this.createFallbackPlan(context);
+    }
   }
   
   /**
@@ -886,6 +1258,206 @@ export class OrchestratorAgent extends BaseAgent {
     return response.content.split('\n').filter((line: string) => line.trim());
   }
   
+  /**
+   * Convert enhanced LLM response to ExecutionPlan format
+   * Implements agent instruction generation with subtask coordination
+   */
+  private convertToExecutionPlan(planResponse: any, context: TaskContext): ExecutionPlan {
+    try {
+      logger.info('🔄 PLAN CONVERSION: Converting enhanced response to ExecutionPlan format', {
+        contextId: context.contextId,
+        hasReasoning: !!planResponse.reasoning,
+        hasExecutionPlan: !!planResponse.execution_plan
+      });
+
+      const phases: ExecutionPhase[] = [];
+      
+      if (planResponse.execution_plan?.phases) {
+        phases.push(...planResponse.execution_plan.phases.map((phase: any, index: number) => ({
+          id: phase.id || `phase_${index + 1}`,
+          name: phase.name || `Phase ${index + 1}`,
+          description: phase.description || 'Generated phase',
+          agents: phase.agent_instructions?.map((instr: any) => instr.agent_id) || [],
+          dependencies: [],
+          operation: 'execute',
+          input: {
+            agentInstructions: phase.agent_instructions || [],
+            successCriteria: phase.success_criteria || [],
+            estimatedDuration: phase.estimated_duration
+          }
+        })));
+      }
+
+      // If no phases provided, create default phases from subtask decomposition
+      if (phases.length === 0 && planResponse.reasoning?.subtask_decomposition) {
+        logger.info('📋 PHASE GENERATION: Creating phases from subtask decomposition');
+        
+        const groupedTasks = this.groupSubtasksByPhase(planResponse.reasoning.subtask_decomposition);
+        
+        groupedTasks.forEach((tasks, phaseIndex) => {
+          phases.push({
+            id: `generated_phase_${phaseIndex + 1}`,
+            name: `${tasks[0]?.subtask || 'Task Execution'} Phase`,
+            description: `Execute subtasks: ${tasks.map(t => t.subtask).join(', ')}`,
+            agents: tasks.map(t => t.assigned_agent),
+            dependencies: [],
+            operation: 'execute',
+            input: {
+              agentInstructions: tasks.map(task => ({
+                agent_id: task.assigned_agent,
+                instruction: task.subtask,
+                context_data: { capabilities: task.required_capabilities },
+                expected_output: `Completion of: ${task.subtask}`
+              })),
+              successCriteria: tasks.map(t => `${t.subtask} completed successfully`),
+              estimatedDuration: tasks[0]?.estimated_duration || '5-10 minutes'
+            }
+          });
+        });
+      }
+
+      const executionPlan: ExecutionPlan = {
+        id: `plan_${context.contextId}`,
+        phases,
+        metadata: {
+          reasoning: planResponse.reasoning,
+          generatedAt: new Date().toISOString(),
+          totalSubtasks: planResponse.reasoning?.subtask_decomposition?.length || 0,
+          estimatedDuration: planResponse.execution_plan?.overall_timeline || 'Variable'
+        }
+      };
+
+      logger.info('✅ PLAN CONVERSION: Successfully converted to ExecutionPlan', {
+        phaseCount: phases.length,
+        totalAgentInstructions: phases.reduce((sum, phase) => sum + (phase.input?.agentInstructions?.length || 0), 0)
+      });
+
+      return executionPlan;
+
+    } catch (error) {
+      logger.error('❌ PLAN CONVERSION FAILED: Error converting response to ExecutionPlan', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      // Return minimal fallback plan
+      return {
+        id: `fallback_plan_${context.contextId}`,
+        phases: [{
+          id: 'fallback_phase',
+          name: 'Manual Task Completion',
+          description: 'Complete task manually due to orchestration failure',
+          agents: [],
+          dependencies: [],
+          operation: 'user_input',
+          input: { message: 'Please complete this task manually' }
+        }],
+        metadata: {
+          isFallback: true,
+          reason: 'Plan conversion failed'
+        }
+      };
+    }
+  }
+
+  /**
+   * Group subtasks into logical phases for execution
+   * Implements intelligent batching and dependency management
+   */
+  private groupSubtasksByPhase(subtasks: any[]): any[][] {
+    const phases: any[][] = [];
+    const processed = new Set<number>();
+
+    // Simple grouping strategy - can be enhanced with dependency analysis
+    subtasks.forEach((subtask, index) => {
+      if (!processed.has(index)) {
+        const phase = [subtask];
+        processed.add(index);
+        
+        // Look for related subtasks that can be executed in parallel
+        subtasks.forEach((otherSubtask, otherIndex) => {
+          if (!processed.has(otherIndex) && 
+              this.canExecuteInParallel(subtask, otherSubtask)) {
+            phase.push(otherSubtask);
+            processed.add(otherIndex);
+          }
+        });
+        
+        phases.push(phase);
+      }
+    });
+
+    return phases;
+  }
+
+  /**
+   * Determine if two subtasks can be executed in parallel
+   * Based on agent capabilities and dependencies
+   */
+  private canExecuteInParallel(task1: any, task2: any): boolean {
+    // Don't parallelize if same agent is assigned
+    if (task1.assigned_agent === task2.assigned_agent) {
+      return false;
+    }
+
+    // Don't parallelize if one depends on the other
+    if (task1.dependencies?.includes(task2.subtask) || 
+        task2.dependencies?.includes(task1.subtask)) {
+      return false;
+    }
+
+    // Can parallelize if different agents with no dependencies
+    return true;
+  }
+
+  /**
+   * Create fallback execution plan when LLM orchestration fails
+   * Provides graceful degradation to manual mode
+   */
+  private createFallbackPlan(context: TaskContext): ExecutionPlan {
+    logger.info('🔄 FALLBACK PLAN: Creating manual execution plan', {
+      contextId: context.contextId
+    });
+
+    return {
+      id: `fallback_plan_${context.contextId}`,
+      phases: [
+        {
+          id: 'manual_guidance_phase',
+          name: 'Manual Task Guidance',
+          description: 'Provide manual guidance when automated orchestration is unavailable',
+          agents: [],
+          dependencies: [],
+          operation: 'user_input',
+          input: {
+            uiRequests: [
+              {
+                requestId: `manual_${Date.now()}`,
+                template: 'manual_guidance' as UITemplateType,
+                context: context.currentState,
+                data: {
+                  taskType: context.taskTemplateId,
+                  message: 'Automated orchestration is temporarily unavailable. Please complete this task manually.',
+                  availableAgents: Array.from(this.agentRegistry.values()).map(agent => ({
+                    id: agent.agentId,
+                    role: agent.role,
+                    capabilities: agent.capabilities,
+                    availability: agent.availability
+                  }))
+                }
+              }
+            ]
+          }
+        }
+      ],
+      metadata: {
+        isFallback: true,
+        reason: 'LLM orchestration failed',
+        fallbackStrategy: 'manual_guidance',
+        createdAt: new Date().toISOString()
+      }
+    };
+  }
+
   /**
    * Optimize execution plan
    */

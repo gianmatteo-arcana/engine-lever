@@ -279,21 +279,28 @@ export interface AgentConfig {
 }
 
 /**
- * Execution plan for orchestration
+ * Enhanced execution plan for intelligent orchestration
+ * Supports detailed agent coordination and task decomposition
  */
 export interface ExecutionPlan {
+  id?: string; // Unique identifier for the execution plan
   phases: ExecutionPhase[];
   metadata?: Record<string, any>;
 }
 
 /**
- * Execution phase definition
+ * Enhanced execution phase definition with detailed agent instructions
+ * Supports the enhanced orchestration system's capabilities
  */
 export interface ExecutionPhase {
+  id?: string; // Unique identifier for the phase
   name: string;
+  description?: string; // Detailed description of what this phase accomplishes
   agents: string[];
   parallel?: boolean;
   dependencies?: string[];
+  operation?: string; // The operation type for this phase
+  input?: Record<string, any>; // Input data and agent instructions for this phase
 }
 
 /**
