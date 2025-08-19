@@ -21,6 +21,10 @@
 
 const { spawn } = require('child_process');
 const path = require('path');
+const dotenv = require('dotenv');
+
+// Load environment variables from .env file
+dotenv.config();
 
 // Parse command line arguments
 const args = process.argv.slice(2);

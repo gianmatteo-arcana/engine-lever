@@ -12,11 +12,48 @@
 import { LLMProvider, LLMRequest, MediaAttachment } from '../../src/services/llm-provider';
 import fs from 'fs';
 import path from 'path';
+import dotenv from 'dotenv';
+
+// Load environment variables from .env file
+dotenv.config();
 
 describe('LLM Provider Real API Integration Tests', () => {
   let llmProvider: LLMProvider;
   
   beforeAll(() => {
+    // Check and warn about API keys
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    const openaiKey = process.env.OPENAI_API_KEY;
+    
+    console.log('\n' + '='.repeat(60));
+    console.log('🔑 API KEY STATUS CHECK');
+    console.log('='.repeat(60));
+    
+    if (!anthropicKey || anthropicKey.includes('placeholder')) {
+      console.warn('⚠️  WARNING: ANTHROPIC_API_KEY is missing or using placeholder value');
+      console.warn('   Anthropic integration tests will be SKIPPED');
+      console.warn('   To run these tests, set a valid ANTHROPIC_API_KEY in .env file');
+    } else {
+      console.log('✅ ANTHROPIC_API_KEY found (will attempt real API calls)');
+    }
+    
+    if (!openaiKey || openaiKey.includes('placeholder')) {
+      console.warn('⚠️  WARNING: OPENAI_API_KEY is missing or using placeholder value');
+      console.warn('   OpenAI integration tests will be SKIPPED');
+      console.warn('   To run these tests, set a valid OPENAI_API_KEY in .env file');
+    } else {
+      console.log('✅ OPENAI_API_KEY found (will attempt real API calls)');
+    }
+    
+    if ((!anthropicKey || anthropicKey.includes('placeholder')) && 
+        (!openaiKey || openaiKey.includes('placeholder'))) {
+      console.warn('\n⚠️  CRITICAL WARNING: No valid API keys found!');
+      console.warn('   All real API integration tests will be SKIPPED');
+      console.warn('   Update your .env file with real API keys to test integration');
+    }
+    
+    console.log('='.repeat(60) + '\n');
+    
     llmProvider = LLMProvider.getInstance();
   });
   
@@ -28,16 +65,17 @@ describe('LLM Provider Real API Integration Tests', () => {
 
   describe('Anthropic Claude Real API Tests', () => {
     const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+    const isValidKey = anthropicApiKey && !anthropicApiKey.includes('placeholder');
     
     beforeEach(() => {
-      if (!anthropicApiKey) {
-        console.log('⏭️ Skipping Anthropic tests - ANTHROPIC_API_KEY not set');
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPING Anthropic tests - Invalid or placeholder API key');
       }
     });
 
     it('should complete text request with Claude 3 Sonnet', async () => {
-      if (!anthropicApiKey) {
-        console.log('⏭️ Skipping - ANTHROPIC_API_KEY not available');
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPED - ANTHROPIC_API_KEY is invalid or placeholder');
         return;
       }
 
@@ -65,8 +103,8 @@ describe('LLM Provider Real API Integration Tests', () => {
     }, 30000);
 
     it('should complete text request with messages format', async () => {
-      if (!anthropicApiKey) {
-        console.log('⏭️ Skipping - ANTHROPIC_API_KEY not available');
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPED - ANTHROPIC_API_KEY is invalid or placeholder');
         return;
       }
 
@@ -93,8 +131,8 @@ describe('LLM Provider Real API Integration Tests', () => {
     }, 30000);
 
     it('should process image with Claude 3 Vision', async () => {
-      if (!anthropicApiKey) {
-        console.log('⏭️ Skipping - ANTHROPIC_API_KEY not available');
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPED - ANTHROPIC_API_KEY is invalid or placeholder');
         return;
       }
 
@@ -132,8 +170,8 @@ describe('LLM Provider Real API Integration Tests', () => {
     }, 30000);
 
     it('should handle document processing with legacy attachments format', async () => {
-      if (!anthropicApiKey) {
-        console.log('⏭️ Skipping - ANTHROPIC_API_KEY not available');
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPED - ANTHROPIC_API_KEY is invalid or placeholder');
         return;
       }
 
@@ -167,8 +205,8 @@ describe('LLM Provider Real API Integration Tests', () => {
     }, 30000);
 
     it('should return JSON response when requested', async () => {
-      if (!anthropicApiKey) {
-        console.log('⏭️ Skipping - ANTHROPIC_API_KEY not available');
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPED - ANTHROPIC_API_KEY is invalid or placeholder');
         return;
       }
 
@@ -199,16 +237,17 @@ describe('LLM Provider Real API Integration Tests', () => {
 
   describe('OpenAI GPT Real API Tests', () => {
     const openaiApiKey = process.env.OPENAI_API_KEY;
+    const isValidKey = openaiApiKey && !openaiApiKey.includes('placeholder');
     
     beforeEach(() => {
-      if (!openaiApiKey) {
-        console.log('⏭️ Skipping OpenAI tests - OPENAI_API_KEY not set');
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPING OpenAI tests - Invalid or placeholder API key');
       }
     });
 
     it('should complete text request with GPT-4', async () => {
-      if (!openaiApiKey) {
-        console.log('⏭️ Skipping - OPENAI_API_KEY not available');
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPED - OPENAI_API_KEY is invalid or placeholder');
         return;
       }
 
@@ -236,8 +275,8 @@ describe('LLM Provider Real API Integration Tests', () => {
     }, 30000);
 
     it('should complete conversational request with GPT-3.5', async () => {
-      if (!openaiApiKey) {
-        console.log('⏭️ Skipping - OPENAI_API_KEY not available');
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPED - OPENAI_API_KEY is invalid or placeholder');
         return;
       }
 
@@ -265,8 +304,8 @@ describe('LLM Provider Real API Integration Tests', () => {
     }, 30000);
 
     it('should process image with GPT-4 Vision', async () => {
-      if (!openaiApiKey) {
-        console.log('⏭️ Skipping - OPENAI_API_KEY not available');
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPED - OPENAI_API_KEY is invalid or placeholder');
         return;
       }
 
@@ -305,8 +344,8 @@ describe('LLM Provider Real API Integration Tests', () => {
     }, 30000);
 
     it('should handle image URL with GPT-4 Vision', async () => {
-      if (!openaiApiKey) {
-        console.log('⏭️ Skipping - OPENAI_API_KEY not available');
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPED - OPENAI_API_KEY is invalid or placeholder');
         return;
       }
 
@@ -341,8 +380,8 @@ describe('LLM Provider Real API Integration Tests', () => {
     }, 30000);
 
     it('should return JSON response with GPT-4', async () => {
-      if (!openaiApiKey) {
-        console.log('⏭️ Skipping - OPENAI_API_KEY not available');
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPED - OPENAI_API_KEY is invalid or placeholder');
         return;
       }
 
@@ -466,8 +505,11 @@ describe('LLM Provider Real API Integration Tests', () => {
     });
 
     it('should reject oversized attachments', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.log('⏭️ Skipping - ANTHROPIC_API_KEY not available');
+      const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+      const isValidKey = anthropicApiKey && !anthropicApiKey.includes('placeholder');
+      
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPED - ANTHROPIC_API_KEY is invalid or placeholder');
         return;
       }
 
@@ -491,8 +533,11 @@ describe('LLM Provider Real API Integration Tests', () => {
 
   describe('Performance and Configuration Tests', () => {
     it('should respect temperature and token limits', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.log('⏭️ Skipping - ANTHROPIC_API_KEY not available');
+      const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+      const isValidKey = anthropicApiKey && !anthropicApiKey.includes('placeholder');
+      
+      if (!isValidKey) {
+        console.warn('⏭️ SKIPPED - ANTHROPIC_API_KEY is invalid or placeholder');
         return;
       }
 
