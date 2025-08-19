@@ -255,6 +255,7 @@
 import { logger } from '../utils/logger';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { ModelRegistry, ModelConfig } from './llm-model-registry';
 
 // Media attachment interface
 export interface MediaAttachment {
@@ -333,17 +334,15 @@ export interface ModelCapabilities {
   maxTotalAttachmentSize: number; // bytes
 }
 
-// Enhanced model configuration
-interface ModelConfig {
-  provider: 'anthropic' | 'openai';
-  modelName: string;
-  maxTokens: number;
-  defaultTemperature: number;
-  capabilities: ModelCapabilities;
-}
+// Get model registry instance
+const modelRegistry = ModelRegistry.getInstance();
 
-// Model registry with detailed capabilities
-const MODEL_REGISTRY: Record<string, ModelConfig> = {
+// Model registry is now dynamically managed via ModelRegistry class
+// Access models through modelRegistry.getModel() or modelRegistry.exportConfig()
+
+// Original static definitions (kept for reference but commented out)
+/*
+const STATIC_MODEL_REGISTRY: Record<string, ModelConfig> = {
   // Anthropic Claude 3.5 Sonnet (latest)
   'claude-3-5-sonnet-20241022': {
     provider: 'anthropic',
@@ -529,6 +528,7 @@ const MODEL_REGISTRY: Record<string, ModelConfig> = {
     }
   }
 };
+*/
 
 export class LLMProvider {
   private static instance: LLMProvider;
@@ -586,13 +586,16 @@ export class LLMProvider {
     // Use specified model or default
     const model = request.model || this.defaultModel;
     
-    // Get model configuration
-    const modelConfig = MODEL_REGISTRY[model];
+    // Get model configuration from registry
+    const modelConfig = modelRegistry.getModel(model);
     if (!modelConfig) {
       // If model not in registry, try to infer provider
       const inferredConfig = this.inferModelConfig(model);
       if (!inferredConfig) {
-        throw new Error(`Unknown model: ${model}. Please use a supported model or update MODEL_REGISTRY.`);
+        const availableModels = modelRegistry.getActiveModels();
+        throw new Error(
+          `Unknown model: ${model}. Available models: ${availableModels.join(', ')}`
+        );
       }
       return this.completeWithInferredProvider(request, model, inferredConfig);
     }
@@ -1261,7 +1264,7 @@ export class LLMProvider {
    * Get list of available models
    */
   getAvailableModels(): string[] {
-    return Object.keys(MODEL_REGISTRY);
+    return modelRegistry.getActiveModels();
   }
 
   /**
@@ -1275,13 +1278,13 @@ export class LLMProvider {
    * Set default model
    */
   setDefaultModel(model: string): void {
-    if (!MODEL_REGISTRY[model] && !this.inferModelConfig(model)) {
+    if (!modelRegistry.getModel(model) && !this.inferModelConfig(model)) {
       throw new Error(`Unknown model: ${model}`);
     }
     this.defaultModel = model;
     
     // Update current provider based on model
-    const modelConfig = MODEL_REGISTRY[model] || this.inferModelConfig(model);
+    const modelConfig = modelRegistry.getModel(model) || this.inferModelConfig(model);
     if (modelConfig) {
       this.currentProvider = modelConfig.provider;
     }
@@ -1318,7 +1321,7 @@ export class LLMProvider {
    * Get current provider based on default model
    */
   getCurrentProvider(): string {
-    const modelConfig = MODEL_REGISTRY[this.defaultModel];
+    const modelConfig = modelRegistry.getModel(this.defaultModel);
     if (modelConfig) {
       return modelConfig.provider;
     }
@@ -1333,7 +1336,7 @@ export class LLMProvider {
    */
   getModelCapabilities(model?: string): ModelCapabilities {
     const targetModel = model || this.defaultModel;
-    const config = MODEL_REGISTRY[targetModel];
+    const config = modelRegistry.getModel(targetModel);
     
     if (!config) {
       // Return default capabilities for unknown models
@@ -1394,7 +1397,7 @@ export class LLMProvider {
   validateAttachment(attachment: MediaAttachment, model?: string): { valid: boolean; error?: string } {
     try {
       const targetModel = model || this.defaultModel;
-      const config = MODEL_REGISTRY[targetModel];
+      const config = modelRegistry.getModel(targetModel);
       
       if (!config) {
         return { valid: false, error: `Unknown model: ${targetModel}` };

@@ -413,7 +413,7 @@ describe('LLM Provider Real API Integration Tests', () => {
 
       const request: LLMRequest = {
         prompt: 'Test prompt',
-        model: 'claude-3-sonnet-20240229'
+        model: 'claude-3-5-sonnet-20241022'
       };
 
       await expect(testProvider.complete(request)).rejects.toThrow(/Invalid.*API key/i);
@@ -431,7 +431,7 @@ describe('LLM Provider Real API Integration Tests', () => {
     it('should reject unsupported model/attachment combinations', async () => {
       const request: LLMRequest = {
         prompt: 'Analyze this image',
-        model: 'claude-2.1', // Text-only model
+        model: 'gpt-3.5-turbo', // Text-only model
         attachments: [{
           type: 'image',
           data: 'base64-data',

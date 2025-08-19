@@ -341,7 +341,7 @@ describe('LLMProvider', () => {
       });
 
       it('should return no capabilities for text-only models', () => {
-        const capabilities = provider.getModelCapabilities('claude-2.1');
+        const capabilities = provider.getModelCapabilities('gpt-4');
         
         expect(capabilities.supportsImages).toBe(false);
         expect(capabilities.supportsDocuments).toBe(false);
@@ -354,14 +354,14 @@ describe('LLMProvider', () => {
       it('should correctly identify image support', () => {
         expect(provider.supportsMediaType('image', 'claude-3-opus-20240229')).toBe(true);
         expect(provider.supportsMediaType('image', 'gpt-4-vision-preview')).toBe(true);
-        expect(provider.supportsMediaType('image', 'claude-2.1')).toBe(false);
+        expect(provider.supportsMediaType('image', 'gpt-4')).toBe(false);
         expect(provider.supportsMediaType('image', 'gpt-3.5-turbo')).toBe(false);
       });
 
       it('should correctly identify document support', () => {
         expect(provider.supportsMediaType('document', 'claude-3-opus-20240229')).toBe(true);
         expect(provider.supportsMediaType('document', 'gpt-4-vision-preview')).toBe(false);
-        expect(provider.supportsMediaType('document', 'claude-2.1')).toBe(false);
+        expect(provider.supportsMediaType('document', 'gpt-3.5-turbo')).toBe(false);
       });
     });
 
@@ -414,7 +414,7 @@ describe('LLMProvider', () => {
           size: 1024
         };
 
-        const result = provider.validateAttachment(attachment, 'claude-2.1');
+        const result = provider.validateAttachment(attachment, 'gpt-4');
         expect(result.valid).toBe(false);
         expect(result.error).toContain('does not support image attachments');
       });
@@ -442,7 +442,7 @@ describe('LLMProvider', () => {
             data: 'base64-data',
             mediaType: 'image/jpeg'
           }],
-          model: 'claude-2.1' // Text-only model
+          model: 'gpt-3.5-turbo' // Text-only model
         };
 
         // Mock the complete method to test validation
@@ -500,8 +500,8 @@ describe('LLMProvider', () => {
       });
 
       it('should return empty arrays for unsupported models', () => {
-        const imageTypes = provider.getSupportedImageTypes('claude-2.1');
-        const docTypes = provider.getSupportedDocumentTypes('claude-2.1');
+        const imageTypes = provider.getSupportedImageTypes('gpt-3.5-turbo');
+        const docTypes = provider.getSupportedDocumentTypes('gpt-3.5-turbo');
         
         expect(imageTypes).toHaveLength(0);
         expect(docTypes).toHaveLength(0);
