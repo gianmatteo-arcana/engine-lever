@@ -388,8 +388,8 @@ describe('LLM Provider Real API Integration Tests', () => {
       const claudeValidation = llmProvider.validateAttachment(imageAttachment, 'claude-3-5-sonnet-20241022');
       expect(claudeValidation.valid).toBe(true);
 
-      // Should be valid for GPT-4 Vision
-      const gptVisionValidation = llmProvider.validateAttachment(imageAttachment, 'gpt-4-vision-preview');
+      // Should be valid for GPT-4o (multimodal)
+      const gptVisionValidation = llmProvider.validateAttachment(imageAttachment, 'gpt-4o');
       expect(gptVisionValidation.valid).toBe(true);
 
       // Should be invalid for text-only GPT-4

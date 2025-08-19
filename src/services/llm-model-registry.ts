@@ -319,31 +319,9 @@ const DEFAULT_MODEL_CONFIGS: Record<string, ModelConfig> = {
       maxAttachmentsPerRequest: 20,
       maxTotalAttachmentSize: 100 * 1024 * 1024
     }
-  },
-
-  // Deprecated models (kept for backward compatibility)
-  'gpt-4-vision-preview': {
-    provider: 'openai',
-    modelName: 'gpt-4-vision-preview',
-    maxTokens: 4096,
-    defaultTemperature: 0.3,
-    deprecated: true,
-    deprecationDate: '2024-12-06',
-    replacementModel: 'gpt-4o',
-    capabilities: {
-      supportsImages: true,
-      supportsDocuments: false,
-      supportsAudio: false,
-      supportsVideo: false,
-      maxImageSize: 20 * 1024 * 1024,
-      maxDocumentSize: 0,
-      supportedImageTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
-      supportedDocumentTypes: [],
-      maxAttachmentsPerRequest: 10,
-      maxTotalAttachmentSize: 20 * 1024 * 1024
-    }
   }
   // Deprecated models removed:
+  // - gpt-4-vision-preview: use gpt-5 or gpt-4o instead
   // - claude-3-sonnet-20240229: use claude-3-5-sonnet-20241022 instead
   // - claude-2.1: use claude-3-5-haiku-20241022 instead
 };

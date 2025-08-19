@@ -331,8 +331,8 @@ describe('LLMProvider', () => {
         expect(capabilities.supportedDocumentTypes).toContain('application/pdf');
       });
 
-      it('should return capabilities for GPT-4 Vision', () => {
-        const capabilities = provider.getModelCapabilities('gpt-4-vision-preview');
+      it('should return capabilities for GPT-4o (multimodal)', () => {
+        const capabilities = provider.getModelCapabilities('gpt-4o');
         
         expect(capabilities.supportsImages).toBe(true);
         expect(capabilities.supportsDocuments).toBe(false);
@@ -353,14 +353,14 @@ describe('LLMProvider', () => {
     describe('Media Type Support Checking', () => {
       it('should correctly identify image support', () => {
         expect(provider.supportsMediaType('image', 'claude-3-opus-20240229')).toBe(true);
-        expect(provider.supportsMediaType('image', 'gpt-4-vision-preview')).toBe(true);
+        expect(provider.supportsMediaType('image', 'gpt-4o')).toBe(true);
         expect(provider.supportsMediaType('image', 'gpt-4')).toBe(false);
         expect(provider.supportsMediaType('image', 'gpt-3.5-turbo')).toBe(false);
       });
 
       it('should correctly identify document support', () => {
         expect(provider.supportsMediaType('document', 'claude-3-opus-20240229')).toBe(true);
-        expect(provider.supportsMediaType('document', 'gpt-4-vision-preview')).toBe(false);
+        expect(provider.supportsMediaType('document', 'gpt-4o')).toBe(false);
         expect(provider.supportsMediaType('document', 'gpt-3.5-turbo')).toBe(false);
       });
     });
@@ -427,7 +427,7 @@ describe('LLMProvider', () => {
           size: 1024
         };
 
-        const result = provider.validateAttachment(attachment, 'gpt-4-vision-preview');
+        const result = provider.validateAttachment(attachment, 'gpt-4o');
         expect(result.valid).toBe(false);
         expect(result.error).toContain('does not support document attachments');
       });
