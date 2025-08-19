@@ -34,7 +34,7 @@ describe('LLMProvider', () => {
 
       // Default provider is determined by the default model
       expect(config.currentProvider).toBe('anthropic');
-      expect(config.defaultModel).toBe('claude-3-sonnet-20240229');
+      expect(config.defaultModel).toBe('claude-3-5-sonnet-20241022');
       expect(config.hasApiKey).toBe(false);
     });
 
@@ -65,7 +65,7 @@ describe('LLMProvider', () => {
 
       // Provider is derived from the model
       expect(config.currentProvider).toBe('anthropic');
-      expect(config.defaultModel).toBe('claude-3-sonnet-20240229');
+      expect(config.defaultModel).toBe('claude-3-5-sonnet-20241022');
       // Check available models
       expect(config.availableModels).toBeInstanceOf(Array);
       expect(config.hasApiKey).toBeDefined();

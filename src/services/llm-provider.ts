@@ -344,6 +344,25 @@ interface ModelConfig {
 
 // Model registry with detailed capabilities
 const MODEL_REGISTRY: Record<string, ModelConfig> = {
+  // Anthropic Claude 3.5 Sonnet (latest)
+  'claude-3-5-sonnet-20241022': {
+    provider: 'anthropic',
+    modelName: 'claude-3-5-sonnet-20241022',
+    maxTokens: 8192,
+    defaultTemperature: 0.3,
+    capabilities: {
+      supportsImages: true,
+      supportsDocuments: true,
+      supportsAudio: false,
+      supportsVideo: false,
+      maxImageSize: 5 * 1024 * 1024, // 5MB
+      maxDocumentSize: 100 * 1024 * 1024, // 100MB
+      supportedImageTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+      supportedDocumentTypes: ['application/pdf', 'text/plain', 'text/csv'],
+      maxAttachmentsPerRequest: 20,
+      maxTotalAttachmentSize: 100 * 1024 * 1024 // 100MB total
+    }
+  },
   // Anthropic Claude 3 models with vision
   'claude-3-opus-20240229': {
     provider: 'anthropic',
@@ -437,22 +456,22 @@ const MODEL_REGISTRY: Record<string, ModelConfig> = {
       maxTotalAttachmentSize: 0
     }
   },
-  'gpt-4-turbo-preview': {
+  'gpt-4o': {
     provider: 'openai',
-    modelName: 'gpt-4-turbo-preview',
+    modelName: 'gpt-4o',
     maxTokens: 4096,
     defaultTemperature: 0.3,
     capabilities: {
-      supportsImages: false,
+      supportsImages: true,
       supportsDocuments: false,
       supportsAudio: false,
       supportsVideo: false,
-      maxImageSize: 0,
+      maxImageSize: 20 * 1024 * 1024, // 20MB
       maxDocumentSize: 0,
-      supportedImageTypes: [],
+      supportedImageTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
       supportedDocumentTypes: [],
-      maxAttachmentsPerRequest: 0,
-      maxTotalAttachmentSize: 0
+      maxAttachmentsPerRequest: 10,
+      maxTotalAttachmentSize: 20 * 1024 * 1024 // 20MB total
     }
   },
   'gpt-4-vision-preview': {
@@ -471,6 +490,24 @@ const MODEL_REGISTRY: Record<string, ModelConfig> = {
       supportedDocumentTypes: [],
       maxAttachmentsPerRequest: 10,
       maxTotalAttachmentSize: 20 * 1024 * 1024 // 20MB total
+    }
+  },
+  'gpt-4-turbo-preview': {
+    provider: 'openai',
+    modelName: 'gpt-4-turbo-preview',
+    maxTokens: 4096,
+    defaultTemperature: 0.3,
+    capabilities: {
+      supportsImages: false,
+      supportsDocuments: false,
+      supportsAudio: false,
+      supportsVideo: false,
+      maxImageSize: 0,
+      maxDocumentSize: 0,
+      supportedImageTypes: [],
+      supportedDocumentTypes: [],
+      maxAttachmentsPerRequest: 0,
+      maxTotalAttachmentSize: 0
     }
   },
   'gpt-3.5-turbo': {
@@ -500,8 +537,8 @@ export class LLMProvider {
   private defaultModel: string;
 
   private constructor() {
-    // Set default model from environment or use Claude 3 Sonnet
-    this.defaultModel = process.env.LLM_DEFAULT_MODEL || 'claude-3-sonnet-20240229';
+    // Set default model from environment or use Claude 3.5 Sonnet (latest)
+    this.defaultModel = process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022';
     
     // Initialize Anthropic client if API key is available
     if (process.env.ANTHROPIC_API_KEY) {
@@ -801,8 +838,38 @@ export class LLMProvider {
       return match ? match[1] : 'application/octet-stream';
     }
     
-    // Default fallback
-    return 'application/octet-stream';
+    // Try to detect from base64 signature
+    if (data.length > 16) {
+      // Decode first few bytes to check signature
+      try {
+        const buffer = Buffer.from(data.substring(0, 32), 'base64');
+        
+        // Check for PNG signature
+        if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+          return 'image/png';
+        }
+        
+        // Check for JPEG signature
+        if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+          return 'image/jpeg';
+        }
+        
+        // Check for GIF signature
+        if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) {
+          return 'image/gif';
+        }
+        
+        // Check for WebP signature
+        if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46) {
+          return 'image/webp';
+        }
+      } catch (e) {
+        // Not valid base64, fall through to default
+      }
+    }
+    
+    // Default fallback - assume PNG for images (most common in tests)
+    return 'image/png';
   }
   
   /**

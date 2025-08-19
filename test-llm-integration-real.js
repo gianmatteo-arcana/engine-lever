@@ -21,6 +21,7 @@
 
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const dotenv = require('dotenv');
 
 // Load environment variables from .env file
@@ -70,13 +71,16 @@ console.log(`🎯 Running tests: ${testPattern}`);
 console.log('⏱️ This may take up to 2 minutes due to API calls...');
 console.log('');
 
-// Run Jest with the integration test file
+// Run Jest directly with inline config, overriding ignore patterns
 const jestArgs = [
-  '--testTimeout=60000', // 60 second timeout for API calls
+  '--preset=ts-jest',
+  '--testEnvironment=node',
+  '--testMatch=**/test/integration/llm-provider-real-api.test.ts',
+  '--testPathIgnorePatterns=/node_modules/', // Override to only ignore node_modules
+  '--testTimeout=60000',
   '--verbose',
   '--no-cache',
-  '--testNamePattern=' + testPattern,
-  'test/integration/llm-provider-real-api.test.ts'
+  '--testNamePattern=' + testPattern
 ];
 
 const jest = spawn('npx', ['jest', ...jestArgs], {
