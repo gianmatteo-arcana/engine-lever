@@ -894,7 +894,7 @@ Remember: You are an autonomous agent following the universal principles while a
     // Call LLM with merged prompt
     const llmResponse = await this.llmProvider.complete({
       prompt: fullPrompt,
-      model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-sonnet-20240229',
+      model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
       temperature: 0.3,
       systemPrompt: this.specializedTemplate.agent?.mission || 'You are a helpful AI assistant that follows instructions precisely.'
     });

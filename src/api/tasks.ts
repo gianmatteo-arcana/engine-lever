@@ -448,7 +448,7 @@ router.get('/:taskId/context/stream', requireAuth, async (req: AuthenticatedRequ
         },
         history: contextEvents,
         activeUIRequests: uiRequests,
-        templateSnapshot: task.metadata?.templateSnapshot || {},
+        templateSnapshot: task.metadata?.taskDefinition || task.metadata?.templateSnapshot || {},
         metadata: task.metadata || {},
         createdAt: task.created_at,
         updatedAt: task.updated_at
@@ -674,7 +674,7 @@ router.get('/:taskId/status', requireAuth, async (req: AuthenticatedRequest, res
  */
 router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const { taskType, title, description, metadata, templateId } = req.body;
+    const { task_type: taskType, title, description, metadata, template_id: templateId } = req.body;
     const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
     const userId = req.userId!;
     
@@ -682,20 +682,58 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
     
     const dbService = DatabaseService.getInstance();
     
-    // Create task using universal pattern
-    const taskRecord = await dbService.createTask(req.userId!, {
-      task_type: taskType,
-      title: title || `${taskType} Task`,
-      description: description || `Created via universal API`,
-      status: 'pending',
-      priority: 'medium',
-      metadata: metadata || {},
-      template_id: templateId
-    });
+    // Load task definition (goals and requirements) and copy by value to task
+    let taskDefinition = {};
+    try {
+      const templateLoader = require('../templates/declarative-parser').DeclarativeTemplateParser.getInstance();
+      const template = await templateLoader.loadTemplate(templateId || taskType);
+      taskDefinition = {
+        id: template.id,
+        goals: template.goals || [],
+        title: template.title,
+        description: template.description
+      };
+    } catch (error) {
+      logger.warn('Task definition not found, using minimal defaults', { templateId, taskType });
+      taskDefinition = {
+        id: templateId || taskType,
+        goals: ['Complete the task successfully'],
+        title: `${taskType} Task`,
+        description: `Standard ${taskType} workflow`
+      };
+    }
+    
+    // Create task with definition embedded in metadata
+    const taskMetadata = {
+      ...(metadata || {}),
+      taskDefinition,
+      source: metadata?.source || 'api',
+      createdAt: new Date().toISOString()
+    };
+    
+    const taskRecord = await dbService.getServiceClient()
+      .from('tasks')
+      .insert({
+        user_id: userId,
+        task_type: taskType,
+        title: title || `${taskType} Task`,
+        description: description || `Created via universal API`,
+        status: 'pending',
+        priority: 'medium',
+        metadata: taskMetadata,
+        template_id: templateId
+      })
+      .select()
+      .single();
+
+    if (taskRecord.error) {
+      logger.error('Failed to create task directly', taskRecord.error);
+      throw taskRecord.error;
+    }
     
     // Emit task creation event
     await emitTaskEvent('task_created', {
-      taskId: taskRecord.id,
+      taskId: taskRecord.data.id,
       taskType,
       templateId
     }, {
@@ -710,35 +748,35 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
         channel_name: 'task_creation_events',
         payload: JSON.stringify({
           eventType: 'TASK_CREATED',
-          taskId: taskRecord.id,
+          taskId: taskRecord.data.id,
           userId: userId,
           taskType: taskType,
           templateId: templateId,
           status: 'pending',
           priority: 'medium',
-          title: taskRecord.title,
+          title: taskRecord.data.title,
           timestamp: new Date().toISOString()
         })
       });
       
       if (notifyError) {
-        logger.error('⚠️ NOTIFY RPC failed', { taskId: taskRecord.id, error: notifyError });
+        logger.error('⚠️ NOTIFY RPC failed', { taskId: taskRecord.data.id, error: notifyError });
       } else {
-        logger.info('✅ Task creation notification sent to EventListener', { taskId: taskRecord.id });
+        logger.info('✅ Task creation notification sent to EventListener', { taskId: taskRecord.data.id });
       }
     } catch (notifyError) {
       logger.error('⚠️ Failed to send task creation notification', { 
-        taskId: taskRecord.id, 
+        taskId: taskRecord.data.id, 
         error: notifyError 
       });
       // Don't fail the request if notification fails
     }
     
-    logger.info('Universal task created', { taskId: taskRecord.id, taskType });
+    logger.info('Universal task created', { taskId: taskRecord.data.id, taskType });
     
     res.status(201).json({
       success: true,
-      taskId: taskRecord.id,
+      taskId: taskRecord.data.id,
       taskType,
       message: 'Task created successfully'
     });

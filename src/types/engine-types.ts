@@ -34,6 +34,10 @@ export interface TaskState {
   completeness: number; // 0-100
   data: Record<string, any>;
   lastUpdated?: string;
+  // Additional fields from database schema
+  task_type?: string;
+  title?: string;
+  description?: string;
 }
 
 /**
@@ -112,6 +116,9 @@ export interface AgentRequest {
     urgency?: 'low' | 'medium' | 'high' | 'critical';
     deviceType?: 'mobile' | 'desktop' | 'tablet';
     userProgress?: number;
+    subtaskDescription?: string;
+    expectedOutput?: string;
+    successCriteria?: string;
   };
   taskContext?: TaskContext; // Optional for Agent base class
   operation?: string; // Optional for Agent base class
