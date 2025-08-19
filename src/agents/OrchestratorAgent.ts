@@ -774,6 +774,22 @@ export class OrchestratorAgent extends BaseAgent {
       taskId: event.taskId
     });
 
+    // Record the request reception for complete audit trail
+    await this.recordContextEntry(
+      { contextId: taskId } as TaskContext,
+      {
+        operation: 'agent_request_received',
+        data: {
+          fromAgent,
+          requestType: request?.type,
+          priority: request?.priority,
+          receivedAt: new Date().toISOString(),
+          eventSource: 'sse_message_bus'
+        },
+        reasoning: `Orchestrator received agent request via SSE from ${fromAgent}`
+      }
+    );
+
     // Schedule request processing based on priority
     const urgency = request?.priority || 'normal';
     const delay = this.calculateRequestDelay(urgency);
@@ -782,6 +798,23 @@ export class OrchestratorAgent extends BaseAgent {
       // Process immediately for urgent requests
       await this.handleAgentRequest(taskId, fromAgent, request);
     } else {
+      // Record the scheduling decision for audit trail
+      await this.recordContextEntry(
+        { contextId: taskId } as TaskContext,
+        {
+          operation: 'agent_request_scheduled',
+          data: {
+            fromAgent,
+            requestType: request?.type,
+            priority: request?.priority,
+            scheduledDelay: delay,
+            urgencyLevel: urgency,
+            scheduledFor: new Date(Date.now() + delay).toISOString()
+          },
+          reasoning: `Request scheduled for ${delay}ms delay based on ${urgency} priority`
+        }
+      );
+
       // Schedule for later processing
       setTimeout(async () => {
         try {
@@ -792,6 +825,21 @@ export class OrchestratorAgent extends BaseAgent {
             requestType: request?.type,
             error: error instanceof Error ? error.message : String(error)
           });
+          
+          // Record the failure for audit trail
+          await this.recordContextEntry(
+            { contextId: taskId } as TaskContext,
+            {
+              operation: 'scheduled_request_failed',
+              data: {
+                fromAgent,
+                requestType: request?.type,
+                error: error instanceof Error ? error.message : String(error),
+                failedAt: new Date().toISOString()
+              },
+              reasoning: `Scheduled request processing failed: ${error instanceof Error ? error.message : String(error)}`
+            }
+          );
         }
       }, delay);
 
@@ -876,6 +924,21 @@ export class OrchestratorAgent extends BaseAgent {
    */
   private async setupOrchestratorListening(taskId: string): Promise<() => void> {
     logger.info('📡 ORCHESTRATOR: Setting up event listening for task', { taskId });
+    
+    // Record the listening setup for complete audit trail
+    await this.recordContextEntry(
+      { contextId: taskId } as TaskContext,
+      {
+        operation: 'orchestrator_listening_started',
+        data: {
+          taskId,
+          listeningFor: ['ORCHESTRATOR_REQUEST', 'AGENT_BLOCKED', 'TASK_CONTEXT_UPDATE', 'AGENT_COMPLETED'],
+          startedAt: new Date().toISOString(),
+          subscriptionType: 'sse_postgresql_notify'
+        },
+        reasoning: 'Orchestrator began listening for agent requests and events via SSE message bus'
+      }
+    );
     
     // Subscribe to task events using the inherited subscription method
     const unsubscribe = await this.subscribeToTaskEvents(taskId, async (event) => {
