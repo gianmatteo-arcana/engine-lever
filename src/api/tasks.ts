@@ -42,10 +42,7 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
       taskCount: tasks.length 
     });
     
-    res.json({
-      tasks: tasks,
-      count: tasks.length
-    });
+    res.json(tasks);
     
   } catch (error) {
     logger.error('Failed to fetch tasks', { 
@@ -207,6 +204,12 @@ router.get('/:contextId', requireAuth, async (req: AuthenticatedRequest, res) =>
   try {
     const { contextId } = req.params;
     const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
+    
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(contextId)) {
+      return res.status(400).json({ error: 'Invalid UUID format' });
+    }
     
     logger.info('Getting task context', { contextId });
     
@@ -1050,6 +1053,45 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   } catch (error) {
     logger.error('Failed to list tasks', error);
     res.status(500).json({ error: 'Failed to list tasks' });
+  }
+});
+
+/**
+ * PATCH /api/tasks/:id - Partial Update
+ * Update specific fields of an existing task
+ */
+router.patch('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.userId!;
+    
+    logger.info('Partially updating task', { taskId: id, userId });
+    
+    const dbService = DatabaseService.getInstance();
+    
+    // Verify user owns this task first
+    const existingTask = await dbService.getTask(userId, id);
+    if (!existingTask) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    // Update the task with provided fields
+    const updatedTask = await dbService.updateTask(userId, id, req.body);
+    
+    logger.info('Task partially updated', { taskId: id, userId });
+    
+    res.json(updatedTask);
+  } catch (error) {
+    logger.error('Failed to update task', { 
+      taskId: req.params.id,
+      userId: req.userId,
+      error: (error as Error).message 
+    });
+    
+    res.status(500).json({
+      error: 'Failed to update task',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 

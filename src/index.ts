@@ -94,6 +94,15 @@ app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Handle JSON parsing errors
+app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (error instanceof SyntaxError && 'body' in error) {
+    logger.warn('Invalid JSON in request body', { url: req.url, method: req.method });
+    return res.status(400).json({ error: 'Invalid JSON format' });
+  }
+  next(error);
+});
+
 // Logging
 app.use(morgan('combined', { stream: { write: (message) => logger.info(message.trim()) } }));
 

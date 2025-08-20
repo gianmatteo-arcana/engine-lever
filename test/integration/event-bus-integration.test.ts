@@ -16,8 +16,26 @@ import {
 } from '../../src/types/a2a-types';
 import { BaseAgentRequest, BaseAgentResponse } from '../../src/types/base-agent-types';
 
-// Mock database service for integration test
+// Mock dependencies for focused event bus testing
 jest.mock('../../src/services/database');
+jest.mock('../../src/services/credential-vault');
+jest.mock('../../src/services/tool-chain');
+jest.mock('../../src/services/llm-provider', () => ({
+  LLMProvider: {
+    getInstance: jest.fn().mockReturnValue({
+      complete: jest.fn().mockResolvedValue({
+        status: 'completed',
+        contextUpdate: {
+          operation: 'compliance_check',
+          data: { result: 'compliant' },
+          reasoning: 'Test compliance check completed',
+          confidence: 0.95
+        }
+      }),
+      isConfigured: jest.fn().mockReturnValue(true)
+    })
+  }
+}));
 
 // Mock the task events service  
 jest.mock('../../src/services/task-events', () => ({
@@ -107,6 +125,10 @@ describe('Event Bus Integration', () => {
       getContextHistory: jest.fn().mockImplementation((userToken, contextId) => {
         return Promise.resolve(persistedEvents.filter(event => event.context_id === contextId));
       }),
+      
+      // Required methods for BaseAgent
+      createTaskContextEvent: jest.fn().mockResolvedValue({ id: 'event_123' }),
+      notifyTaskContextUpdate: jest.fn().mockResolvedValue(undefined),
       
       // Legacy pattern: getUserClient (for backward compatibility)
       getUserClient: jest.fn().mockReturnValue({
