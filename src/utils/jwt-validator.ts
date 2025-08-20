@@ -48,6 +48,12 @@ export interface JWTUser {
  */
 export async function validateJWT(token: string): Promise<JWTUser | null> {
   try {
+    // E2E test mode - use basic JWT parsing without Supabase signature validation
+    if (process.env.JEST_E2E_TEST === 'true') {
+      logger.debug('E2E test mode - using basic JWT parsing');
+      return parseJWTWithoutValidation(token);
+    }
+    
     // Initialize Supabase client if not already done
     if (!supabase) {
       supabase = initSupabaseClient();

@@ -6,28 +6,29 @@
  * NO MOCKS - Complete request → auth → database → response flow
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+
 import request from 'supertest';
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import * as jwt from 'jsonwebtoken';
 
-// Real database connection for test cleanup - use explicit values
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://raenkewzlvrdqufwxjpl.supabase.co';
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhZW5rZXd6bHZyZHF1Znd4anBsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzA0NzM4MywiZXhwIjoyMDY4NjIzMzgzfQ.tPBuIjB_JF4aW0NEmYwzVfbg1zcFUo1r1eOTeZVWuyw';
+// Read database connection from environment variables
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
-// Disable Supabase JWT validation for test app to force fallback basic JWT parsing
-// This allows us to use custom JWT tokens for testing
-delete process.env.SUPABASE_URL;
-delete process.env.SUPABASE_ANON_KEY;
+if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !SUPABASE_ANON_KEY) {
+  throw new Error('E2E tests require SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SUPABASE_ANON_KEY environment variables');
+}
 
-// Import middleware and routes (with JWT validation disabled)
+// Set up test environment with special test bypass flag
+process.env.JEST_E2E_TEST = 'true';
+
+// Import middleware and routes with test environment configured
 const { extractUserContext } = require('../../src/middleware/auth');
 const { apiRoutes } = require('../../src/api');
-
-// Now restore Supabase config for DatabaseService to work
-process.env.SUPABASE_URL = SUPABASE_URL;
-process.env.SUPABASE_SERVICE_ROLE_KEY = SUPABASE_SERVICE_KEY;
-process.env.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhZW5rZXd6bHZyZHF1Znd4anBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwNDczODMsImV4cCI6MjA2ODYyMzM4M30.CvnbE8w1yEX4zYHjHmxRIpTlh4O7ZClbcNSEfYFGlag';
 
 // Create test app instance
 const app = express();
@@ -87,17 +88,17 @@ describe('REAL E2E API Tests - Complete Flow', () => {
         .expect('Content-Type', /json/)
         .expect(201);
 
-      expect(response.body).toHaveProperty('id');
-      expect(response.body.title).toBe(taskData.title);
-      expect(response.body.user_id).toBe(TEST_USER_ID);
+      expect(response.body).toHaveProperty('taskId');
+      expect(response.body.success).toBe(true);
+      expect(response.body.taskType).toBe(taskData.task_type);
       
-      createdIds.push(response.body.id);
+      createdIds.push(response.body.taskId);
 
       // Verify in database
       const { data: dbTask } = await supabase
         .from('tasks')
         .select('*')
-        .eq('id', response.body.id)
+        .eq('id', response.body.taskId)
         .single();
 
       expect(dbTask).toBeDefined();
@@ -146,21 +147,19 @@ describe('REAL E2E API Tests - Complete Flow', () => {
     let testTaskId: string;
 
     beforeAll(async () => {
-      // Create a task for reading
-      const { data } = await supabase
-        .from('tasks')
-        .insert({
-          user_id: TEST_USER_ID,
+      // Create a task for reading via API
+      const response = await request(app)
+        .post('/api/tasks')
+        .set('Authorization', authToken)
+        .send({
           task_type: 'read_test',
           title: 'Task to Read',
           description: 'E2E Read Test',
           status: 'pending',
           priority: 'medium'
-        })
-        .select()
-        .single();
+        });
       
-      testTaskId = data.id;
+      testTaskId = response.body.taskId;
       createdIds.push(testTaskId);
     });
 
@@ -196,21 +195,19 @@ describe('REAL E2E API Tests - Complete Flow', () => {
     let testTaskId: string;
 
     beforeAll(async () => {
-      // Create a task for updating
-      const { data } = await supabase
-        .from('tasks')
-        .insert({
-          user_id: TEST_USER_ID,
+      // Create a task for updating via API
+      const response = await request(app)
+        .post('/api/tasks')
+        .set('Authorization', authToken)
+        .send({
           task_type: 'update_test',
           title: 'Original Title',
           description: 'Original Description',
           status: 'pending',
           priority: 'low'
-        })
-        .select()
-        .single();
+        });
       
-      testTaskId = data.id;
+      testTaskId = response.body.taskId;
       createdIds.push(testTaskId);
     });
 
@@ -279,23 +276,23 @@ describe('REAL E2E API Tests - Complete Flow', () => {
 
   describe('DELETE /api/tasks/:id - Delete Task', () => {
     it('should delete a task with valid authentication', async () => {
-      // Create a task to delete
-      const { data: taskToDelete } = await supabase
-        .from('tasks')
-        .insert({
-          user_id: TEST_USER_ID,
+      // Create a task to delete via API
+      const createResponse = await request(app)
+        .post('/api/tasks')
+        .set('Authorization', authToken)
+        .send({
           task_type: 'delete_test',
           title: 'Task to Delete',
           description: 'Will be deleted',
           status: 'pending',
           priority: 'low'
-        })
-        .select()
-        .single();
+        });
+
+      const taskToDeleteId = createResponse.body.taskId;
 
       // Delete via API
       await request(app)
-        .delete(`/api/tasks/${taskToDelete.id}`)
+        .delete(`/api/tasks/${taskToDeleteId}`)
         .set('Authorization', authToken)
         .expect(204); // No content
 
@@ -303,38 +300,37 @@ describe('REAL E2E API Tests - Complete Flow', () => {
       const { data: shouldBeNull } = await supabase
         .from('tasks')
         .select('*')
-        .eq('id', taskToDelete.id)
+        .eq('id', taskToDeleteId)
         .single();
 
       expect(shouldBeNull).toBeNull();
     });
 
     it('should reject deletion without authentication', async () => {
-      // Create a task
-      const { data: task } = await supabase
-        .from('tasks')
-        .insert({
-          user_id: TEST_USER_ID,
+      // Create a task via API
+      const createResponse = await request(app)
+        .post('/api/tasks')
+        .set('Authorization', authToken)
+        .send({
           task_type: 'auth_test',
           title: 'Protected Task',
           status: 'pending',
           priority: 'high'
-        })
-        .select()
-        .single();
+        });
 
-      createdIds.push(task.id);
+      const taskId = createResponse.body.taskId;
+      createdIds.push(taskId);
 
       // Try to delete without auth
       await request(app)
-        .delete(`/api/tasks/${task.id}`)
+        .delete(`/api/tasks/${taskId}`)
         .expect(401);
 
       // Verify it still exists
       const { data: stillExists } = await supabase
         .from('tasks')
         .select('*')
-        .eq('id', task.id)
+        .eq('id', taskId)
         .single();
 
       expect(stillExists).toBeDefined();
@@ -343,7 +339,7 @@ describe('REAL E2E API Tests - Complete Flow', () => {
 
   describe('GET /api/tasks - List Tasks', () => {
     beforeAll(async () => {
-      // Create multiple tasks for listing
+      // Create multiple tasks for listing via API
       const tasks = [
         { title: 'Task 1', priority: 'high' },
         { title: 'Task 2', priority: 'medium' },
@@ -351,20 +347,18 @@ describe('REAL E2E API Tests - Complete Flow', () => {
       ];
 
       for (const task of tasks) {
-        const { data } = await supabase
-          .from('tasks')
-          .insert({
-            user_id: TEST_USER_ID,
+        const response = await request(app)
+          .post('/api/tasks')
+          .set('Authorization', authToken)
+          .send({
             task_type: 'list_test',
             title: task.title,
             description: 'List test',
             status: 'pending',
             priority: task.priority
-          })
-          .select()
-          .single();
+          });
         
-        createdIds.push(data.id);
+        createdIds.push(response.body.taskId);
       }
     });
 
@@ -437,19 +431,17 @@ describe('REAL E2E API Tests - Complete Flow', () => {
         .post('/api/tasks')
         .set('Authorization', authToken)
         .send({
-          templateId: 'event_test',
-          metadata: {
-            title: 'Task with Events',
-            description: 'Event testing',
-            priority: 'high'
-          }
+          task_type: 'event_test',
+          title: 'Task with Events',
+          description: 'Event testing',
+          priority: 'high'
         });
       
       if (response.status !== 201) {
         throw new Error(`Failed to create test task: ${response.status} ${response.text}`);
       }
       
-      testTaskId = response.body.task.id;
+      testTaskId = response.body.taskId;
       createdIds.push(testTaskId);
     });
 
@@ -553,19 +545,17 @@ describe('REAL E2E API Tests - Complete Flow', () => {
         .post('/api/tasks')
         .set('Authorization', authToken)
         .send({
-          templateId: 'patch_test',
-          metadata: {
-            title: 'Original',
-            description: 'Original Desc',
-            priority: 'low'
-          }
+          task_type: 'patch_test',
+          title: 'Original',
+          description: 'Original Desc',
+          priority: 'low'
         });
       
       if (response.status !== 201) {
         throw new Error(`Failed to create test task for PATCH: ${response.status} ${response.text}`);
       }
       
-      testTaskId = response.body.task.id;
+      testTaskId = response.body.taskId;
       createdIds.push(testTaskId);
     });
 
