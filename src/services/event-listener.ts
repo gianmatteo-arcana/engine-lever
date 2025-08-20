@@ -133,6 +133,8 @@ export class EventListener {
             status: newTask.status,
             priority: newTask.priority,
             title: newTask.title,
+            description: newTask.description,
+            metadata: newTask.metadata, // ← Include task metadata (contains copied template content)
             timestamp: newTask.created_at || new Date().toISOString()
           };
           
@@ -188,8 +190,8 @@ export class EventListener {
     });
 
     try {
-      // Create a simple TaskContext object for orchestration
-      // We'll use task_context_events table for storing events
+      // Create TaskContext object for orchestration using ONLY task data
+      // Template content should already be copied to task metadata during creation
       const taskContext = {
         contextId: event.taskId, // Use the task ID as context ID
         taskTemplateId: event.templateId || event.taskType || 'onboarding',
@@ -203,48 +205,15 @@ export class EventListener {
             taskId: event.taskId,
             userId: event.userId,
             title: event.title || 'Task',
-            taskType: event.taskType,
-            metadata: event.metadata || {}
+            description: event.description || 'No description provided',
+            taskType: event.taskType
           }
         },
         history: [],
-        templateSnapshot: {
-          id: event.templateId || event.taskType || 'onboarding',
-          version: '1.0.0',
-          metadata: {
-            name: event.title || 'Task',
-            description: 'Task execution'
-          },
-          goals: {
-            primary: [
-              { id: 'complete_task', description: 'Complete the task', required: true }
-            ],
-            secondary: []
-          },
-          phases: [
-            {
-              id: 'initialization',
-              name: 'Initialization',
-              description: 'Task setup',
-              requiredCapabilities: ['orchestrator'],
-              estimatedDurationMinutes: 1
-            },
-            {
-              id: 'execution',
-              name: 'Execution',
-              description: 'Execute task',
-              requiredCapabilities: ['execution'],
-              estimatedDurationMinutes: 10
-            },
-            {
-              id: 'completion',
-              name: 'Completion',
-              description: 'Complete task',
-              requiredCapabilities: ['orchestrator'],
-              estimatedDurationMinutes: 1
-            }
-          ]
-        }
+        // Use task metadata which contains copied template content (taskDefinition)
+        metadata: event.metadata || {},
+        // No templateSnapshot - agents should only work with task data
+        templateSnapshot: null
       };
 
       // Record the orchestration initiation event

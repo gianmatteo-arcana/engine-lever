@@ -406,12 +406,11 @@ Follow these exact steps:
 # Context Writing Pattern (MANDATORY)
 ${base.context_patterns.write_pattern}
 
-# Context Entry Schema (Required Format)
-Your contextUpdate MUST follow this exact format:
-${base.context_patterns.context_entry_schema}
+# Response Schema (MANDATORY FORMAT)
+${base.context_patterns.agent_response_schema}
 
-# Response Requirements
-- Use JSON format matching the specialized output schema
+# Additional Response Requirements
+- Use ONLY the JSON format shown above - no additional text
 - Include confidence scoring (0.0-1.0) for all decisions
 - Provide detailed reasoning explaining your decision process
 - Follow universal error handling patterns if errors occur
@@ -469,13 +468,33 @@ Remember: You are an autonomous agent following the universal principles while a
    * defined in base_agent.yaml. This ensures consistency across all agents.
    */
   private enforceStandardSchema(llmResponse: any, request: BaseAgentRequest): BaseAgentResponse {
-    // Validate response structure
+    // Log the raw LLM response for debugging
+    logger.debug('Raw LLM response received', {
+      agentId: this.specializedTemplate.agent.id,
+      responseType: typeof llmResponse,
+      responseKeys: Object.keys(llmResponse || {}),
+      hasStatus: !!llmResponse.status,
+      hasContextUpdate: !!llmResponse.contextUpdate,
+      response: JSON.stringify(llmResponse).substring(0, 500)
+    });
+
+    // Validate response structure with better error messages
     if (!llmResponse.status) {
-      throw new Error('LLM response missing required status field');
+      logger.error('LLM response validation failed - missing status field', {
+        agentId: this.specializedTemplate.agent.id,
+        receivedFields: Object.keys(llmResponse || {}),
+        expectedStatus: ['completed', 'needs_input', 'delegated', 'error']
+      });
+      throw new Error(`LLM response missing required status field. Received fields: ${Object.keys(llmResponse || {}).join(', ')}`);
     }
     
     if (!llmResponse.contextUpdate) {
-      throw new Error('LLM response missing required contextUpdate');
+      logger.error('LLM response validation failed - missing contextUpdate field', {
+        agentId: this.specializedTemplate.agent.id,
+        receivedFields: Object.keys(llmResponse || {}),
+        response: JSON.stringify(llmResponse).substring(0, 200)
+      });
+      throw new Error(`LLM response missing required contextUpdate field. Received fields: ${Object.keys(llmResponse || {}).join(', ')}`);
     }
     
     // Create context entry following the standard schema
@@ -892,12 +911,29 @@ Remember: You are an autonomous agent following the universal principles while a
     const fullPrompt = this.buildInheritedPrompt(request);
     
     // Call LLM with merged prompt
-    const llmResponse = await this.llmProvider.complete({
+    const llmResult = await this.llmProvider.complete({
       prompt: fullPrompt,
       model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
       temperature: 0.3,
       systemPrompt: this.specializedTemplate.agent?.mission || 'You are a helpful AI assistant that follows instructions precisely.'
     });
+    
+    // Parse LLM response as JSON
+    let llmResponse: any;
+    try {
+      if (typeof llmResult.content === 'string') {
+        llmResponse = JSON.parse(llmResult.content);
+      } else {
+        llmResponse = llmResult.content;
+      }
+    } catch (parseError) {
+      logger.error('Failed to parse LLM response as JSON', {
+        agentId: this.specializedTemplate.agent.id,
+        rawResponse: llmResult.content,
+        parseError: parseError instanceof Error ? parseError.message : String(parseError)
+      });
+      throw new Error(`LLM returned invalid JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+    }
     
     // Validate and enforce standard schema
     const validatedResponse = this.enforceStandardSchema(llmResponse, request);
@@ -1036,8 +1072,9 @@ Remember: You are an autonomous agent following the universal principles while a
         operation: fullEntry.operation,
         error: error instanceof Error ? error.message : String(error)
       });
-      // Throw error - without persistence/broadcast, the system cannot function
-      // But this should be monitored and handled via retry mechanism
+      // Re-throw error - without persistence/broadcast, the system cannot function
+      // Agents should handle this failure and implement retry mechanisms
+      throw error;
     }
   }
 

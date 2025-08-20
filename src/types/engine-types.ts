@@ -21,7 +21,7 @@ export interface TaskContext {
   createdAt: string; // ISO 8601
   currentState: TaskState;
   history: ContextEntry[];
-  templateSnapshot: TaskTemplateSnapshot;
+  templateSnapshot?: TaskTemplateSnapshot; // Optional - agents should use task data only
   metadata?: Record<string, any>;
 }
 

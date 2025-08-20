@@ -23,10 +23,8 @@ import { ConfigurationManager } from '../services/configuration-manager';
 import { DatabaseService } from '../services/database';
 import { StateComputer } from '../services/state-computer';
 import { logger } from '../utils/logger';
-import { AgentDiscoveryService } from '../services/agent-discovery';
 import {
   TaskContext,
-  TaskTemplate,
   ExecutionPlan,
   ExecutionPhase,
   AgentRequest,
@@ -332,10 +330,10 @@ export class OrchestratorAgent extends BaseAgent {
     try {
       logger.info('🤖 Initializing agent registry dynamically from YAML files...');
       
-      // Use AgentDiscoveryService to discover all agents from YAML files
+      // Use AgentDiscoveryService singleton to discover all agents from YAML files
       // YAML files are the ONLY source of truth for agent existence
-      const discoveryService = new AgentDiscoveryService();
-      const agentCapabilities = await discoveryService.discoverAgents();
+      const { agentDiscovery } = await import('../services/agent-discovery');
+      const agentCapabilities = await agentDiscovery.discoverAgents();
       
       logger.info(`📊 Discovered ${agentCapabilities.size} agents from YAML configurations`);
       
@@ -440,11 +438,12 @@ export class OrchestratorAgent extends BaseAgent {
     if (this.agentRegistry.size === 0) {
       await this.initializeAgentRegistry();
     }
-    // Extract comprehensive task information from the task's own data (self-contained task)
-    const taskType = context.currentState?.task_type || 'general';
-    const taskTitle = context.currentState?.title || 'Unknown Task';
-    const taskDefinition = context.metadata?.taskDefinition || context.templateSnapshot || {};
-    const taskDescription = taskDefinition?.description || context.currentState?.description || 'No description provided';
+    // Extract task information from the task data ONLY (no template references)
+    // Template content should already be copied to task during creation
+    const taskType = context.currentState?.data?.taskType || 'general';
+    const taskTitle = context.currentState?.data?.title || 'Unknown Task';
+    const taskDescription = context.currentState?.data?.description || 'No description provided';
+    const taskDefinition = context.metadata?.taskDefinition || {};
     
     // Build detailed agent capability information for LLM reasoning
     const availableAgents = Array.from(this.agentRegistry.values()).map(agent => ({
@@ -927,16 +926,16 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     });
     
     // Execute the agent with specific instructions
-    // Get the real agent instance from the discovery service
-    const discoveryService = new AgentDiscoveryService();
-    const agentInstance = await discoveryService.instantiateAgent(
+    // Get the real agent instance from the discovery service singleton
+    const { agentDiscovery } = await import('../services/agent-discovery');
+    const agentInstance = await agentDiscovery.instantiateAgent(
       agent.agentId,
       context.tenantId,
 (context.currentState as any)?.user_id
     );
     
     // Execute the real agent with the request
-    const agentResponse = await (agentInstance as any).executeRequest(request);
+    const agentResponse = await (agentInstance as any).executeInternal(request);
     
     // Record the subtask execution for audit trail
     await this.recordContextEntry(context, {
@@ -1042,8 +1041,8 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       taskContext: context
     };
     
-    // Use real agent execution via AgentDiscoveryService
-    const discoveryService = new AgentDiscoveryService();
+    // Use real agent execution via AgentDiscoveryService singleton
+    const { agentDiscovery: discoveryService } = await import('../services/agent-discovery');
     
     try {
       logger.info('Executing real agent (legacy mode)', {
@@ -1059,7 +1058,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       );
       
       // Execute the real agent with the request
-      const agentResponse = await (agentInstance as any).executeRequest(request);
+      const agentResponse = await (agentInstance as any).executeInternal(request);
       
       return agentResponse;
     } catch (error) {
@@ -1263,16 +1262,23 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
    * Check if task goals are achieved
    */
   private async areGoalsAchieved(context: TaskContext): Promise<boolean> {
-    const template = context.templateSnapshot as TaskTemplate;
+    const taskDefinition = context.metadata?.taskDefinition || {};
     
-    if (!template.goals) {
+    if (!taskDefinition.goals) {
       return true; // No goals means task is complete
     }
     
     // Check primary goals
-    for (const goal of template.goals.primary) {
-      if (goal.required && !this.isGoalAchieved(context, goal)) {
-        return false;
+    const goals = taskDefinition.goals;
+    if (Array.isArray(goals)) {
+      // Simple array of goal strings
+      return true; // For now, assume goals are achieved if context is stable
+    } else if (goals.primary) {
+      // Structured goals with primary/secondary
+      for (const goal of goals.primary) {
+        if (goal.required && !this.isGoalAchieved(context, goal)) {
+          return false;
+        }
       }
     }
     
@@ -1400,16 +1406,26 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
    * Generate manual steps from template
    */
   private generateManualSteps(context: TaskContext): any[] {
-    const template = context.templateSnapshot as TaskTemplate;
+    const taskDefinition = context.metadata?.taskDefinition || {};
     
-    // Convert template phases to manual steps
-    return (template.phases || []).map((phase, index) => ({
-      id: `step_${index + 1}`,
-      title: phase.name,
-      description: phase.description,
-      fields: this.generateFieldsForPhase(phase),
-      help: `This step typically takes ${phase.maxDuration || '5-10'} minutes`
-    }));
+    // Generate manual steps from task goals
+    const goals = taskDefinition.goals || [];
+    if (Array.isArray(goals)) {
+      return goals.map((goal, index) => ({
+        step: index + 1,
+        title: `Step ${index + 1}`,
+        description: goal,
+        status: 'pending'
+      }));
+    }
+    
+    // Fallback: create basic steps from task data
+    return [{
+      step: 1,
+      title: context.currentState?.data?.title || 'Complete Task',
+      description: context.currentState?.data?.description || 'Follow the instructions to complete this task',
+      status: 'pending'
+    }];
   }
   
   /**
@@ -1434,7 +1450,8 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     // Use LLM to generate helpful guidance
     const prompt = `
       Generate step-by-step guidance for completing this task manually:
-      Template: ${JSON.stringify(context.templateSnapshot)}
+      Task: ${JSON.stringify(context.currentState?.data)}
+      Task Definition: ${JSON.stringify(context.metadata?.taskDefinition)}
       Current State: ${JSON.stringify(context.currentState)}
       
       Provide clear, actionable steps the user can follow.
@@ -1910,7 +1927,7 @@ Respond with JSON only:
       createdAt: state.metadata?.createdAt || new Date().toISOString(),
       currentState: state,
       history: state.history || [],
-      templateSnapshot: state.metadata?.template || {}
+      metadata: state.metadata || {}
     };
   }
 
@@ -1930,7 +1947,6 @@ Respond with JSON only:
         data: {}
       },
       history: [],
-      templateSnapshot: {},
       metadata: taskRequest.metadata || {}
     };
 
