@@ -917,7 +917,7 @@ Remember: You are an autonomous agent following the universal principles while a
     
     // Log agent reasoning request
     logger.info('🤖 AGENT LLM REQUEST', {
-      agentType: (this.specializedTemplate.agent as any)?.type || this.specializedTemplate.agent?.role || 'unknown',
+      agentRole: this.specializedTemplate.agent?.role || 'unknown',
       agentId: this.specializedTemplate.agent?.id || 'unknown',
       taskId: request.taskContext?.contextId,
       promptLength: fullPrompt.length,
@@ -945,7 +945,7 @@ Remember: You are an autonomous agent following the universal principles while a
     
     // Log agent reasoning response
     logger.info('🧠 AGENT LLM RESPONSE', {
-      agentType: (this.specializedTemplate.agent as any)?.type || this.specializedTemplate.agent?.role || 'unknown',
+      agentRole: this.specializedTemplate.agent?.role || 'unknown',
       agentId: this.specializedTemplate.agent?.id || 'unknown',
       taskId: request.taskContext?.contextId,
       responseLength: llmResult.content.length,
