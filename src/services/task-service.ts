@@ -18,11 +18,12 @@
 
 import { DatabaseService } from './database';
 import { StateComputer } from './state-computer';
-import { ConfigurationManager } from './configuration-manager';
 import { logger } from '../utils/logger';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as yaml from 'yaml';
 import {
   TaskContext,
-  TaskTemplate,
   ContextEntry,
   TaskState
 } from '../types/engine-types';
@@ -72,12 +73,10 @@ export interface DatabaseTaskCreateRequest extends DatabaseCreateTaskRequest {
 export class TaskService {
   private static instance: TaskService; // Keep for backward compatibility (deprecated)
   private dbService: DatabaseService;
-  private configManager: ConfigurationManager;
   private userToken: string | null = null;
 
-  constructor(dbService?: DatabaseService, configManager?: ConfigurationManager) {
+  constructor(dbService?: DatabaseService) {
     this.dbService = dbService || DatabaseService.getInstance();
-    this.configManager = configManager || new ConfigurationManager();
   }
 
   /**
@@ -112,21 +111,49 @@ export class TaskService {
         trigger: request.initialData?.trigger || 'api_request'
       });
 
-      // 1. Load task template from YAML (PRD Line 46: Configuration-Driven)
-      const template = await this.loadTemplate(request.templateId);
-      
-      if (!template) {
-        throw new Error(`Template not found: ${request.templateId}`);
+      // Load task template if it exists (for goals and requirements)
+      let taskDefinition: any = undefined;
+      if (request.templateId) {
+        try {
+          // Handle mapping of user_onboarding -> onboarding for backward compatibility
+          let templateName = request.templateId;
+          if (templateName === 'user_onboarding') {
+            templateName = 'onboarding';
+          }
+          
+          const templatePath = path.join(__dirname, '../../config/templates', `${templateName}.yaml`);
+          if (fs.existsSync(templatePath)) {
+            const templateContent = await fs.promises.readFile(templatePath, 'utf8');
+            const parsed = yaml.parse(templateContent);
+            taskDefinition = parsed.task_template || parsed;
+            logger.info('Loaded task template', {
+              templateId: request.templateId,
+              templateFile: templateName,
+              hasGoals: !!taskDefinition?.goals
+            });
+          } else {
+            logger.warn('Template file not found', {
+              templateId: request.templateId,
+              templateFile: templateName,
+              path: templatePath
+            });
+          }
+        } catch (error) {
+          logger.warn('Failed to load task template', {
+            templateId: request.templateId,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
       }
 
-      // 2. Create TaskContext (PRD Lines 145-220: Core Data Structure)
+      // Create TaskContext with template data in metadata
       const taskContext: TaskContext = {
         contextId: this.generateId(),
         taskTemplateId: request.templateId,
         tenantId: request.tenantId,
         createdAt: new Date().toISOString(),
         
-        // PRD Line 152: Current state computed from history
+        // Current state computed from history
         currentState: {
           status: 'pending',
           phase: 'initialization',
@@ -134,11 +161,19 @@ export class TaskService {
           data: request.initialData || {}
         },
         
-        // PRD Line 154: Immutable event history
+        // Immutable event history
         history: [],
         
-        // PRD Line 156: Template snapshot frozen at creation
-        templateSnapshot: template
+        // Include task definition and description for orchestrator
+        metadata: {
+          ...request.initialData,
+          taskDefinition,
+          // Copy template content into task description as requested
+          taskDescription: taskDefinition ? JSON.stringify(taskDefinition) : undefined
+        },
+        
+        // No template snapshot - agents are self-directed
+        templateSnapshot: undefined
       };
 
       // 3. Persist TaskContext (PRD Lines 266-278: Database Schema)
@@ -329,57 +364,7 @@ export class TaskService {
     }
   }
 
-  /**
-   * Load template from configuration
-   * PRD Line 46: Configuration-Driven
-   */
-  private async loadTemplate(templateId: string): Promise<TaskTemplate | null> {
-    try {
-      // Use ConfigurationManager to load templates from YAML files
-      const template = await this.configManager.loadTemplate(templateId);
-      
-      if (!template) {
-        // Fallback: Try loading from database if not found in config files
-        logger.info('Template not found in config, trying database', { templateId });
-        return await this.loadTemplateFromDatabase(templateId);
-      }
-
-      return template;
-    } catch (error) {
-      logger.error('Error loading template', { templateId, error });
-      return null;
-    }
-  }
-
-  /**
-   * Fallback method to load template from database
-   * Used when template is not found in configuration files
-   */
-  private async loadTemplateFromDatabase(templateId: string): Promise<TaskTemplate | null> {
-    try {
-      // Use service client when no user token (e.g., from EventListener)
-      const client = this.userToken 
-        ? this.dbService.getUserClient(this.userToken)
-        : this.dbService.getServiceClient();
-      
-      const { data, error } = await client
-        .from('task_templates')
-        .select('*')
-        .eq('id', templateId)
-        .eq('is_active', true)
-        .single();
-
-      if (error || !data) {
-        logger.warn('Template not found in database', { templateId });
-        return null;
-      }
-
-      return this.mapToTaskTemplate(data);
-    } catch (error) {
-      logger.error('Error loading template from database', { templateId, error });
-      return null;
-    }
-  }
+  // Template loading removed - agents are self-directed from YAML configs
 
   /**
    * Persist task context to database
@@ -408,7 +393,7 @@ export class TaskService {
           contextId: context.contextId,
           error 
         });
-        throw error;
+        throw new Error(`Failed to persist task context: ${error.message || JSON.stringify(error)}`);
       }
 
     } catch (error) {
@@ -492,19 +477,6 @@ export class TaskService {
         trigger: h.trigger
       })),
       templateSnapshot: data.template_snapshot
-    };
-  }
-
-  /**
-   * Map database record to TaskTemplate
-   */
-  private mapToTaskTemplate(data: any): TaskTemplate {
-    return {
-      id: data.id,
-      version: data.version,
-      metadata: data.metadata,
-      goals: data.goals,
-      phases: data.phases
     };
   }
 

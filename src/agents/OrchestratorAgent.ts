@@ -1928,6 +1928,7 @@ Respond with JSON only:
       currentState: state,
       history: state.history || [],
       metadata: state.metadata || {}
+      // templateSnapshot omitted - agents use task data only
     };
   }
 

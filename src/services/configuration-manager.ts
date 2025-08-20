@@ -1,60 +1,26 @@
 /**
  * Configuration Manager
- * Loads and manages YAML configuration files for agents and task templates
+ * Loads and manages YAML configuration files for agents ONLY
+ * Agents internalize their mission from YAML configs and reason autonomously
  * Supports hot-reload in development for rapid iteration
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';
-import { TaskTemplate, AgentConfig } from '../types/engine-types';
-import { DeclarativeTemplateParser } from '../templates/declarative-parser';
+import { AgentConfig } from '../types/engine-types';
 
 export class ConfigurationManager {
   private configCache = new Map<string, any>();
   private watchers = new Map<string, fs.FSWatcher>();
   private configPath: string;
-  private templateParser: DeclarativeTemplateParser;
 
   constructor(configPath?: string) {
     this.configPath = configPath || path.join(__dirname, '../../config');
     
-    // Initialize declarative template parser with custom paths
-    const templateDirs = [
-      path.join(this.configPath, 'templates'),
-      path.join(__dirname, '../templates/tasks'),
-      path.join(process.cwd(), 'src', 'templates', 'tasks')
-    ];
-    this.templateParser = new DeclarativeTemplateParser(templateDirs);
-    
     // Enable hot-reload in development
     if (process.env.NODE_ENV === 'development') {
       this.enableHotReload();
-    }
-  }
-
-  /**
-   * Load a task template from YAML using declarative parser
-   */
-  async loadTemplate(templateId: string): Promise<TaskTemplate> {
-    const cacheKey = `template:${templateId}`;
-    
-    // Check cache first
-    if (this.configCache.has(cacheKey)) {
-      return this.configCache.get(cacheKey);
-    }
-    
-    try {
-      // Use declarative parser to load template
-      const template = await this.templateParser.loadTemplate(templateId);
-      
-      // Cache the template
-      this.configCache.set(cacheKey, template);
-      
-      return template;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to load template ${templateId}: ${message}`);
     }
   }
 
@@ -95,21 +61,6 @@ export class ConfigurationManager {
     }
   }
 
-  /**
-   * List all available templates
-   */
-  async listTemplates(): Promise<string[]> {
-    const templatesDir = path.join(this.configPath, 'templates');
-    
-    if (!fs.existsSync(templatesDir)) {
-      return [];
-    }
-    
-    const files = await fs.promises.readdir(templatesDir);
-    return files
-      .filter(file => file.endsWith('.yaml') || file.endsWith('.yml'))
-      .map(file => file.replace(/\.(yaml|yml)$/, ''));
-  }
 
   /**
    * List all available agent configs
@@ -169,27 +120,6 @@ export class ConfigurationManager {
     this.watchers.clear();
   }
 
-  /**
-   * Validate a template against schema
-   */
-  validateTemplate(template: TaskTemplate): boolean {
-    // Basic validation
-    if (!template.id || !template.version) {
-      return false;
-    }
-    
-    // Check required fields based on our schema
-    if (!template.metadata?.name || !template.goals?.primary) {
-      return false;
-    }
-    
-    // All primary goals must have required field
-    if (!template.goals.primary.every(goal => typeof goal.required === 'boolean')) {
-      return false;
-    }
-    
-    return true;
-  }
 
   /**
    * Validate an agent config against schema

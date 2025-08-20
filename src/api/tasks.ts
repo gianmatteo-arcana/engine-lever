@@ -685,26 +685,14 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
     
     const dbService = DatabaseService.getInstance();
     
-    // Load task definition (goals and requirements) and copy by value to task
-    let taskDefinition = {};
-    try {
-      const templateLoader = require('../templates/declarative-parser').DeclarativeTemplateParser.getInstance();
-      const template = await templateLoader.loadTemplate(templateId || taskType);
-      taskDefinition = {
-        id: template.id,
-        goals: template.goals || [],
-        title: template.title,
-        description: template.description
-      };
-    } catch (error) {
-      logger.warn('Task definition not found, using minimal defaults', { templateId, taskType });
-      taskDefinition = {
-        id: templateId || taskType,
-        goals: ['Complete the task successfully'],
-        title: `${taskType} Task`,
-        description: `Standard ${taskType} workflow`
-      };
-    }
+    // Tasks are self-contained - agents reason from their YAML configs
+    // No templates needed - just create minimal task definition
+    const taskDefinition = {
+      id: templateId || taskType,
+      goals: ['Complete the task successfully'],
+      title: `${taskType} Task`,
+      description: `Standard ${taskType} workflow`
+    };
     
     // Create task with definition embedded in metadata
     const taskMetadata = {

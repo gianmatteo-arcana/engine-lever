@@ -128,40 +128,22 @@ export abstract class BaseAgent implements AgentExecutor {
     // Validate inheritance
     this.validateInheritance();
     
-    // Initialize services (mock in test environment)
-    if (process.env.NODE_ENV === 'test') {
-      // Create mock instances for testing
-      this.llmProvider = {
-        complete: jest.fn().mockResolvedValue({
-          status: 'completed',
-          contextUpdate: {
-            operation: 'test_operation',
-            data: { result: 'success' },
-            reasoning: 'Test reasoning',
-            confidence: 0.9
-          },
-          confidence: 0.9
-        })
-      } as any;
-      this.toolChain = {
-        getAvailableTools: jest.fn().mockReturnValue('mock tools')
-      } as any;
-    } else {
-      // Import the actual implementations
-      const { LLMProvider: LLMProviderImpl } = require('../../services/llm-provider');
-      
-      // Use getInstance for LLMProvider (singleton pattern)
-      this.llmProvider = LLMProviderImpl.getInstance();
-      
-      // ToolChain requires Supabase - let CredentialVault handle validation
-      // The validation happens at the actual point of connection
-      const { ToolChain: ToolChainImpl } = require('../../services/tool-chain');
-      
-      try {
-        this.toolChain = new ToolChainImpl();
-      } catch (error: any) {
-        // If CredentialVault fails, add context about where it failed
-        console.error(`
+    // Initialize services
+    // Import the actual implementations
+    const { LLMProvider: LLMProviderImpl } = require('../../services/llm-provider');
+    
+    // Use getInstance for LLMProvider (singleton pattern)
+    this.llmProvider = LLMProviderImpl.getInstance();
+    
+    // ToolChain requires Supabase - let CredentialVault handle validation
+    // The validation happens at the actual point of connection
+    const { ToolChain: ToolChainImpl } = require('../../services/tool-chain');
+    
+    try {
+      this.toolChain = new ToolChainImpl();
+    } catch (error: any) {
+      // If CredentialVault fails, add context about where it failed
+      console.error(`
 ========================================
 🚨 AGENT INITIALIZATION FAILED 🚨
 ========================================
@@ -173,8 +155,7 @@ Error: ${error.message}
 Check the error message above for specific configuration issues.
 ========================================
 `);
-        throw error;
-      }
+      throw error;
     }
   }
   
@@ -407,7 +388,31 @@ Follow these exact steps:
 ${base.context_patterns.write_pattern}
 
 # Response Schema (MANDATORY FORMAT)
-${base.context_patterns.agent_response_schema}
+Your response MUST be valid JSON matching this EXACT schema:
+{
+  "status": "completed|needs_input|delegated|error",
+  "contextUpdate": {
+    "operation": "descriptive_operation_name",
+    "data": { 
+      "relevant": "structured data",
+      "results": "action outcomes"
+    },
+    "reasoning": "Clear explanation of decision process",
+    "confidence": 0.85
+  },
+  "uiRequest": {
+    "type": "form|approval|notification|none",
+    "title": "UI element title",
+    "fields": [],
+    "instructions": "Clear user guidance"
+  }
+}
+
+STATUS VALUES:
+- "completed": Task finished successfully
+- "needs_input": Requires user input to proceed  
+- "delegated": Passed to another agent
+- "error": Failed with error (include error details in reasoning)
 
 # Additional Response Requirements
 - Use ONLY the JSON format shown above - no additional text
