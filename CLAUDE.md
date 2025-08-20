@@ -125,6 +125,38 @@ User Request → Master Orchestrator Agent → Specialist Agents → MCP Tools �
 
 These principles are derived from PR review feedback and production lessons learned. They apply universally across all SmallBizAlly repositories:
 
+### 🔴 ABSOLUTELY FORBIDDEN: MOCK DATA IN PRODUCTION CODE
+
+**CRITICAL RULE - NO EXCEPTIONS:**
+```typescript
+// ❌ FORBIDDEN IN PRODUCTION CODE:
+- NO simulated data
+- NO mock responses  
+- NO fake agent execution
+- NO placeholder results
+- NO "form1", "form2" style test data
+- NO simulateIntelligentAgentExecution() methods
+- NO getMockStepResult() methods
+- NO "simulated user data" strings
+
+// ✅ ONLY ALLOWED IN:
+- Files under __tests__ directories
+- Files ending with .test.ts or .spec.ts
+- Files in test-utils/ directories
+```
+
+**ENFORCEMENT:**
+- ANY mock data outside tests = IMMEDIATE REJECTION
+- ALL agents must use REAL LLM calls
+- ALL data must come from REAL sources
+- ALL operations must be REAL executions
+
+**WHY THIS MATTERS:**
+- Mock data creates false confidence
+- Real systems need real data flow
+- Production issues only surface with real operations
+- User explicitly demanded: "You are forbidden to use 'simulated' data. We must have REAL data."
+
 ### 🔴 MANDATORY ARCHITECTURAL PATTERNS
 
 #### 1. **Dependency Injection Over Singletons** (CRITICAL)

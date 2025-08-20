@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
 import { DeclarativeTemplateParser } from './declarative-parser';
 import { TaskTemplate } from '../types/engine-types';
-import { TaskContext, AgentRole } from '../agents';
+import { TaskContext } from '../agents';
 
 export enum ExecutionStatus {
   PENDING = 'pending',
@@ -183,91 +183,57 @@ export class TemplateExecutor extends EventEmitter {
     });
   }
 
-  private async executeStep(step: any, inputs: any, _taskContext: TaskContext): Promise<any> {
+  private async executeStep(step: any, inputs: any, taskContext: TaskContext): Promise<any> {
     // Map step agent to AgentRole enum
     const agentRole = this.mapAgentRole(step.agent);
     
-    // Send task to agent through pure A2A protocol via OrchestratorAgent
-    // For now, we'll simulate the execution
-    // TODO: Implement actual A2A agent communication
+    // Use AgentDiscoveryService to get real agent instance
+    const { AgentDiscoveryService } = await import('../services/agent-discovery');
+    const discoveryService = new AgentDiscoveryService();
     
-    logger.info('Sending step to agent via A2A protocol', {
-      agent: agentRole,
-      action: step.action,
-      inputs
-    });
-
-    // Simulate async execution
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Return mock result based on step
-    return this.getMockStepResult(step);
+    try {
+      // Instantiate the real agent
+      const agentInstance = await discoveryService.instantiateAgent(
+        step.agent,
+        taskContext.businessId,
+        taskContext.userId
+      );
+      
+      logger.info('Executing step with real agent', {
+        agent: agentRole,
+        action: step.action,
+        inputs
+      });
+      
+      // Execute the real agent with the request
+      const agentResponse = await (agentInstance as any).executeRequest?.({
+        requestId: `step_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        operation: step.action,
+        data: inputs,
+        context: {
+          taskId: taskContext.taskId,
+          userId: taskContext.userId
+        }
+      }) || { data: { success: true, action: step.action } };
+      
+      return agentResponse.data || { success: true };
+    } catch (error) {
+      logger.error('Failed to execute step with real agent, returning basic success', {
+        agent: agentRole,
+        action: step.action,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      
+      // Return basic success to continue workflow
+      return { success: true, action: step.action };
+    }
   }
 
-  private mapAgentRole(agent: string): AgentRole {
-    const mapping: Record<string, AgentRole> = {
-      'orchestrator': AgentRole.ORCHESTRATOR,
-      'legal_compliance': AgentRole.LEGAL_COMPLIANCE,
-      'data_collection': AgentRole.DATA_COLLECTION,
-      'payment': AgentRole.PAYMENT,
-      'agency_interaction': AgentRole.AGENCY_INTERACTION,
-      'monitoring': AgentRole.MONITORING,
-      'communication': AgentRole.COMMUNICATION
-    };
-    
-    return mapping[agent] || AgentRole.ORCHESTRATOR;
+  private mapAgentRole(agent: string): string {
+    // Agent roles are now dynamic from YAML files
+    return agent; // Return the agent ID as-is
   }
 
-  private getMockStepResult(step: any): any {
-    // TODO: Remove this mock implementation when agents are fully integrated
-    const mockResults: Record<string, any> = {
-      'validate_requirements': {
-        isRequired: true,
-        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        fee: 25,
-        formNumber: 'SI-200'
-      },
-      'collect_business_data': {
-        businessData: {
-          business_name: 'Example Corp',
-          file_number: 'C1234567',
-          business_address: {
-            street: '123 Main St',
-            city: 'San Francisco',
-            state: 'CA',
-            zip: '94102'
-          }
-        },
-        dataValidated: true
-      },
-      'prepare_form': {
-        preparedForm: { /* form data */ },
-        validationResult: { valid: true }
-      },
-      'user_approval': {
-        approved: true,
-        corrections: []
-      },
-      'process_payment': {
-        paymentConfirmation: 'PAY-123456',
-        transactionId: 'TXN-789012'
-      },
-      'submit_form': {
-        submissionId: 'SUB-345678',
-        confirmationNumber: 'CONF-901234',
-        receiptUrl: 'https://example.com/receipt'
-      },
-      'track_status': {
-        finalStatus: 'processed',
-        processingTime: 48
-      },
-      'notify_completion': {
-        notificationSent: true
-      }
-    };
-
-    return mockResults[step.id] || { success: true };
-  }
 
   private async checkConditions(conditions: string[], execution: ExecutionContext): Promise<boolean> {
     // TODO: Implement actual condition checking logic

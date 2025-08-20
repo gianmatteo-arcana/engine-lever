@@ -1460,8 +1460,10 @@ export class DatabaseService {
             });
           }
         })
-        .subscribe((status: string) => {
-          if (status === 'SUBSCRIBED') {
+        .subscribe((status: any, error: any) => {
+          if (error) {
+            logger.error(`❌ Subscription error for ${schema}.${tableName}:`, error);
+          } else if (status === 'SUBSCRIBED') {
             logger.info(`✅ Successfully subscribed to ${schema}.${tableName} INSERT events`);
           } else {
             logger.info(`📡 Subscription status for ${schema}.${tableName}: ${status}`);
