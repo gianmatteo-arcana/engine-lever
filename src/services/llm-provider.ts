@@ -604,11 +604,23 @@ export class LLMProvider {
     this.validateRequestCapabilities(request, modelConfig);
     
     // Log the request (without sensitive content)
-    logger.info('LLM request initiated', {
+    logger.info('🚀 LLM REQUEST INITIATED', {
       model,
       provider: modelConfig.provider,
       temperature: request.temperature || modelConfig.defaultTemperature,
-      metadata: request.metadata
+      metadata: request.metadata,
+      promptLength: request.prompt?.length || 0,
+      hasMessages: !!request.messages,
+      hasAttachments: !!request.attachments,
+      promptPreview: request.prompt?.substring(0, 200)
+    });
+    
+    // DEBUG: Log full prompt for tracing
+    logger.debug('📝 Full LLM prompt', {
+      model,
+      prompt: request.prompt,
+      messages: request.messages,
+      systemPrompt: request.systemPrompt
     });
     
     try {
@@ -624,12 +636,21 @@ export class LLMProvider {
       }
       
       // Log success
-      logger.info('LLM request completed', {
+      const duration = Date.now() - startTime;
+      logger.info('✅ LLM REQUEST COMPLETED', {
         model: response.model,
         provider: response.provider,
         usage: response.usage,
-        duration: Date.now() - startTime,
-        metadata: request.metadata
+        duration: `${duration}ms`,
+        metadata: request.metadata,
+        responseLength: response.content.length,
+        responsePreview: response.content.substring(0, 200)
+      });
+      
+      // DEBUG: Log full response for tracing
+      logger.debug('📄 Full LLM response', {
+        model: response.model,
+        fullResponse: response.content
       });
       
       return response;
@@ -1012,6 +1033,13 @@ export class LLMProvider {
    * Complete using Anthropic Claude
    */
   private async completeWithAnthropic(request: LLMRequest, config: ModelConfig): Promise<LLMResponse> {
+    logger.info('🔍 ANTHROPIC: Starting completion request', {
+      hasClient: !!this.anthropicClient,
+      model: config.modelName,
+      apiKeyLength: process.env.ANTHROPIC_API_KEY ? process.env.ANTHROPIC_API_KEY.length : 0,
+      apiKeyPrefix: process.env.ANTHROPIC_API_KEY ? process.env.ANTHROPIC_API_KEY.substring(0, 10) + '...' : 'none'
+    });
+    
     if (!this.anthropicClient) {
       throw new Error('Anthropic client not initialized. Set ANTHROPIC_API_KEY environment variable.');
     }
@@ -1058,13 +1086,39 @@ export class LLMProvider {
       const systemPrompt = request.systemPrompt || 
         'You are a helpful AI assistant that follows instructions precisely and returns well-structured responses.';
       
-      // Create the completion
-      const response = await this.anthropicClient.messages.create({
+      // Log the request details
+      logger.info('🔍 ANTHROPIC: Preparing API call', {
         model: config.modelName,
-        messages,
-        max_tokens: request.maxTokens || config.maxTokens,
+        messageCount: messages.length,
+        maxTokens: request.maxTokens || config.maxTokens,
         temperature: request.temperature || config.defaultTemperature,
-        system: systemPrompt,
+        systemPromptLength: systemPrompt.length,
+        firstMessagePreview: JSON.stringify(messages[0]).substring(0, 200)
+      });
+      
+      // Create the completion with timeout wrapper
+      logger.info('🚀 ANTHROPIC: Making API call to messages.create()...');
+      const apiStartTime = Date.now();
+      
+      const response = await Promise.race([
+        this.anthropicClient.messages.create({
+          model: config.modelName,
+          messages,
+          max_tokens: request.maxTokens || config.maxTokens,
+          temperature: request.temperature || config.defaultTemperature,
+          system: systemPrompt,
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Anthropic API call timed out after 30 seconds')), 30000)
+        )
+      ]) as any;
+      
+      const apiDuration = Date.now() - apiStartTime;
+      logger.info('✅ ANTHROPIC: API call completed', {
+        duration: `${apiDuration}ms`,
+        model: response.model,
+        stopReason: response.stop_reason,
+        usage: response.usage
       });
       
       // Extract text content
@@ -1097,6 +1151,13 @@ export class LLMProvider {
       };
       
     } catch (error: any) {
+      logger.error('❌ ANTHROPIC: API call failed', {
+        error: error.message,
+        stack: error.stack,
+        status: error.status,
+        type: error.type,
+        details: JSON.stringify(error)
+      });
       this.handleProviderError(error, 'Anthropic');
       throw error;
     }

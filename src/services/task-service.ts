@@ -122,26 +122,36 @@ export class TaskService {
           }
           
           const templatePath = path.join(__dirname, '../../config/templates', `${templateName}.yaml`);
+          logger.info('🔍 Looking for template file', {
+            templateId: request.templateId,
+            templateName,
+            templatePath,
+            exists: fs.existsSync(templatePath)
+          });
+          
           if (fs.existsSync(templatePath)) {
             const templateContent = await fs.promises.readFile(templatePath, 'utf8');
             const parsed = yaml.parse(templateContent);
             taskDefinition = parsed.task_template || parsed;
-            logger.info('Loaded task template', {
+            logger.info('✅ Loaded task template successfully', {
               templateId: request.templateId,
               templateFile: templateName,
-              hasGoals: !!taskDefinition?.goals
+              hasGoals: !!taskDefinition?.goals,
+              goalCount: taskDefinition?.goals?.primary?.length || 0,
+              metadata: taskDefinition?.metadata
             });
           } else {
-            logger.warn('Template file not found', {
+            logger.warn('⚠️ Template file not found', {
               templateId: request.templateId,
               templateFile: templateName,
               path: templatePath
             });
           }
         } catch (error) {
-          logger.warn('Failed to load task template', {
+          logger.error('❌ Failed to load task template', {
             templateId: request.templateId,
-            error: error instanceof Error ? error.message : String(error)
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined
           });
         }
       }
