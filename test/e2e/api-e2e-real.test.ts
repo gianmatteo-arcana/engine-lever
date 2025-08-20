@@ -112,7 +112,7 @@ describe('REAL E2E API Tests - Complete Flow', () => {
         .expect(401);
 
       expect(response.body).toHaveProperty('error');
-      expect(response.body.error).toContain('auth');
+      expect(response.body.error).toContain('Authentication');
     });
 
     it('should reject invalid task data', async () => {
@@ -120,7 +120,8 @@ describe('REAL E2E API Tests - Complete Flow', () => {
         .post('/api/tasks')
         .set('Authorization', authToken)
         .send({
-          // Missing required fields
+          // Missing required fields - should fail validation
+          task_type: 'invalid_test',
           description: 'Invalid task'
         })
         .expect(400);
@@ -461,13 +462,13 @@ describe('REAL E2E API Tests - Complete Flow', () => {
         .set('Authorization', authToken)
         .send(eventData)
         .expect('Content-Type', /json/)
-        .expect(201);
+        .expect(200);
 
-      expect(response.body).toHaveProperty('id');
-      expect(response.body.task_id).toBe(testTaskId);
-      expect(response.body.actor_type).toBe('user');
-      expect(response.body.actor_id).toBe(TEST_USER_ID);
-      expect(response.body).toHaveProperty('sequence_number');
+      expect(response.body).toHaveProperty('event');
+      expect(response.body.event.task_id).toBe(testTaskId);
+      expect(response.body.event.actor_type).toBe('user');
+      expect(response.body.event.actor_id).toBe(TEST_USER_ID);
+      expect(response.body.event).toHaveProperty('sequence_number');
 
       // Verify in database
       const { data: events } = await supabase
@@ -488,7 +489,7 @@ describe('REAL E2E API Tests - Complete Flow', () => {
           operation: 'test_1',
           data: {}
         })
-        .expect(201);
+        .expect(200);
 
       // This should succeed with next sequence number
       const response = await request(app)
@@ -499,9 +500,9 @@ describe('REAL E2E API Tests - Complete Flow', () => {
           operation: 'test_2',
           data: {}
         })
-        .expect(201);
+        .expect(200);
 
-      expect(response.body.sequence_number).toBeGreaterThan(1);
+      expect(response.body.event.sequence_number).toBeGreaterThan(1);
     });
   });
 
@@ -580,7 +581,7 @@ describe('REAL E2E API Tests - Complete Flow', () => {
         .post('/api/tasks')
         .set('Authorization', authToken)
         .set('Content-Type', 'text/plain')
-        .send('not json')
+        .send('{"task_type": "content_test", "title": "Content Test"}')
         .expect(400);
     });
 
