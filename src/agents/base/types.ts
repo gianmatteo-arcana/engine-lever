@@ -1,14 +1,7 @@
 import { z } from 'zod';
 
-export enum AgentRole {
-  ORCHESTRATOR = 'orchestrator',
-  LEGAL_COMPLIANCE = 'legal_compliance',
-  DATA_COLLECTION = 'data_collection',
-  PAYMENT = 'payment',
-  AGENCY_INTERACTION = 'agency_interaction',
-  MONITORING = 'monitoring',
-  COMMUNICATION = 'communication'
-}
+// AgentRole is now dynamic - determined from YAML files
+export type AgentRole = string; // Dynamic agent IDs from YAML configurations
 
 export enum AgentStatus {
   IDLE = 'idle',
@@ -27,8 +20,8 @@ export enum TaskPriority {
 
 export const AgentMessageSchema = z.object({
   id: z.string(),
-  from: z.nativeEnum(AgentRole),
-  to: z.nativeEnum(AgentRole),
+  from: z.string(), // Dynamic agent ID from YAML
+  to: z.string(), // Dynamic agent ID from YAML
   type: z.enum(['request', 'response', 'notification', 'error']),
   timestamp: z.date(),
   payload: z.any(),
@@ -51,7 +44,7 @@ export const TaskContextSchema = z.object({
   metadata: z.record(z.any()).default({}),
   auditTrail: z.array(z.object({
     timestamp: z.date(),
-    agent: z.nativeEnum(AgentRole),
+    agent: z.string(), // Dynamic agent ID from YAML
     action: z.string(),
     details: z.any().optional()
   })).default([])

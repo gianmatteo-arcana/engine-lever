@@ -37,8 +37,11 @@ cp .env.example .env
 # Check database connection
 npm run db:check
 
-# Start development server
+# Start development server (with watch mode - auto-restarts on file changes)
 npm run dev
+
+# Start development server (without watch mode - for long-running operations)
+npm run dev:no-watch
 
 # Run tests
 npm test
@@ -106,6 +109,22 @@ All tables are defined in frontend migrations but used by this backend:
 - `agent_metrics` - Performance tracking
 
 ## Development
+
+### Important: Server Watch Mode
+
+The development server runs in watch mode by default (`npm run dev`), which automatically restarts when files change. This can interrupt long-running operations like LLM API calls.
+
+**For long-running operations (e.g., task orchestration with multiple LLM calls):**
+```bash
+# Use non-watch mode to prevent interruptions
+npm run dev:no-watch
+```
+
+**For normal development:**
+```bash
+# Use watch mode for automatic reloading
+npm run dev
+```
 
 ### Testing
 ```bash

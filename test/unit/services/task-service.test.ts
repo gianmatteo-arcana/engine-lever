@@ -41,7 +41,7 @@ jest.mock('../../../src/services/state-computer', () => ({
 }));
 jest.mock('../../../src/services/configuration-manager', () => ({
   ConfigurationManager: jest.fn().mockImplementation(() => ({
-    loadTemplate: jest.fn()
+    loadAgentConfig: jest.fn()
   }))
 }));
 jest.mock('../../../src/utils/logger');
@@ -88,8 +88,8 @@ describe('TaskService - Universal Task Creation', () => {
     mockDbService = DatabaseService.getInstance() as jest.Mocked<DatabaseService>;
     mockConfigManager = new ConfigurationManager() as jest.Mocked<ConfigurationManager>;
     
-    // Create TaskService with injected mocks
-    taskService = new TaskService(mockDbService, mockConfigManager);
+    // Create TaskService with injected mock
+    taskService = new TaskService(mockDbService);
     
     // Mock getUserClient to return a mock client with database operations
     const mockTableOps = {
@@ -120,7 +120,6 @@ describe('TaskService - Universal Task Creation', () => {
     mockDbService.getUserClient = jest.fn().mockReturnValue(mockUserClient);
     
     // Default mock implementations
-    mockConfigManager.loadTemplate.mockResolvedValue(mockTemplate);
     mockDbService.createContext = jest.fn().mockResolvedValue({ id: 'context-123' } as any);
     mockDbService.addContextEvent = jest.fn().mockResolvedValue({ id: 'event-123' } as any);
     mockDbService.createContextHistoryEntry = jest.fn().mockResolvedValue({ id: 'history-123' } as any);
@@ -157,13 +156,13 @@ describe('TaskService - Universal Task Creation', () => {
         const request = { ...mockRequest, templateId };
         const template = { ...mockTemplate, id: templateId };
         
-        mockConfigManager.loadTemplate.mockResolvedValue(template);
+        // No template loading - agents are self-directed
         mockDbService.createContext.mockResolvedValue({ id: 'context-123' } as any);
         mockDbService.createContextHistoryEntry.mockResolvedValue({ id: 'entry-123' } as any);
         
         const context = await taskService.create(request);
         
-        // Verify universal structure regardless of template
+        // Verify universal structure regardless of task type
         expect(context).toMatchObject({
           contextId: expect.any(String),
           taskTemplateId: templateId,
@@ -173,7 +172,7 @@ describe('TaskService - Universal Task Creation', () => {
             phase: 'initialization',
             completeness: 0
           },
-          templateSnapshot: template
+          templateSnapshot: undefined
         });
         // History should have initial entry
         expect(context.history).toHaveLength(1);
@@ -182,25 +181,23 @@ describe('TaskService - Universal Task Creation', () => {
           actor: { type: 'system', id: 'task_service' }
         });
         
-        // Verify all templates use same flow
-        expect(mockConfigManager.loadTemplate).toHaveBeenCalledWith(templateId);
+        // Verify all task types use same flow
         expect(mockDbService.getUserClient).toHaveBeenCalled();
       }
     });
 
-    it('should load template from configuration (PRD Line 46)', async () => {
-      mockConfigManager.loadTemplate.mockResolvedValue(mockTemplate);
+    it('should create task without loading templates', async () => {
       mockDbService.createContext.mockResolvedValue({ id: 'context-123' } as any);
       mockDbService.createContextHistoryEntry.mockResolvedValue({ id: 'entry-123' } as any);
       
-      await taskService.create(mockRequest);
+      const context = await taskService.create(mockRequest);
       
-      expect(mockConfigManager.loadTemplate).toHaveBeenCalledWith('test_template');
-      expect(mockConfigManager.loadTemplate).toHaveBeenCalledTimes(1);
+      // Verify no template loading - agents are self-directed
+      expect(context.templateSnapshot).toBeUndefined();
+      expect(context.taskTemplateId).toBe('test_template');
     });
 
     it('should create immutable TaskContext (PRD Lines 145-220)', async () => {
-      mockConfigManager.loadTemplate.mockResolvedValue(mockTemplate);
       mockDbService.createContext.mockResolvedValue({ id: 'context-123' } as any);
       mockDbService.createContextHistoryEntry.mockResolvedValue({ id: 'entry-123' } as any);
       
@@ -218,14 +215,13 @@ describe('TaskService - Universal Task Creation', () => {
         operation: 'task_created',
         actor: { type: 'system', id: 'task_service' }
       });
-      expect(context.templateSnapshot).toEqual(mockTemplate);
+      expect(context.templateSnapshot).toBeUndefined(); // No templates - agents are self-directed
       
       // Note: Object.freeze not implemented in current code but should be
       // expect(Object.isFrozen(context.templateSnapshot)).toBe(true);
     });
 
     it('should persist TaskContext to database', async () => {
-      mockConfigManager.loadTemplate.mockResolvedValue(mockTemplate);
       mockDbService.createContext.mockResolvedValue({ id: 'context-123' } as any);
       mockDbService.createContextHistoryEntry.mockResolvedValue({ id: 'entry-123' } as any);
       
@@ -237,19 +233,12 @@ describe('TaskService - Universal Task Creation', () => {
       expect(mockUserClient.from).toHaveBeenCalledWith('task_contexts');
     });
 
-    it('should handle missing template gracefully', async () => {
-      mockConfigManager.loadTemplate.mockResolvedValue(null as any);
-      
-      // Mock database fallback also returning null
-      // Update the mock to return null for the template lookup
+    it('should handle database errors gracefully', async () => {
+      // Mock database error on insert
       const mockTableOps = {
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
-          data: null,
-          error: { message: 'Template not found' }
-        }),
-        insert: jest.fn().mockResolvedValue({ error: null })
+        insert: jest.fn().mockResolvedValue({ 
+          error: { message: 'Database connection failed' }
+        })
       };
       
       const mockUserClient = {
@@ -259,10 +248,7 @@ describe('TaskService - Universal Task Creation', () => {
       mockDbService.getUserClient = jest.fn().mockReturnValue(mockUserClient);
       
       await expect(taskService.create(mockRequest))
-        .rejects.toThrow('Template not found: test_template');
-      
-      // Verify no partial data persisted
-      expect(mockTableOps.insert).not.toHaveBeenCalled();
+        .rejects.toThrow('Failed to persist task context');
     });
   });
 

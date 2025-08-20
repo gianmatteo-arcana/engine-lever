@@ -42,10 +42,7 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
       taskCount: tasks.length 
     });
     
-    res.json({
-      tasks: tasks,
-      count: tasks.length
-    });
+    res.json(tasks);
     
   } catch (error) {
     logger.error('Failed to fetch tasks', { 
@@ -97,15 +94,36 @@ router.post('/create', requireAuth, async (req: AuthenticatedRequest, res) => {
     
     const input = CreateTaskSchema.parse(req.body);
     
-    logger.info('Creating universal task', {
+    logger.info('🎯 Creating universal task', {
       userId,
       templateId: input.templateId,
-      source: input.metadata?.source || 'api'
+      source: input.metadata?.source || 'api',
+      timestamp: new Date().toISOString(),
+      hasInitialData: !!input.initialData,
+      initialDataKeys: input.initialData ? Object.keys(input.initialData) : []
+    });
+    
+    // DEBUG: Log full request
+    logger.debug('📥 Full task creation request', {
+      body: req.body,
+      headers: {
+        authorization: req.headers.authorization ? 'Bearer ***' : 'none'
+      }
     });
     
     // Get services
     const taskService = TaskService.getInstance();
-    const orchestrator = OrchestratorAgent.getInstance();
+    logger.info('📦 TaskService instance obtained');
+    
+    try {
+      OrchestratorAgent.getInstance();
+      logger.info('🤖 OrchestratorAgent instance obtained');
+    } catch (orchError) {
+      logger.error('❌ Failed to get OrchestratorAgent instance', {
+        error: orchError instanceof Error ? orchError.message : String(orchError),
+        stack: orchError instanceof Error ? orchError.stack : undefined
+      });
+    }
     
     // Create task through universal service
     const context = await taskService.create({
@@ -120,13 +138,33 @@ router.post('/create', requireAuth, async (req: AuthenticatedRequest, res) => {
       }
     });
     
-    // Start orchestration asynchronously
-    orchestrator.orchestrateTask(context).catch(error => {
-      logger.error('Orchestration failed', {
-        contextId: context.contextId,
-        error: error.message
-      });
+    logger.info('📝 Task context created', {
+      contextId: context.contextId,
+      hasMetadata: !!context.metadata,
+      hasTaskDefinition: !!context.metadata?.taskDefinition
     });
+    
+    // Start orchestration asynchronously
+    try {
+      const orchestrator = OrchestratorAgent.getInstance();
+      logger.info('🚀 Calling orchestrator.orchestrateTask()...');
+      
+      orchestrator.orchestrateTask(context).catch(error => {
+        logger.error('❌ Orchestration promise rejected', {
+          contextId: context.contextId,
+          error: error.message,
+          stack: error.stack
+        });
+      });
+      
+      logger.info('✅ orchestrateTask() called successfully (async)');
+    } catch (orchError) {
+      logger.error('❌ Failed to start orchestration', {
+        contextId: context.contextId,
+        error: orchError instanceof Error ? orchError.message : String(orchError),
+        stack: orchError instanceof Error ? orchError.stack : undefined
+      });
+    }
     
     res.json({
       success: true,
@@ -207,6 +245,12 @@ router.get('/:contextId', requireAuth, async (req: AuthenticatedRequest, res) =>
   try {
     const { contextId } = req.params;
     const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
+    
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(contextId)) {
+      return res.status(400).json({ error: 'Invalid UUID format' });
+    }
     
     logger.info('Getting task context', { contextId });
     
@@ -682,26 +726,14 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
     
     const dbService = DatabaseService.getInstance();
     
-    // Load task definition (goals and requirements) and copy by value to task
-    let taskDefinition = {};
-    try {
-      const templateLoader = require('../templates/declarative-parser').DeclarativeTemplateParser.getInstance();
-      const template = await templateLoader.loadTemplate(templateId || taskType);
-      taskDefinition = {
-        id: template.id,
-        goals: template.goals || [],
-        title: template.title,
-        description: template.description
-      };
-    } catch (error) {
-      logger.warn('Task definition not found, using minimal defaults', { templateId, taskType });
-      taskDefinition = {
-        id: templateId || taskType,
-        goals: ['Complete the task successfully'],
-        title: `${taskType} Task`,
-        description: `Standard ${taskType} workflow`
-      };
-    }
+    // Tasks are self-contained - agents reason from their YAML configs
+    // No templates needed - just create minimal task definition
+    const taskDefinition = {
+      id: templateId || taskType,
+      goals: ['Complete the task successfully'],
+      title: `${taskType} Task`,
+      description: `Standard ${taskType} workflow`
+    };
     
     // Create task with definition embedded in metadata
     const taskMetadata = {
@@ -1050,6 +1082,45 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   } catch (error) {
     logger.error('Failed to list tasks', error);
     res.status(500).json({ error: 'Failed to list tasks' });
+  }
+});
+
+/**
+ * PATCH /api/tasks/:id - Partial Update
+ * Update specific fields of an existing task
+ */
+router.patch('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.userId!;
+    
+    logger.info('Partially updating task', { taskId: id, userId });
+    
+    const dbService = DatabaseService.getInstance();
+    
+    // Verify user owns this task first
+    const existingTask = await dbService.getTask(userId, id);
+    if (!existingTask) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    // Update the task with provided fields
+    const updatedTask = await dbService.updateTask(userId, id, req.body);
+    
+    logger.info('Task partially updated', { taskId: id, userId });
+    
+    res.json(updatedTask);
+  } catch (error) {
+    logger.error('Failed to update task', { 
+      taskId: req.params.id,
+      userId: req.userId,
+      error: (error as Error).message 
+    });
+    
+    res.status(500).json({
+      error: 'Failed to update task',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 

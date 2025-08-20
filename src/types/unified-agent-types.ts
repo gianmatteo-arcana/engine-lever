@@ -113,12 +113,7 @@ export function toEngineTaskContext(agentContext: AgentTaskContext): EngineTaskC
       data: {}
     },
     history: agentContext.history || [],
-    templateSnapshot: agentContext.templateSnapshot || {
-      id: '',
-      name: '',
-      version: '',
-      steps: []
-    },
+    // templateSnapshot omitted - agents use task data only
     metadata: {
       ...agentContext.metadata,
       agentContexts: agentContext.agentContexts,
@@ -138,8 +133,8 @@ export type { TaskContext } from './engine-types';
 // Re-export engine types for backward compatibility
 export type { TaskContext as EngineTaskContext } from './engine-types';
 
-// Helper function to ensure required context fields
-export function ensureAgentContext(context: AgentTaskContext): Required<AgentTaskContext> {
+// Helper function to ensure required context fields (excluding optional templateSnapshot)
+export function ensureAgentContext(context: AgentTaskContext): AgentTaskContext {
   return {
     ...context,
     agentContexts: context.agentContexts || {},
@@ -168,12 +163,7 @@ export function ensureAgentContext(context: AgentTaskContext): Required<AgentTas
       data: {}
     },
     history: context.history || [],
-    templateSnapshot: context.templateSnapshot || {
-      id: '',
-      name: '',
-      version: '',
-      steps: []
-    },
+    // templateSnapshot omitted - agents use task data only
     metadata: context.metadata || {}
   };
 }
@@ -207,24 +197,7 @@ export function createMinimalContext(overrides: Partial<AgentTaskContext> = {}):
       data: {}
     },
     history: overrides.history || [],
-    templateSnapshot: overrides.templateSnapshot || {
-      id: '',
-      version: '',
-      metadata: {
-        name: '',
-        description: '',
-        category: ''
-      },
-      goals: {
-        primary: [],
-        secondary: []
-      },
-      phases: [],
-      monitoring: {
-        checkpoints: [],
-        successCriteria: []
-      }
-    } as any,
+    // templateSnapshot omitted - agents use task data only
     metadata: overrides.metadata || {}
   };
 }

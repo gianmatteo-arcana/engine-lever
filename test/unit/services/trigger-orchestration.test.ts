@@ -14,6 +14,8 @@ import { DatabaseService } from '../../../src/services/database';
 // Mock dependencies
 jest.mock('../../../src/services/database');
 jest.mock('../../../src/utils/logger');
+jest.mock('../../../src/services/credential-vault');
+jest.mock('../../../src/services/tool-chain');
 jest.mock('../../../src/services/llm-provider', () => ({
   LLMProvider: {
     getInstance: jest.fn().mockReturnValue({
@@ -48,6 +50,8 @@ describe('Trigger-Based Task Orchestration', () => {
       createTask: jest.fn(),
       updateTask: jest.fn(),
       addContextEvent: jest.fn(),
+      createTaskContextEvent: jest.fn().mockResolvedValue({ id: 'event_123' }),
+      notifyTaskContextUpdate: jest.fn().mockResolvedValue(undefined),
       getContext: jest.fn(),
       createContext: jest.fn(),
       getServiceClient: jest.fn().mockReturnValue({

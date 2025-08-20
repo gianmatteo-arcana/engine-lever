@@ -106,19 +106,11 @@ describe('Service Integration Tests', () => {
       configManager = new ConfigurationManager(testConfigPath);
     });
 
-    test('should handle missing template gracefully', async () => {
-      try {
-        await configManager.loadTemplate('non_existent_template');
-      } catch (error: any) {
-        expect(error.message).toContain('Template not found');
-      }
-    });
-
     test('should handle missing agent config gracefully', async () => {
       try {
         await configManager.loadAgentConfig('non_existent_agent');
       } catch (error: any) {
-        expect(error.message).toContain('not found');
+        expect(error.message).toContain('Agent config not found');
       }
     });
 

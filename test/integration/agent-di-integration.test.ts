@@ -33,6 +33,24 @@ import { logger } from '../../src/utils/logger';
 // Mock dependencies
 jest.mock('../../src/services/database');
 jest.mock('../../src/utils/logger');
+jest.mock('../../src/services/credential-vault');
+jest.mock('../../src/services/tool-chain');
+jest.mock('../../src/services/llm-provider', () => ({
+  LLMProvider: {
+    getInstance: jest.fn().mockReturnValue({
+      complete: jest.fn().mockResolvedValue({
+        status: 'completed',
+        contextUpdate: {
+          operation: 'test_operation',
+          data: { result: 'success' },
+          reasoning: 'Test operation completed',
+          confidence: 0.9
+        }
+      }),
+      isConfigured: jest.fn().mockReturnValue(true)
+    })
+  }
+}));
 jest.mock('../../src/services/real-llm-provider');
 jest.mock('fs');
 jest.mock('yaml');
@@ -48,6 +66,7 @@ describe('Agent DI Integration', () => {
     // Mock DatabaseService.getInstance()
     mockDbService = {
       notifyTaskContextUpdate: jest.fn().mockResolvedValue(undefined),
+      createTaskContextEvent: jest.fn().mockResolvedValue({ id: 'event_123' }),
       listenForTaskUpdates: jest.fn().mockResolvedValue(() => {}),
       query: jest.fn(),
       transaction: jest.fn(),

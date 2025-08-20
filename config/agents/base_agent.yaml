@@ -94,6 +94,34 @@ agent_template:
         "reasoning": "Clear explanation of decision process",
         "confidence": 0.85
       }
+    
+    # MANDATORY: Complete Agent Response Schema
+    agent_response_schema: |
+      Your response MUST be valid JSON matching this EXACT schema:
+      {
+        "status": "completed|needs_input|delegated|error",
+        "contextUpdate": {
+          "operation": "descriptive_operation_name",
+          "data": { 
+            "relevant": "structured data",
+            "results": "action outcomes"
+          },
+          "reasoning": "Clear explanation of decision process",
+          "confidence": 0.85
+        },
+        "uiRequest": {
+          "type": "form|approval|notification|none",
+          "title": "UI element title",
+          "fields": [],
+          "instructions": "Clear user guidance"
+        }
+      }
+      
+      STATUS VALUES:
+      - "completed": Task finished successfully
+      - "needs_input": Requires user input to proceed  
+      - "delegated": Passed to another agent
+      - "error": Failed with error (include error details in reasoning)
   
   # Error handling patterns
   error_patterns:

@@ -109,33 +109,9 @@ export class EventListener {
    */
   private async setupPostgreSQLListener(): Promise<void> {
     try {
-      // Listen to new user registrations (auth.users table)
-      await this.dbService.listenToTableInserts('users', 'auth', async (newUser: any) => {
-        try {
-          logger.info('🆕 New user registration detected', {
-            userId: newUser.id,
-            email: newUser.email
-          });
-          
-          // Convert to SystemEvent format
-          const event: SystemEvent = {
-            eventType: 'USER_REGISTERED',
-            contextId: `user_${newUser.id}`, // Add contextId for user registration
-            userId: newUser.id,
-            email: newUser.email,
-            timestamp: newUser.created_at || new Date().toISOString(),
-            metadata: {
-              email_confirmed: newUser.email_confirmed_at ? true : false,
-              provider: newUser.app_metadata?.provider || 'email'
-            }
-          };
-          
-          await this.handleSystemEvent(event);
-        } catch (error) {
-          logger.error('Failed to process new user event', { error, newUser });
-        }
-      });
-
+      // NOTE: Listening to auth.users table is not available through Realtime
+      // User registration events should come through a different mechanism
+      
       // Listen to new task creation (tasks table)
       await this.dbService.listenToTableInserts('tasks', 'public', async (newTask: any) => {
         try {
@@ -157,6 +133,8 @@ export class EventListener {
             status: newTask.status,
             priority: newTask.priority,
             title: newTask.title,
+            description: newTask.description,
+            metadata: newTask.metadata, // ← Include task metadata (contains copied template content)
             timestamp: newTask.created_at || new Date().toISOString()
           };
           
@@ -166,7 +144,7 @@ export class EventListener {
         }
       });
 
-      logger.info('✅ EventListener subscribed to Supabase Realtime: auth.users INSERT, public.tasks INSERT');
+      logger.info('✅ EventListener subscribed to Supabase Realtime: public.tasks INSERT');
     } catch (error) {
       logger.error('Failed to set up Realtime listeners', error);
       throw error;
@@ -212,8 +190,8 @@ export class EventListener {
     });
 
     try {
-      // Create a simple TaskContext object for orchestration
-      // We'll use task_context_events table for storing events
+      // Create TaskContext object for orchestration using ONLY task data
+      // Template content should already be copied to task metadata during creation
       const taskContext = {
         contextId: event.taskId, // Use the task ID as context ID
         taskTemplateId: event.templateId || event.taskType || 'onboarding',
@@ -227,48 +205,15 @@ export class EventListener {
             taskId: event.taskId,
             userId: event.userId,
             title: event.title || 'Task',
-            taskType: event.taskType,
-            metadata: event.metadata || {}
+            description: event.description || 'No description provided',
+            taskType: event.taskType
           }
         },
         history: [],
-        templateSnapshot: {
-          id: event.templateId || event.taskType || 'onboarding',
-          version: '1.0.0',
-          metadata: {
-            name: event.title || 'Task',
-            description: 'Task execution'
-          },
-          goals: {
-            primary: [
-              { id: 'complete_task', description: 'Complete the task', required: true }
-            ],
-            secondary: []
-          },
-          phases: [
-            {
-              id: 'initialization',
-              name: 'Initialization',
-              description: 'Task setup',
-              requiredCapabilities: ['orchestrator'],
-              estimatedDurationMinutes: 1
-            },
-            {
-              id: 'execution',
-              name: 'Execution',
-              description: 'Execute task',
-              requiredCapabilities: ['execution'],
-              estimatedDurationMinutes: 10
-            },
-            {
-              id: 'completion',
-              name: 'Completion',
-              description: 'Complete task',
-              requiredCapabilities: ['orchestrator'],
-              estimatedDurationMinutes: 1
-            }
-          ]
-        }
+        // Use task metadata which contains copied template content (taskDefinition)
+        metadata: event.metadata || {},
+        // No templateSnapshot - agents should only work with task data
+        templateSnapshot: null
       };
 
       // Record the orchestration initiation event

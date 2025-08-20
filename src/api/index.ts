@@ -1,17 +1,12 @@
 import { Router } from 'express';
 import { logger } from '../utils/logger';
 import { OrchestratorAgent } from '../agents/OrchestratorAgent';
-import { TemplateExecutor } from '../templates/executor';
+// TemplateExecutor removed - orchestration handled by OrchestratorAgent
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import tasksRoutes from './tasks';
 
 const router = Router();
-const templateExecutor = new TemplateExecutor();
-
-// Initialize template executor
-templateExecutor.initialize().catch(error => {
-  logger.error('Failed to initialize template executor', error);
-});
+// TemplateExecutor removed - orchestration handled by OrchestratorAgent
 
 // Health check for API (no auth required)
 router.get('/health', (req, res) => {
@@ -30,33 +25,12 @@ router.get('/health', (req, res) => {
 // The tasks router at /api/tasks provides all task-related endpoints
 
 
-// Get execution status (requires auth, verifies ownership)
+// Get execution status (removed - TemplateExecutor no longer exists)
+// Orchestration is handled by OrchestratorAgent and tracked in task_context_events
 router.get('/executions/:executionId', requireAuth, async (req: AuthenticatedRequest, res) => {
-  const { executionId } = req.params;
-  const userId = req.userId!;
-  
-  const execution = templateExecutor.getExecution(executionId);
-  
-  if (!execution) {
-    return res.status(404).json({ error: 'Execution not found' });
-  }
-  
-  // Verify the execution belongs to the user
-  if (execution.taskContext?.userId !== userId) {
-    return res.status(403).json({ 
-      error: 'Forbidden',
-      message: 'You do not have access to this execution'
-    });
-  }
-  
-  res.json({
-    executionId,
-    status: execution.status,
-    currentStep: execution.currentStep,
-    completedSteps: execution.completedSteps,
-    errors: execution.errors,
-    startTime: execution.startTime,
-    endTime: execution.endTime
+  return res.status(404).json({ 
+    error: 'TemplateExecutor has been removed',
+    message: 'Orchestration is now handled by OrchestratorAgent' 
   });
 });
 
@@ -307,9 +281,9 @@ router.get('/queues/status', async (req, res) => {
           error: 0 // Errors are handled at task level
         },
         executions: {
-          running: templateExecutor.getAllExecutions().filter(e => e.status === 'running').length,
-          completed: templateExecutor.getAllExecutions().filter(e => e.status === 'completed').length,
-          failed: templateExecutor.getAllExecutions().filter(e => e.status === 'failed').length
+          running: 0, // TemplateExecutor removed - using OrchestratorAgent
+          completed: 0, // Task tracking is now in task_context_events table
+          failed: 0
         }
       },
       timestamp: new Date().toISOString()

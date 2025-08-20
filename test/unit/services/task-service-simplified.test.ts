@@ -45,4 +45,109 @@ describe('TaskService - Core Functionality', () => {
       }
     });
   });
+
+  describe('Task Status Update', () => {
+    let mockDbService: any;
+    let mockClient: any;
+
+    beforeEach(() => {
+      // Create mock database client
+      mockClient = {
+        from: jest.fn().mockReturnThis(),
+        update: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis()
+      };
+
+      // Create mock database service
+      mockDbService = {
+        getServiceClient: jest.fn().mockReturnValue(mockClient)
+      };
+
+      // Create task service with mock
+      taskService = new TaskService(mockDbService);
+    });
+
+    it('should update task status to completed', async () => {
+      const taskId = 'test-task-123';
+      const completedAt = new Date().toISOString();
+      
+      // Mock successful update
+      mockClient.eq.mockResolvedValue({ error: null });
+
+      await taskService.updateTaskStatus(taskId, 'completed', completedAt);
+
+      expect(mockDbService.getServiceClient).toHaveBeenCalled();
+      expect(mockClient.from).toHaveBeenCalledWith('tasks');
+      expect(mockClient.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'completed',
+          completed_at: completedAt,
+          updated_at: expect.any(String)
+        })
+      );
+      expect(mockClient.eq).toHaveBeenCalledWith('id', taskId);
+    });
+
+    it('should update task status to processing without completed_at', async () => {
+      const taskId = 'test-task-456';
+      
+      // Mock successful update
+      mockClient.eq.mockResolvedValue({ error: null });
+
+      await taskService.updateTaskStatus(taskId, 'processing');
+
+      expect(mockClient.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'processing',
+          updated_at: expect.any(String)
+        })
+      );
+      expect(mockClient.update).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          completed_at: expect.anything()
+        })
+      );
+    });
+
+    it('should update task status to failed', async () => {
+      const taskId = 'test-task-789';
+      
+      // Mock successful update
+      mockClient.eq.mockResolvedValue({ error: null });
+
+      await taskService.updateTaskStatus(taskId, 'failed');
+
+      expect(mockClient.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'failed',
+          updated_at: expect.any(String)
+        })
+      );
+    });
+
+    it('should throw error when database update fails', async () => {
+      const taskId = 'test-task-error';
+      const errorMessage = 'Database connection failed';
+      
+      // Mock failed update
+      mockClient.eq.mockResolvedValue({ 
+        error: { message: errorMessage } 
+      });
+
+      await expect(
+        taskService.updateTaskStatus(taskId, 'completed')
+      ).rejects.toThrow(`Failed to update task status: ${errorMessage}`);
+    });
+
+    it('should handle unexpected errors gracefully', async () => {
+      const taskId = 'test-task-unexpected';
+      
+      // Mock unexpected error
+      mockClient.eq.mockRejectedValue(new Error('Unexpected error'));
+
+      await expect(
+        taskService.updateTaskStatus(taskId, 'completed')
+      ).rejects.toThrow('Unexpected error');
+    });
+  });
 });
