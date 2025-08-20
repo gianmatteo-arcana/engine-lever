@@ -915,12 +915,48 @@ Remember: You are an autonomous agent following the universal principles while a
     // Build merged prompt from base + specialized templates
     const fullPrompt = this.buildInheritedPrompt(request);
     
+    // Log agent reasoning request
+    logger.info('🤖 AGENT LLM REQUEST', {
+      agentType: (this.specializedTemplate.agent as any)?.type || this.specializedTemplate.agent?.role || 'unknown',
+      agentId: this.specializedTemplate.agent?.id || 'unknown',
+      taskId: request.taskContext?.contextId,
+      promptLength: fullPrompt.length,
+      model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
+      promptPreview: fullPrompt.substring(0, 500)
+    });
+    
+    // DEBUG: Log full prompt
+    logger.debug('📝 Full agent prompt', {
+      agentId: this.specializedTemplate.agent?.id,
+      fullPrompt
+    });
+    
+    const llmStartTime = Date.now();
+    
     // Call LLM with merged prompt
     const llmResult = await this.llmProvider.complete({
       prompt: fullPrompt,
       model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
       temperature: 0.3,
       systemPrompt: this.specializedTemplate.agent?.mission || 'You are a helpful AI assistant that follows instructions precisely.'
+    });
+    
+    const llmDuration = Date.now() - llmStartTime;
+    
+    // Log agent reasoning response
+    logger.info('🧠 AGENT LLM RESPONSE', {
+      agentType: (this.specializedTemplate.agent as any)?.type || this.specializedTemplate.agent?.role || 'unknown',
+      agentId: this.specializedTemplate.agent?.id || 'unknown',
+      taskId: request.taskContext?.contextId,
+      responseLength: llmResult.content.length,
+      duration: `${llmDuration}ms`,
+      responsePreview: llmResult.content.substring(0, 500)
+    });
+    
+    // DEBUG: Log full response
+    logger.debug('📄 Full agent response', {
+      agentId: this.specializedTemplate.agent?.id,
+      fullResponse: llmResult.content
     });
     
     // Parse LLM response as JSON
@@ -938,6 +974,15 @@ Remember: You are an autonomous agent following the universal principles while a
         parseError: parseError instanceof Error ? parseError.message : String(parseError)
       });
       throw new Error(`LLM returned invalid JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+    }
+    
+    // Log parsed reasoning
+    if (llmResponse.reasoning) {
+      logger.info('🎯 AGENT REASONING', {
+        agentId: this.specializedTemplate.agent?.id,
+        taskId: request.taskContext?.contextId,
+        reasoning: llmResponse.reasoning
+      });
     }
     
     // Validate and enforce standard schema

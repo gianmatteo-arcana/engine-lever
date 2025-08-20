@@ -361,16 +361,39 @@ export class OrchestratorAgent extends BaseAgent {
   public async orchestrateTask(context: TaskContext): Promise<void> {
     const startTime = Date.now();
     
+    logger.info('🎯 orchestrateTask() CALLED', {
+      contextId: context.contextId,
+      templateId: context.taskTemplateId,
+      tenantId: context.tenantId,
+      hasMetadata: !!context.metadata,
+      hasTaskDefinition: !!context.metadata?.taskDefinition,
+      taskDefinitionKeys: context.metadata?.taskDefinition ? Object.keys(context.metadata.taskDefinition) : []
+    });
+    
+    // DEBUG: Log full context for tracing
+    logger.debug('📊 Full TaskContext received', {
+      context: JSON.stringify(context, null, 2)
+    });
+    
     try {
       logger.info('Starting universal task orchestration', {
         contextId: context.contextId,
         templateId: context.taskTemplateId,
-        tenantId: context.tenantId
+        tenantId: context.tenantId,
+        timestamp: new Date().toISOString()
       });
       
       // 1. Create execution plan from template
+      logger.info('📝 Creating execution plan...');
       const executionPlan = await this.createExecutionPlan(context);
       this.activeExecutions.set(context.contextId, executionPlan);
+      
+      logger.info('✅ Execution plan created', {
+        contextId: context.contextId,
+        phases: executionPlan.phases.length,
+        estimatedDuration: (executionPlan as any).estimated_duration,
+        userInteractions: (executionPlan as any).user_interactions
+      });
       
       // 2. Record plan in context for traceability
       await this.recordContextEntry(context, {
@@ -380,7 +403,18 @@ export class OrchestratorAgent extends BaseAgent {
       });
       
       // 3. Execute plan phases
+      let allPhasesCompleted = true;
+      let phaseIndex = 0;
+      
       for (const phase of executionPlan.phases) {
+        phaseIndex++;
+        logger.info(`📌 Executing phase ${phaseIndex}/${executionPlan.phases.length}: ${phase.name}`, {
+          contextId: context.contextId,
+          phaseName: phase.name,
+          phaseNumber: phaseIndex,
+          totalPhases: executionPlan.phases.length
+        });
+        
         const phaseResult = await this.executePhase(context, phase);
         
         // 4. Record phase completion
@@ -389,9 +423,11 @@ export class OrchestratorAgent extends BaseAgent {
           data: { 
             phaseId: (phase as any).id || phase.name,
             result: phaseResult,
-            duration: phaseResult.duration
+            duration: phaseResult.duration,
+            phaseNumber: phaseIndex,
+            totalPhases: executionPlan.phases.length
           },
-          reasoning: `Completed phase: ${phase.name}`
+          reasoning: `Completed phase ${phaseIndex}/${executionPlan.phases.length}: ${phase.name}`
         });
         
         // 5. Handle UI requests with progressive disclosure
@@ -399,14 +435,43 @@ export class OrchestratorAgent extends BaseAgent {
           await this.handleProgressiveDisclosure(context, phaseResult.uiRequests);
         }
         
-        // 6. Check if goals achieved
-        if (await this.areGoalsAchieved(context)) {
+        // 6. Check for critical failures that should stop execution
+        if (phaseResult.status === 'failed' || phaseResult.criticalError) {
+          logger.error(`Phase ${phaseIndex} failed critically, stopping execution`, {
+            contextId: context.contextId,
+            phaseName: phase.name,
+            error: phaseResult.error
+          });
+          allPhasesCompleted = false;
           break;
         }
       }
       
-      // 7. Mark task complete
-      await this.completeTaskContext(context);
+      // 7. Only mark task complete if all phases executed successfully
+      if (allPhasesCompleted) {
+        logger.info('✅ All phases completed successfully, marking task as complete', {
+          contextId: context.contextId,
+          phasesExecuted: phaseIndex,
+          totalPhases: executionPlan.phases.length
+        });
+        await this.completeTaskContext(context);
+      } else {
+        logger.warn('⚠️ Task execution incomplete - not all phases executed', {
+          contextId: context.contextId,
+          phasesExecuted: phaseIndex,
+          totalPhases: executionPlan.phases.length
+        });
+        // Update task status to 'failed' or 'incomplete'
+        await this.recordContextEntry(context, {
+          operation: 'task_incomplete',
+          data: {
+            phasesCompleted: phaseIndex,
+            totalPhases: executionPlan.phases.length,
+            reason: 'Phase execution failed or interrupted'
+          },
+          reasoning: 'Task could not complete all planned phases'
+        });
+      }
       
       logger.info('Task orchestration completed', {
         contextId: context.contextId,
@@ -434,16 +499,31 @@ export class OrchestratorAgent extends BaseAgent {
    * analyze available agent capabilities, and create a coordinated execution plan
    */
   private async createExecutionPlan(context: TaskContext): Promise<ExecutionPlan> {
+    logger.info('🧠 createExecutionPlan() starting', {
+      contextId: context.contextId,
+      hasAgentRegistry: this.agentRegistry.size > 0
+    });
+    
     // Ensure agent registry is initialized from YAML files (the ONLY source of truth)
     if (this.agentRegistry.size === 0) {
+      logger.info('📋 Initializing agent registry from YAML...');
       await this.initializeAgentRegistry();
+      logger.info(`✅ Agent registry initialized with ${this.agentRegistry.size} agents`);
     }
+    
     // Extract task information from the task data ONLY (no template references)
     // Template content should already be copied to task during creation
     const taskType = context.currentState?.data?.taskType || 'general';
     const taskTitle = context.currentState?.data?.title || 'Unknown Task';
     const taskDescription = context.currentState?.data?.description || 'No description provided';
     const taskDefinition = context.metadata?.taskDefinition || {};
+    
+    logger.info('📄 Task information extracted', {
+      taskType,
+      taskTitle,
+      taskDescription: taskDescription.substring(0, 100),
+      hasTaskDefinition: Object.keys(taskDefinition).length > 0
+    });
     
     // Build detailed agent capability information for LLM reasoning
     const availableAgents = Array.from(this.agentRegistry.values()).map(agent => ({
@@ -564,21 +644,37 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022'
     });
 
+    // Log before LLM request
+    logger.info('🚀 Sending request to LLM...', {
+      contextId: context.contextId,
+      model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
+      temperature: 0.3
+    });
+    
+    const llmStartTime = Date.now();
     const llmResponse = await this.llmProvider.complete({
       prompt: planPrompt,
       model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
       temperature: 0.3,
       systemPrompt: this.config.mission
     });
+    const llmDuration = Date.now() - llmStartTime;
     
     // Log the complete response for tracing
     logger.info('🎯 LLM EXECUTION PLAN RESPONSE', {
       contextId: context.contextId,
       response: llmResponse.content.substring(0, 500),
       responseLength: llmResponse.content.length,
+      duration: `${llmDuration}ms`,
       isValidJSON: (() => {
         try { JSON.parse(llmResponse.content); return true; } catch { return false; }
       })()
+    });
+    
+    // DEBUG: Log full response if needed
+    logger.debug('📄 Full LLM response', {
+      contextId: context.contextId,
+      fullResponse: llmResponse.content
     });
     
     // Parse JSON response with comprehensive error handling and validation
@@ -1271,8 +1367,9 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     // Check primary goals
     const goals = taskDefinition.goals;
     if (Array.isArray(goals)) {
-      // Simple array of goal strings
-      return true; // For now, assume goals are achieved if context is stable
+      // Simple array of goal strings - DO NOT return true prematurely!
+      // Goals are only achieved when ALL phases are complete
+      return false; // Continue executing all phases
     } else if (goals.primary) {
       // Structured goals with primary/secondary
       for (const goal of goals.primary) {
@@ -1298,13 +1395,19 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
    * Complete task
    */
   private async completeTaskContext(context: TaskContext): Promise<void> {
+    // Log that we're updating task status
+    logger.info('📝 Updating task status to COMPLETED', {
+      contextId: context.contextId
+    });
+    
+    // Record completion in context
     await this.recordContextEntry(context, {
       operation: 'task_completed',
       data: {
         completedAt: new Date().toISOString(),
         finalState: context.currentState
       },
-      reasoning: 'All required goals achieved'
+      reasoning: 'All phases executed successfully'
     });
     
     // Clean up

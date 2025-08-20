@@ -94,15 +94,36 @@ router.post('/create', requireAuth, async (req: AuthenticatedRequest, res) => {
     
     const input = CreateTaskSchema.parse(req.body);
     
-    logger.info('Creating universal task', {
+    logger.info('🎯 Creating universal task', {
       userId,
       templateId: input.templateId,
-      source: input.metadata?.source || 'api'
+      source: input.metadata?.source || 'api',
+      timestamp: new Date().toISOString(),
+      hasInitialData: !!input.initialData,
+      initialDataKeys: input.initialData ? Object.keys(input.initialData) : []
+    });
+    
+    // DEBUG: Log full request
+    logger.debug('📥 Full task creation request', {
+      body: req.body,
+      headers: {
+        authorization: req.headers.authorization ? 'Bearer ***' : 'none'
+      }
     });
     
     // Get services
     const taskService = TaskService.getInstance();
-    const orchestrator = OrchestratorAgent.getInstance();
+    logger.info('📦 TaskService instance obtained');
+    
+    try {
+      OrchestratorAgent.getInstance();
+      logger.info('🤖 OrchestratorAgent instance obtained');
+    } catch (orchError) {
+      logger.error('❌ Failed to get OrchestratorAgent instance', {
+        error: orchError instanceof Error ? orchError.message : String(orchError),
+        stack: orchError instanceof Error ? orchError.stack : undefined
+      });
+    }
     
     // Create task through universal service
     const context = await taskService.create({
@@ -117,13 +138,33 @@ router.post('/create', requireAuth, async (req: AuthenticatedRequest, res) => {
       }
     });
     
-    // Start orchestration asynchronously
-    orchestrator.orchestrateTask(context).catch(error => {
-      logger.error('Orchestration failed', {
-        contextId: context.contextId,
-        error: error.message
-      });
+    logger.info('📝 Task context created', {
+      contextId: context.contextId,
+      hasMetadata: !!context.metadata,
+      hasTaskDefinition: !!context.metadata?.taskDefinition
     });
+    
+    // Start orchestration asynchronously
+    try {
+      const orchestrator = OrchestratorAgent.getInstance();
+      logger.info('🚀 Calling orchestrator.orchestrateTask()...');
+      
+      orchestrator.orchestrateTask(context).catch(error => {
+        logger.error('❌ Orchestration promise rejected', {
+          contextId: context.contextId,
+          error: error.message,
+          stack: error.stack
+        });
+      });
+      
+      logger.info('✅ orchestrateTask() called successfully (async)');
+    } catch (orchError) {
+      logger.error('❌ Failed to start orchestration', {
+        contextId: context.contextId,
+        error: orchError instanceof Error ? orchError.message : String(orchError),
+        stack: orchError instanceof Error ? orchError.stack : undefined
+      });
+    }
     
     res.json({
       success: true,
