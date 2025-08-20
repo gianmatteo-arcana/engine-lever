@@ -711,6 +711,55 @@ export class TaskService {
   }
 
   /**
+   * Update task status (internal use - service role)
+   * Used by orchestrator to mark tasks as completed
+   */
+  async updateTaskStatus(taskId: string, status: 'pending' | 'processing' | 'completed' | 'failed', completedAt?: string): Promise<void> {
+    try {
+      logger.info('Updating task status', { taskId, status });
+      
+      // Use service role client for internal operations
+      const client = this.dbService.getServiceClient();
+      
+      const updateData: any = {
+        status,
+        updated_at: new Date().toISOString()
+      };
+      
+      if (completedAt) {
+        updateData.completed_at = completedAt;
+      }
+      
+      const { error } = await client
+        .from('tasks')
+        .update(updateData)
+        .eq('id', taskId);
+      
+      if (error) {
+        logger.error('Failed to update task status', {
+          taskId,
+          status,
+          error: error.message
+        });
+        throw new Error(`Failed to update task status: ${error.message}`);
+      }
+      
+      logger.info('✅ Task status updated successfully', {
+        taskId,
+        status
+      });
+      
+    } catch (error) {
+      logger.error('Error updating task status', {
+        taskId,
+        status,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Extract user ID from JWT token
    * This should be implemented based on your auth system
    */

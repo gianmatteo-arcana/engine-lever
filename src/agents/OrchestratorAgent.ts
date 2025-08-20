@@ -22,6 +22,7 @@ import { BaseAgent } from './base/BaseAgent';
 import { ConfigurationManager } from '../services/configuration-manager';
 import { DatabaseService } from '../services/database';
 import { StateComputer } from '../services/state-computer';
+import { TaskService } from '../services/task-service';
 import { logger } from '../utils/logger';
 import {
   TaskContext,
@@ -1399,6 +1400,23 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     logger.info('📝 Updating task status to COMPLETED', {
       contextId: context.contextId
     });
+    
+    // Update task status in database via TaskService
+    try {
+      const taskService = new TaskService(DatabaseService.getInstance());
+      const completedAt = new Date().toISOString();
+      
+      await taskService.updateTaskStatus(context.contextId, 'completed', completedAt);
+      
+      logger.info('✅ Task status updated to COMPLETED in database', {
+        contextId: context.contextId
+      });
+    } catch (error) {
+      logger.error('Error updating task status', {
+        contextId: context.contextId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
     
     // Record completion in context
     await this.recordContextEntry(context, {
