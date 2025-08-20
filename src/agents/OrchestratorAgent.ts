@@ -1401,6 +1401,10 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       contextId: context.contextId
     });
     
+    // Update the context state to completed
+    context.currentState.status = 'completed';
+    context.currentState.completeness = 100;
+    
     // Update task status in database via TaskService
     try {
       const taskService = new TaskService(DatabaseService.getInstance());
@@ -1418,12 +1422,14 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       });
     }
     
-    // Record completion in context
+    // Record completion in context with updated state
     await this.recordContextEntry(context, {
       operation: 'task_completed',
       data: {
         completedAt: new Date().toISOString(),
-        finalState: context.currentState
+        finalState: context.currentState,
+        status: 'completed',
+        completeness: 100
       },
       reasoning: 'All phases executed successfully'
     });
