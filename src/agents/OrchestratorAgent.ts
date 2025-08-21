@@ -446,7 +446,7 @@ export class OrchestratorAgent extends BaseAgent {
           });
           
           // Update task status to waiting_for_input
-          await this.updateTaskStatus(context, 'waiting_for_input');
+          await this.updateTaskStatus(context, 'waiting_for_input' as TaskStatus);
           
           // Don't mark as complete, exit orchestration loop
           allPhasesCompleted = false;

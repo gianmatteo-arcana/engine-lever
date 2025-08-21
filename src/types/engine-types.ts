@@ -29,7 +29,7 @@ export interface TaskContext {
  * Current state of task execution
  */
 export interface TaskState {
-  status: 'pending' | 'gathering_user_info' | 'processing' | 'waiting_for_input' | 'completed' | 'failed';
+  status: 'pending' | 'in_progress' | 'processing' | 'waiting_for_input' | 'gathering_user_info' | 'completed' | 'failed' | 'cancelled';
   phase: string;
   completeness: number; // 0-100
   data: Record<string, any>;
