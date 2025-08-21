@@ -456,6 +456,9 @@ export class OrchestratorAgent extends BaseAgent {
           // The task is NOT failed, NOT completed, just waiting
           await this.updateTaskStatus(context, TASK_STATUS.WAITING_FOR_INPUT);
           
+          // Also update the context state to reflect this
+          context.currentState.status = TASK_STATUS.WAITING_FOR_INPUT;
+          
           // Don't mark as complete, exit orchestration loop
           allPhasesCompleted = false;
           break;
@@ -486,50 +489,76 @@ export class OrchestratorAgent extends BaseAgent {
         });
         await this.completeTaskContext(context);
       } else {
-        logger.warn('⚠️ Task execution incomplete - not all phases executed', {
+        // Check WHY we didn't complete all phases before logging
+        const currentStatus = context.currentState.status;
+        
+        // DEBUG: Log what status we actually have
+        logger.debug('Status check debug', {
           contextId: context.contextId,
-          phasesExecuted: phaseIndex,
-          totalPhases: executionPlan.phases.length
+          currentStatus,
+          waitingForInputConstant: TASK_STATUS.WAITING_FOR_INPUT,
+          statusMatch: currentStatus === TASK_STATUS.WAITING_FOR_INPUT
         });
-        // Update task status to 'failed' or 'incomplete'
-        await this.recordContextEntry(context, {
-          operation: 'task_incomplete',
-          data: {
-            phasesCompleted: phaseIndex,
+        
+        if (currentStatus === TASK_STATUS.WAITING_FOR_INPUT) {
+          // Task is not incomplete - it's intentionally paused waiting for user
+          logger.info('⏸️ Task execution paused - waiting for user input', {
+            contextId: context.contextId,
+            phasesExecuted: phaseIndex,
             totalPhases: executionPlan.phases.length,
-            reason: 'Phase execution failed or interrupted'
-          },
-          reasoning: 'Task could not complete all planned phases'
-        });
+            status: currentStatus
+          });
+          // Don't record as incomplete when waiting for input - this is expected behavior
+        } else if (currentStatus === TASK_STATUS.FAILED) {
+          // Task actually failed
+          logger.error('❌ Task execution failed', {
+            contextId: context.contextId,
+            phasesExecuted: phaseIndex,
+            totalPhases: executionPlan.phases.length,
+            status: currentStatus
+          });
+          await this.recordContextEntry(context, {
+            operation: `task_${TASK_STATUS.FAILED}`,
+            data: {
+              phasesCompleted: phaseIndex,
+              totalPhases: executionPlan.phases.length,
+              status: currentStatus,
+              reason: 'Phase execution failed'
+            },
+            reasoning: 'Task failed during phase execution'
+          });
+        } else {
+          // Some other unexpected state
+          logger.warn('⚠️ Task execution incomplete - unexpected state', {
+            contextId: context.contextId,
+            phasesExecuted: phaseIndex,
+            totalPhases: executionPlan.phases.length,
+            status: currentStatus
+          });
+          await this.recordContextEntry(context, {
+            operation: 'task_incomplete', // Keep as-is since there's no TASK_STATUS.INCOMPLETE
+            data: {
+              phasesCompleted: phaseIndex,
+              totalPhases: executionPlan.phases.length,
+              status: currentStatus,
+              reason: 'Unexpected execution state'
+            },
+            reasoning: 'Task could not complete all planned phases due to unexpected state'
+          });
+        }
       }
       
-      // Log appropriate message based on actual task status
+      // Final summary log
       const finalStatus = context.currentState.status;
-      if (finalStatus === TASK_STATUS.WAITING_FOR_INPUT) {
-        logger.info('⏸️ Task orchestration paused - waiting for user input', {
-          contextId: context.contextId,
-          status: finalStatus,
-          duration: Date.now() - startTime
-        });
-      } else if (finalStatus === TASK_STATUS.FAILED) {
-        logger.info('❌ Task orchestration ended - task failed', {
-          contextId: context.contextId,
-          status: finalStatus,
-          duration: Date.now() - startTime
-        });
-      } else if (finalStatus === TASK_STATUS.COMPLETED) {
-        logger.info('✅ Task orchestration completed successfully', {
-          contextId: context.contextId,
-          status: finalStatus,
-          duration: Date.now() - startTime
-        });
-      } else {
-        logger.info('Task orchestration ended', {
-          contextId: context.contextId,
-          status: finalStatus,
-          duration: Date.now() - startTime
-        });
-      }
+      const duration = Date.now() - startTime;
+      
+      logger.info('Task orchestration ended', {
+        contextId: context.contextId,
+        status: finalStatus,
+        duration,
+        phasesCompleted: phaseIndex,
+        totalPhases: executionPlan.phases.length
+      });
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1614,7 +1643,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     
     // Record completion in context with updated state
     await this.recordContextEntry(context, {
-      operation: 'task_completed',
+      operation: `task_${TASK_STATUS.COMPLETED}`,
       data: {
         completedAt: new Date().toISOString(),
         finalState: context.currentState,
