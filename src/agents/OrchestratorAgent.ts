@@ -481,9 +481,11 @@ export class OrchestratorAgent extends BaseAgent {
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const stackTrace = error instanceof Error ? error.stack : 'No stack trace available';
       logger.error('Orchestration failed', {
         contextId: context.contextId,
-        error: errorMessage
+        error: errorMessage,
+        stack: stackTrace
       });
       
       // Apply resilience strategy
@@ -2380,20 +2382,20 @@ Respond with JSON only:
   ): Promise<ExecutionPlan> {
     logger.info('🎯 Creating UI request execution plan after toolchain attempts', {
       contextId: context.contextId,
-      stillMissingFields: acquisitionResult.stillMissingFields,
-      toolchainResults: acquisitionResult.toolchainResults.length
+      stillMissingFields: acquisitionResult.stillMissingFields || acquisitionResult.stillMissing,
+      toolchainResults: acquisitionResult.toolResults?.length || 0
     });
     
     // Record why we're requesting user input
     await this.recordContextEntry(context, {
       operation: 'toolchain_acquisition_failed_requesting_ui',
       data: {
-        originalMissingFields: acquisitionResult.stillMissingFields,
-        toolchainResults: acquisitionResult.toolchainResults,
+        originalMissingFields: acquisitionResult.stillMissingFields || acquisitionResult.stillMissing,
+        toolchainResults: acquisitionResult.toolResults || [],
         acquiredFromToolchain: acquisitionResult.acquiredData,
         requestingUserInput: true
       },
-      reasoning: `Toolchain attempted ${acquisitionResult.toolchainResults.length} tools but could not acquire all required data. Requesting user input for remaining fields.`
+      reasoning: `Toolchain attempted ${acquisitionResult.toolResults?.length || 0} tools but could not acquire all required data. Requesting user input for remaining fields.`
     });
     
     // Create a single-phase plan that requests user input
@@ -2403,11 +2405,11 @@ Respond with JSON only:
         subtasks: [{
           description: 'Collect remaining business information from user after toolchain attempts',
           agent: 'profile_collection_agent',
-          specific_instruction: `Request the following business information from the user: ${acquisitionResult.stillMissingFields.join(', ')}. Explain that we attempted to find this information automatically but need their input for accuracy.`,
+          specific_instruction: `Request the following business information from the user: ${(acquisitionResult.stillMissingFields || acquisitionResult.stillMissing || []).join(', ')}. Explain that we attempted to find this information automatically but need their input for accuracy.`,
           input_data: {
-            missingFields: acquisitionResult.stillMissingFields,
-            toolchainResults: acquisitionResult.toolchainResults,
-            acquiredData: acquisitionResult.acquiredData,
+            missingFields: acquisitionResult.stillMissingFields || acquisitionResult.stillMissing || [],
+            toolchainResults: acquisitionResult.toolResults || [],
+            acquiredData: acquisitionResult.acquiredData || {},
             context: 'toolchain_acquisition_failed'
           },
           expected_output: 'User-provided business data for remaining fields',
