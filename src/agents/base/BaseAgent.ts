@@ -908,6 +908,460 @@ Remember: You are an autonomous agent following the universal principles while a
    * - Log entries here show the agent's thought process
    * - Performance metrics here indicate reasoning complexity
    * 
+   * =============================================================================
+   * DATA ACQUISITION PROTOCOL - TOOLCHAIN FIRST, UI FALLBACK
+   * =============================================================================
+   * 
+   * Implements the YAML-defined data acquisition protocol:
+   * 1. FIRST: Check toolchain for tools that can provide needed data
+   * 2. SECOND: Use toolchain tools to gather information  
+   * 3. THIRD: Generate UIRequest only if toolchain can't help
+   * 4. ALWAYS: Record the data acquisition process
+   */
+  
+  /**
+   * Attempt to acquire missing data using toolchain-first approach
+   * This is called by agents when they need data to proceed
+   */
+  protected async acquireDataWithToolchain(
+    missingFields: string[],
+    taskContext: TaskContext,
+    taskType: string = 'general'
+  ): Promise<{
+    acquiredData: Record<string, any>;
+    stillMissingFields: string[];
+    toolchainResults: Array<{ tool: string; success: boolean; reason: string }>;
+    requiresUserInput: boolean;
+  }> {
+    const config = this.baseTemplate.agent_template?.data_acquisition_protocol;
+    const taskConfig = config?.required_business_data?.[taskType] || config?.required_business_data?.general;
+    
+    if (!taskConfig) {
+      logger.warn('No data acquisition config found for task type', { taskType });
+      return {
+        acquiredData: {},
+        stillMissingFields: missingFields,
+        toolchainResults: [],
+        requiresUserInput: true
+      };
+    }
+    
+    logger.info('🔧 Starting toolchain-first data acquisition', {
+      contextId: taskContext.contextId,
+      missingFields,
+      taskType,
+      availableToolchainSources: taskConfig.toolchain_sources
+    });
+    
+    const acquiredData: Record<string, any> = {};
+    const toolchainResults: Array<{ tool: string; success: boolean; reason: string }> = [];
+    const stillMissingFields: string[] = [...missingFields];
+    
+    // Try each toolchain source
+    for (const toolName of taskConfig.toolchain_sources || []) {
+      try {
+        logger.info(`🔍 Attempting to use toolchain tool: ${toolName}`, {
+          contextId: taskContext.contextId,
+          tool: toolName,
+          remainingFields: stillMissingFields
+        });
+        
+        // Check if tool is available in toolchain
+        if (this.toolChain && await this.isToolAvailable(toolName)) {
+          const toolResult = await this.executeToolchainTool(toolName, stillMissingFields, taskContext);
+          
+          if (toolResult.success && toolResult.data) {
+            // Merge acquired data
+            Object.assign(acquiredData, toolResult.data);
+            
+            // Remove fields that were successfully acquired
+            for (const field of Object.keys(toolResult.data)) {
+              const index = stillMissingFields.indexOf(field);
+              if (index > -1) {
+                stillMissingFields.splice(index, 1);
+              }
+            }
+            
+            toolchainResults.push({
+              tool: toolName,
+              success: true,
+              reason: `Successfully acquired: ${Object.keys(toolResult.data).join(', ')}`
+            });
+            
+            logger.info(`✅ Tool ${toolName} successfully provided data`, {
+              contextId: taskContext.contextId,
+              acquiredFields: Object.keys(toolResult.data),
+              remainingFields: stillMissingFields
+            });
+          } else {
+            toolchainResults.push({
+              tool: toolName,
+              success: false,
+              reason: toolResult.reason || 'Tool failed to provide data'
+            });
+            
+            logger.warn(`⚠️ Tool ${toolName} failed to provide data`, {
+              contextId: taskContext.contextId,
+              reason: toolResult.reason
+            });
+          }
+        } else {
+          toolchainResults.push({
+            tool: toolName,
+            success: false,
+            reason: 'Tool not available in current toolchain'
+          });
+          
+          logger.warn(`❌ Tool ${toolName} not available`, {
+            contextId: taskContext.contextId
+          });
+        }
+      } catch (error) {
+        toolchainResults.push({
+          tool: toolName,
+          success: false,
+          reason: error instanceof Error ? error.message : 'Unknown error'
+        });
+        
+        logger.error(`💥 Error using tool ${toolName}`, {
+          contextId: taskContext.contextId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+    
+    // Record the toolchain acquisition attempt
+    await this.recordContextEntry(taskContext, {
+      operation: 'toolchain_data_acquisition',
+      data: {
+        taskType,
+        requestedFields: missingFields,
+        acquiredData,
+        stillMissingFields,
+        toolchainResults,
+        toolsAttempted: taskConfig.toolchain_sources?.length || 0,
+        successfulTools: toolchainResults.filter(r => r.success).length
+      },
+      reasoning: `Attempted to acquire missing data using ${taskConfig.toolchain_sources?.length || 0} toolchain tools. ${Object.keys(acquiredData).length} fields acquired, ${stillMissingFields.length} still missing.`
+    });
+    
+    return {
+      acquiredData,
+      stillMissingFields,
+      toolchainResults,
+      requiresUserInput: stillMissingFields.length > 0
+    };
+  }
+  
+  /**
+   * Check if a tool is available in the current toolchain
+   */
+  private async isToolAvailable(toolName: string): Promise<boolean> {
+    try {
+      if (!this.toolChain) {
+        return false;
+      }
+      
+      // Map YAML tool names to actual ToolChain methods
+      const availableTools = [
+        'business_registry_lookup',    // Maps to searchBusinessEntity
+        'public_records_search',       // Maps to searchPublicRecords  
+        'secretary_of_state_lookup',   // Maps to searchBusinessEntity
+        'business_registry_search',    // Maps to searchBusinessEntity
+        'domain_whois_lookup',         // TODO: Implement in ToolChain
+        'social_media_discovery',      // TODO: Implement in ToolChain
+        'registered_agent_directory',  // TODO: Implement in ToolChain
+        'email_validation',            // Maps to validateEmail
+        'ein_validation'               // Maps to validateEIN
+      ];
+      
+      return availableTools.includes(toolName);
+    } catch (error) {
+      logger.error('Error checking tool availability', {
+        toolName,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return false;
+    }
+  }
+  
+  /**
+   * Execute a specific toolchain tool to acquire data
+   */
+  private async executeToolchainTool(
+    toolName: string,
+    missingFields: string[],
+    taskContext: TaskContext
+  ): Promise<{ success: boolean; data?: Record<string, any>; reason?: string }> {
+    try {
+      logger.info(`🚀 Executing toolchain tool: ${toolName}`, {
+        contextId: taskContext.contextId,
+        missingFields
+      });
+      
+      if (!this.toolChain) {
+        return {
+          success: false,
+          reason: 'ToolChain not available'
+        };
+      }
+      
+      // Extract business context for tool calls
+      const businessProfile = (taskContext as any).businessProfile || {};
+      const businessName = businessProfile.business_name || '';
+      
+      // Map YAML tool names to actual ToolChain method calls
+      switch (toolName) {
+        case 'business_registry_lookup':
+        case 'secretary_of_state_lookup':
+        case 'business_registry_search':
+          if (businessName) {
+            const result = await this.toolChain.searchBusinessEntity(businessName);
+            if (result) {
+              const mappedData = this.mapBusinessEntityToFields(result, missingFields);
+              return {
+                success: Object.keys(mappedData).length > 0,
+                data: mappedData,
+                reason: `Found business entity: ${result.name}`
+              };
+            } else {
+              return {
+                success: false,
+                reason: `No business entity found for: ${businessName}`
+              };
+            }
+          } else {
+            return {
+              success: false,
+              reason: 'No business name available for registry lookup'
+            };
+          }
+          
+        case 'public_records_search':
+          if (businessName) {
+            const result = await this.toolChain.searchPublicRecords(businessName);
+            if (result) {
+              const mappedData = this.mapBusinessEntityToFields(result, missingFields);
+              return {
+                success: Object.keys(mappedData).length > 0,
+                data: mappedData,
+                reason: `Found public records for: ${result.name}`
+              };
+            } else {
+              return {
+                success: false,
+                reason: `No public records found for: ${businessName}`
+              };
+            }
+          } else {
+            return {
+              success: false,
+              reason: 'No business name available for public records search'
+            };
+          }
+          
+        case 'email_validation':
+          if (businessProfile.contact_email) {
+            const isValid = this.toolChain.validateEmail(businessProfile.contact_email);
+            return {
+              success: isValid,
+              data: isValid ? { contact_email: businessProfile.contact_email } : {},
+              reason: isValid ? 'Email format is valid' : 'Email format is invalid'
+            };
+          } else {
+            return {
+              success: false,
+              reason: 'No email available for validation'
+            };
+          }
+          
+        case 'ein_validation':
+          if (businessProfile.ein) {
+            const isValid = this.toolChain.validateEIN(businessProfile.ein);
+            return {
+              success: isValid,
+              data: isValid ? { ein: businessProfile.ein } : {},
+              reason: isValid ? 'EIN format is valid' : 'EIN format is invalid'
+            };
+          } else {
+            return {
+              success: false,
+              reason: 'No EIN available for validation'
+            };
+          }
+          
+        case 'domain_whois_lookup':
+        case 'social_media_discovery':
+        case 'registered_agent_directory':
+          return {
+            success: false,
+            reason: `Tool ${toolName} not yet implemented in ToolChain`
+          };
+          
+        default:
+          return {
+            success: false,
+            reason: `Unknown tool: ${toolName}`
+          };
+      }
+    } catch (error) {
+      logger.error(`Error executing toolchain tool: ${toolName}`, {
+        contextId: taskContext.contextId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      
+      return {
+        success: false,
+        reason: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+  
+  /**
+   * Map BusinessEntity result to missing fields
+   */
+  private mapBusinessEntityToFields(
+    entity: any,
+    missingFields: string[]
+  ): Record<string, any> {
+    const mappedData: Record<string, any> = {};
+    
+    // Map business entity fields to our expected field names
+    for (const field of missingFields) {
+      switch (field) {
+        case 'business_name':
+          if (entity.name) mappedData.business_name = entity.name;
+          break;
+          
+        case 'business_type':
+        case 'entity_type':
+          if (entity.entityType) {
+            // Map ToolChain entity types to our business types
+            const typeMapping: Record<string, string> = {
+              'LLC': 'llc',
+              'Corporation': 'corporation',
+              'Sole Proprietorship': 'sole_proprietorship',
+              'Partnership': 'partnership'
+            };
+            const mappedType = typeMapping[entity.entityType] || entity.entityType.toLowerCase();
+            mappedData[field] = mappedType;
+          }
+          break;
+          
+        case 'address':
+        case 'business_address':
+          if (entity.address) {
+            const address = `${entity.address.street}, ${entity.address.city}, ${entity.address.state} ${entity.address.zip}`;
+            mappedData[field] = address;
+          }
+          break;
+          
+        case 'ein':
+          if (entity.ein) mappedData.ein = entity.ein;
+          break;
+          
+        case 'formation_date':
+          if (entity.formationDate) mappedData.formation_date = entity.formationDate;
+          break;
+          
+        case 'status':
+          if (entity.status) mappedData.status = entity.status.toLowerCase();
+          break;
+      }
+    }
+    
+    return mappedData;
+  }
+  
+  /**
+   * Create a UIRequest for missing data after toolchain attempts
+   */
+  protected createDataAcquisitionUIRequest(
+    missingFields: string[],
+    taskType: string,
+    toolchainResults: Array<{ tool: string; success: boolean; reason: string }>
+  ): any {
+    const config = this.baseTemplate.agent_template?.data_acquisition_protocol;
+    const taskConfig = config?.required_business_data?.[taskType] || config?.required_business_data?.general;
+    
+    const fieldDefinitions = this.createFieldDefinitionsForMissingData(missingFields);
+    
+    return {
+      type: 'form',
+      title: 'Additional Information Required',
+      description: taskConfig?.fallback_ui_message || 'We need some additional information to continue.',
+      fields: fieldDefinitions,
+      instructions: `We attempted to find this information automatically using ${toolchainResults.length} different sources, but were unable to locate all required details. Please provide the missing information below.`,
+      context: {
+        reason: 'toolchain_acquisition_failed',
+        missingFields,
+        taskType,
+        toolchainResults,
+        attemptedSources: toolchainResults.map(r => r.tool)
+      }
+    };
+  }
+  
+  /**
+   * Create field definitions for missing data
+   */
+  private createFieldDefinitionsForMissingData(missingFields: string[]): any[] {
+    const fieldMapping: Record<string, any> = {
+      'business_name': {
+        id: 'business_name',
+        label: 'Business Name',
+        type: 'text',
+        required: true,
+        placeholder: 'Enter your business name',
+        help: 'The legal name of your business as registered'
+      },
+      'business_type': {
+        id: 'business_type',
+        label: 'Business Type',
+        type: 'select',
+        required: true,
+        options: [
+          { value: 'sole_proprietorship', label: 'Sole Proprietorship' },
+          { value: 'partnership', label: 'Partnership' },
+          { value: 'llc', label: 'Limited Liability Company (LLC)' },
+          { value: 'corporation', label: 'Corporation' },
+          { value: 'nonprofit', label: 'Nonprofit Organization' },
+          { value: 'other', label: 'Other' }
+        ],
+        help: 'The legal structure of your business'
+      },
+      'address': {
+        id: 'address',
+        label: 'Business Address',
+        type: 'textarea',
+        required: true,
+        placeholder: '123 Business St, City, State, ZIP',
+        help: 'The physical address of your business'
+      },
+      'contact_email': {
+        id: 'contact_email',
+        label: 'Contact Email',
+        type: 'email',
+        required: true,
+        placeholder: 'business@example.com',
+        help: 'Primary email address for business communications'
+      },
+      'contact_phone': {
+        id: 'contact_phone',
+        label: 'Contact Phone',
+        type: 'tel',
+        required: true,
+        placeholder: '(555) 123-4567',
+        help: 'Primary phone number for business communications'
+      }
+    };
+    
+    return missingFields
+      .map(field => fieldMapping[field])
+      .filter(field => field !== undefined);
+  }
+
+   /**
    * Internal execution method (core reasoning engine)
    * This is the heart of agent intelligence - subclasses override for specialized behavior
    */

@@ -505,6 +505,58 @@ export class OrchestratorAgent extends BaseAgent {
       hasAgentRegistry: this.agentRegistry.size > 0
     });
     
+    // CRITICAL: Use BaseAgent toolchain-first data acquisition
+    const taskType = context.currentState?.data?.taskType || 'general';
+    const businessProfile = (context as any).businessProfile || {};
+    const config = this.baseTemplate.agent_template?.data_acquisition_protocol;
+    const taskConfig = config?.required_business_data?.[taskType] || config?.required_business_data?.general;
+    
+    if (taskConfig?.critical_fields) {
+      const missingFields: string[] = [];
+      
+      // Check which critical fields are missing
+      for (const field of taskConfig.critical_fields) {
+        if (!businessProfile[field] || 
+            businessProfile[field] === '' || 
+            businessProfile[field] === null || 
+            businessProfile[field] === undefined) {
+          missingFields.push(field);
+        }
+      }
+      
+      if (missingFields.length > 0) {
+        logger.info('🔧 BUSINESS DATA MISSING - Starting toolchain-first acquisition', {
+          contextId: context.contextId,
+          missingFields,
+          taskType
+        });
+        
+        // Use BaseAgent's toolchain-first approach
+        const acquisitionResult = await this.acquireDataWithToolchain(missingFields, context, taskType);
+        
+        if (acquisitionResult.requiresUserInput) {
+          // Create UIRequest for remaining missing fields
+          const uiRequest = this.createDataAcquisitionUIRequest(
+            acquisitionResult.stillMissingFields,
+            taskType,
+            acquisitionResult.toolchainResults
+          );
+          
+          // Return special plan that requests user input
+          return this.createUIRequestExecutionPlan(context, uiRequest, acquisitionResult);
+        } else {
+          // Update business profile with acquired data
+          Object.assign(businessProfile, acquisitionResult.acquiredData);
+          (context as any).businessProfile = businessProfile;
+          
+          logger.info('✅ All required business data acquired from toolchain', {
+            contextId: context.contextId,
+            acquiredFields: Object.keys(acquisitionResult.acquiredData)
+          });
+        }
+      }
+    }
+    
     // Ensure agent registry is initialized from YAML files (the ONLY source of truth)
     if (this.agentRegistry.size === 0) {
       logger.info('📋 Initializing agent registry from YAML...');
@@ -514,7 +566,7 @@ export class OrchestratorAgent extends BaseAgent {
     
     // Extract task information from the task data ONLY (no template references)
     // Template content should already be copied to task during creation
-    const taskType = context.currentState?.data?.taskType || 'general';
+    const _mainTaskType = context.currentState?.data?.taskType || 'general';
     const taskTitle = context.currentState?.data?.title || 'Unknown Task';
     const taskDescription = context.currentState?.data?.description || 'No description provided';
     const taskDefinition = context.metadata?.taskDefinition || {};
@@ -2318,6 +2370,78 @@ Respond with JSON only:
     });
     
     return correctedPlan;
+  }
+  
+  /**
+   * =============================================================================
+   * TOOLCHAIN-FIRST UI REQUEST EXECUTION PLAN
+   * =============================================================================
+   * 
+   * Creates execution plan when toolchain acquisition fails and UI input is needed
+   */
+  
+  /**
+   * Create execution plan that requests user input after toolchain attempts
+   */
+  private async createUIRequestExecutionPlan(
+    context: TaskContext,
+    uiRequest: any,
+    acquisitionResult: any
+  ): Promise<ExecutionPlan> {
+    logger.info('🎯 Creating UI request execution plan after toolchain attempts', {
+      contextId: context.contextId,
+      stillMissingFields: acquisitionResult.stillMissingFields,
+      toolchainResults: acquisitionResult.toolchainResults.length
+    });
+    
+    // Record why we're requesting user input
+    await this.recordContextEntry(context, {
+      operation: 'toolchain_acquisition_failed_requesting_ui',
+      data: {
+        originalMissingFields: acquisitionResult.stillMissingFields,
+        toolchainResults: acquisitionResult.toolchainResults,
+        acquiredFromToolchain: acquisitionResult.acquiredData,
+        requestingUserInput: true
+      },
+      reasoning: `Toolchain attempted ${acquisitionResult.toolchainResults.length} tools but could not acquire all required data. Requesting user input for remaining fields.`
+    });
+    
+    // Create a single-phase plan that requests user input
+    const uiRequestPlan: ExecutionPlan = {
+      phases: [{
+        name: 'User Data Collection (Post-Toolchain)',
+        subtasks: [{
+          description: 'Collect remaining business information from user after toolchain attempts',
+          agent: 'profile_collection_agent',
+          specific_instruction: `Request the following business information from the user: ${acquisitionResult.stillMissingFields.join(', ')}. Explain that we attempted to find this information automatically but need their input for accuracy.`,
+          input_data: {
+            missingFields: acquisitionResult.stillMissingFields,
+            toolchainResults: acquisitionResult.toolchainResults,
+            acquiredData: acquisitionResult.acquiredData,
+            context: 'toolchain_acquisition_failed'
+          },
+          expected_output: 'User-provided business data for remaining fields',
+          success_criteria: ['All required fields provided by user', 'Data validated and stored']
+        }],
+        parallel_execution: false,
+        dependencies: []
+      }],
+      reasoning: {
+        task_analysis: `Toolchain tools could not provide all required data. Still need: ${acquisitionResult.stillMissingFields.join(', ')}`,
+        subtask_decomposition: [{
+          subtask: 'Collect remaining business information from user',
+          required_capabilities: ['user_input_collection', 'business_profile_management'],
+          assigned_agent: 'profile_collection_agent',
+          rationale: 'Specialized in collecting business information with user interaction after automated attempts'
+        }],
+        coordination_strategy: 'Single-phase user data collection as fallback after toolchain attempts'
+      }
+    } as any;
+    
+    // Add the UI request directly to the plan
+    (uiRequestPlan as any).immediateUIRequest = uiRequest;
+    
+    return uiRequestPlan;
   }
   
 }
