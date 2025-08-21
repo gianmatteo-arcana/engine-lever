@@ -1039,15 +1039,17 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
         // Find the agent in discovered capabilities
         const agentCapability = capabilities.find(cap => cap.agentId === subtask.agent);
         if (agentCapability) {
-          // Add to registry for future use
+          // Add to registry for future use - properly typed as AgentCapability
           agent = {
             agentId: subtask.agent,
             role: agentCapability.role,
+            capabilities: agentCapability.skills || [],
             availability: agentCapability.availability || 'available',
-            skills: agentCapability.skills || []
-          } as any;
+            specialization: agentCapability.name || subtask.agent,
+            fallbackStrategy: 'user_input'
+          } as AgentCapability;
           
-          this.agentRegistry.set(subtask.agent, agent as any);
+          this.agentRegistry.set(subtask.agent, agent);
           
           logger.info('✅ Agent discovered and registered via discovery service', {
             agentId: subtask.agent,
