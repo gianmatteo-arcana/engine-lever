@@ -84,6 +84,17 @@ export interface BaseAgentTemplate {
     required_metrics: string[];
     logging_pattern: string;
   };
+  data_acquisition_protocol?: {
+    strategy?: string;
+    description?: string;
+    toolchain_consultation?: {
+      priority?: string;
+      instruction?: string;
+    };
+    ui_request_criteria?: {
+      generate_only_when?: string;
+    };
+  };
 }
 
 // Specialized Agent Configuration

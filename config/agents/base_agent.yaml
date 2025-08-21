@@ -54,6 +54,33 @@ agent_template:
       instruction: "Document everything for complete traceability"
       output: "Context entry with operation, data, and reasoning"
   
+  # Data Acquisition Protocol - MANDATORY for all agents
+  data_acquisition_protocol:
+    strategy: "toolchain_first_ui_fallback"
+    description: |
+      When any agent needs information to complete their task:
+      1. FIRST: Check toolchain for available tools that can provide the data
+      2. SECOND: If toolchain has relevant tools, use them to gather information
+      3. THIRD: If no toolchain tools can help, generate UIRequest for user input
+      4. ALWAYS: Record the data acquisition process for traceability
+    
+    toolchain_consultation:
+      priority: "mandatory_first_step"
+      instruction: |
+        Before requesting user input, you MUST:
+        - Query available toolchain tools to see if they can provide needed data
+        - Use business_data_lookup, public_records_search, or other relevant tools
+        - Only request user input if NO toolchain tools can help
+        - Document which tools were checked and why they couldn't help
+    
+    ui_request_criteria:
+      generate_only_when: |
+        - No toolchain tools available for the required data type
+        - Toolchain tools failed after exhausting retry attempts  
+        - Data requires human judgment or personal preferences
+        - Legal authorization needed from business owner
+        - Information is confidential and cannot be auto-discovered
+  
   # Communication patterns
   communication:
     with_orchestrator:

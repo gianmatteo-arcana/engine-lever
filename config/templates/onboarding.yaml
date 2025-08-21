@@ -115,8 +115,8 @@ task_template:
       action: save_progress
       message: Your progress has been saved - you can continue anytime
   
-  # Metadata for tracking and optimization
-  metadata:
+  # Configuration for tracking and optimization
+  configuration:
     trackingEnabled: true
     allowSkipAndReturn: true
     celebrateProgress: true

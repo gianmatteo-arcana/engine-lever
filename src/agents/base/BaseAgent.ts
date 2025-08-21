@@ -68,7 +68,7 @@ import * as fs from 'fs';
 import * as yaml from 'yaml';
 import * as path from 'path';
 import { LLMProvider } from '../../services/llm-provider';
-import type { ToolChain } from '../../services/tool-chain';
+import type { ToolChain } from '../../toolchain/ToolChain';
 import { 
   BaseAgentTemplate,
   SpecializedAgentConfig,
@@ -99,7 +99,7 @@ import {
  * - Implements A2A AgentExecutor interface for event-driven execution
  */
 export abstract class BaseAgent implements AgentExecutor {
-  protected baseTemplate: BaseAgentTemplate;
+  protected agentConfig: BaseAgentTemplate;
   protected specializedTemplate: SpecializedAgentConfig;
   protected llmProvider!: LLMProvider;
   protected toolChain!: ToolChain;
@@ -120,7 +120,7 @@ export abstract class BaseAgent implements AgentExecutor {
       throw new Error('BaseAgent requires businessId for access control');
     }
     // Load base template (universal foundation)
-    this.baseTemplate = this.loadBaseTemplate();
+    this.agentConfig = this.loadBaseTemplate();
     
     // Load specialized configuration
     this.specializedTemplate = this.loadSpecializedConfig(specializedConfigPath);
@@ -289,11 +289,11 @@ Check the error message above for specific configuration issues.
    * to create a comprehensive prompt for the LLM
    */
   private buildInheritedPrompt(request: BaseAgentRequest): string {
-    const base = this.baseTemplate;
+    const base = this.agentConfig;
     const specialized = this.specializedTemplate.agent;
     
-    // Extract business profile from TaskContext if available
-    const businessProfile = request.taskContext?.businessProfile || {};
+    // Extract context data from TaskContext if available
+    const contextData = request.taskContext?.currentState?.data || {};
     const taskHistory = request.taskContext?.history || [];
     
     return `
@@ -308,18 +308,18 @@ ${base.universal_principles.decision_priority}
 ## Ethical Boundaries
 ${base.universal_principles.ethical_boundaries}
 
-# Business Context
+# Task Context
 
-## Business Information
+## Context Information
 - Business ID: ${this.businessId}
 - User ID: ${this.userId || 'System'}
-${businessProfile.name ? `- Business Name: ${businessProfile.name}` : ''}
-${businessProfile.entityType ? `- Entity Type: ${businessProfile.entityType}` : ''}
-${businessProfile.industry ? `- Industry: ${businessProfile.industry}` : ''}
-${businessProfile.state ? `- State: ${businessProfile.state}` : ''}
+${contextData.name ? `- Name: ${contextData.name}` : ''}
+${contextData.type ? `- Type: ${contextData.type}` : ''}
+${contextData.taskType ? `- Task Type: ${contextData.taskType}` : ''}
+${contextData.state ? `- State: ${contextData.state}` : ''}
 
-## Business Profile
-${JSON.stringify(businessProfile, null, 2)}
+## Context Data
+${JSON.stringify(contextData, null, 2)}
 
 # Your Specialization
 
@@ -408,11 +408,20 @@ Your response MUST be valid JSON matching this EXACT schema:
   }
 }
 
-STATUS VALUES:
-- "completed": Task finished successfully
-- "needs_input": Requires user input to proceed  
-- "delegated": Passed to another agent
-- "error": Failed with error (include error details in reasoning)
+STATUS VALUES (CRITICAL - USE CORRECTLY):
+- "completed": Task/subtask finished successfully, all work done, no user input needed
+  Example: Successfully analyzed data, generated report, saved results
+  
+- "needs_input": MUST have user input to continue, cannot proceed without it
+  Example: Missing required business information, need user approval, require clarification
+  IMPORTANT: Always include a uiRequest when returning this status
+  
+- "delegated": Passed work to another specialized agent
+  Example: Forwarding compliance check to compliance_agent
+  
+- "error": Unrecoverable failure, cannot continue even with user input  
+  Example: API unavailable, invalid configuration, critical system error
+  IMPORTANT: This is terminal - use "needs_input" if user can help resolve it
 
 # Additional Response Requirements
 - Use ONLY the JSON format shown above - no additional text
@@ -741,7 +750,7 @@ Remember: You are an autonomous agent following the universal principles while a
    */
   getFullConfiguration(): { base: BaseAgentTemplate; specialized: SpecializedAgentConfig } {
     return {
-      base: this.baseTemplate,
+      base: this.agentConfig,
       specialized: this.specializedTemplate
     };
   }
@@ -754,7 +763,7 @@ Remember: You are an autonomous agent following the universal principles while a
     const warnings: string[] = [];
     
     // Check base template loaded
-    if (!this.baseTemplate) {
+    if (!this.agentConfig) {
       errors.push('Base template not loaded');
     }
     
@@ -908,6 +917,312 @@ Remember: You are an autonomous agent following the universal principles while a
    * - Log entries here show the agent's thought process
    * - Performance metrics here indicate reasoning complexity
    * 
+   * =============================================================================
+   * DATA ACQUISITION PROTOCOL - TOOLCHAIN FIRST, UI FALLBACK
+   * =============================================================================
+   * 
+   * Implements the YAML-defined data acquisition protocol:
+   * 1. FIRST: Check toolchain for tools that can provide needed data
+   * 2. SECOND: Use toolchain tools to gather information  
+   * 3. THIRD: Generate UIRequest only if toolchain can't help
+   * 4. ALWAYS: Record the data acquisition process
+   */
+  
+  /**
+   * Intelligently acquire missing data using LLM reasoning and available tools
+   */
+  protected async acquireDataWithToolchain(
+    missingData: string[],
+    taskContext: TaskContext
+  ): Promise<{
+    acquiredData: Record<string, any>;
+    stillMissing: string[];
+    toolResults: Array<{ tool: string; success: boolean; reason: string }>;
+    requiresUserInput: boolean;
+  }> {
+    if (!this.toolChain) {
+      logger.warn('ToolChain not available for data acquisition');
+      return {
+        acquiredData: {},
+        stillMissing: missingData,
+        toolResults: [],
+        requiresUserInput: true
+      };
+    }
+    
+    logger.info('🧠 Using LLM reasoning to acquire missing data', {
+      contextId: taskContext.contextId,
+      missingData
+    });
+    
+    // Get all available tools from the toolchain
+    const availableTools = await this.toolChain.getAvailableTools();
+    
+    // Use LLM to reason about which tools can help
+    const toolSelectionPrompt = `
+You are an intelligent agent that needs to acquire missing data.
+
+Missing data needed:
+${missingData.map(item => `- ${item}`).join('\n')}
+
+Available tools:
+${Array.isArray(availableTools) && availableTools.length > 0 
+  ? availableTools.map(tool => `- ${tool.name}: ${tool.description}\n  Capabilities: ${tool.capabilities?.join(', ') || 'N/A'}`).join('\n')
+  : 'No tools currently available'}
+
+Task context:
+${JSON.stringify(taskContext.currentState?.data || {}, null, 2)}
+
+Analyze which tools could help acquire the missing data.
+For each piece of missing data, identify the best tool to use.
+
+Respond with a JSON object:
+{
+  "reasoning": "Your analysis of how to acquire the data",
+  "tool_plan": [
+    {
+      "missing_item": "name of missing data",
+      "tool_id": "id of tool to use",
+      "tool_name": "name of tool",
+      "parameters": {}
+    }
+  ],
+  "cannot_acquire": ["list of items that no tool can help with"]
+}
+`;
+    
+    const toolSelectionResponse = await this.llmProvider.complete({
+      prompt: toolSelectionPrompt,
+      temperature: 0.3,
+      maxTokens: 1000,
+      responseFormat: 'json'
+    });
+    
+    const toolPlan = this.safeJsonParse(toolSelectionResponse.content);
+    
+    // Execute the tool plan determined by LLM reasoning
+    const acquiredData: Record<string, any> = {};
+    const toolResults: Array<{ tool: string; success: boolean; reason: string }> = [];
+    const stillMissing: string[] = [...missingData];
+    
+    if (toolPlan?.tool_plan) {
+      for (const step of toolPlan.tool_plan) {
+        try {
+          logger.info(`🔍 Executing tool: ${step.tool_name} for ${step.missing_item}`, {
+            contextId: taskContext.contextId
+          });
+          
+          const result = await this.toolChain.executeTool(step.tool_id, step.parameters || {});
+          
+          if (result.success && result.data) {
+            // Use LLM to extract relevant data from tool result
+            const extractionPrompt = `
+Tool ${step.tool_name} returned this data:
+${JSON.stringify(result.data, null, 2)}
+
+Extract the value for: ${step.missing_item}
+
+Respond with JSON:
+{
+  "found": true/false,
+  "value": "extracted value or null",
+  "confidence": 0.0-1.0
+}
+`;
+            
+            const extraction = await this.llmProvider.complete({
+              prompt: extractionPrompt,
+              temperature: 0.1,
+              maxTokens: 200,
+              responseFormat: 'json'
+            });
+            
+            const extracted = this.safeJsonParse(extraction.content);
+            if (extracted?.found && extracted.value) {
+              acquiredData[step.missing_item] = extracted.value;
+              const index = stillMissing.indexOf(step.missing_item);
+              if (index > -1) stillMissing.splice(index, 1);
+              
+              toolResults.push({
+                tool: step.tool_name,
+                success: true,
+                reason: `Acquired ${step.missing_item} with confidence ${extracted.confidence}`
+              });
+            } else {
+              toolResults.push({
+                tool: step.tool_name,
+                success: false,
+                reason: `Could not extract ${step.missing_item} from tool result`
+              });
+            }
+          } else {
+            toolResults.push({
+              tool: step.tool_name,
+              success: false,
+              reason: result.error || 'Tool execution failed'
+            });
+          }
+        } catch (error) {
+          toolResults.push({
+            tool: step.tool_name || 'unknown',
+            success: false,
+            reason: error instanceof Error ? error.message : 'Unknown error'
+          });
+        }
+      }
+    }
+    
+    // Add items that cannot be acquired to stillMissing
+    if (toolPlan?.cannot_acquire) {
+      for (const item of toolPlan.cannot_acquire) {
+        if (!stillMissing.includes(item)) {
+          stillMissing.push(item);
+        }
+      }
+    }
+    
+    // Record the toolchain acquisition attempt
+    await this.recordContextEntry(taskContext, {
+      operation: 'toolchain_data_acquisition',
+      data: {
+        requestedFields: missingData,
+        acquiredData,
+        stillMissing,
+        toolResults,
+        toolsAttempted: toolPlan?.tool_plan?.length || 0,
+        successfulTools: toolResults?.filter(r => r.success).length || 0
+      },
+      reasoning: `Attempted to acquire missing data using ${toolPlan?.tool_plan?.length || 0} toolchain tools. ${Object.keys(acquiredData).length} fields acquired, ${stillMissing.length} still missing.`
+    });
+    
+    return {
+      acquiredData,
+      stillMissing,
+      toolResults,
+      requiresUserInput: stillMissing.length > 0
+    };
+  }
+  
+  /**
+   * Create a UIRequest for missing data after toolchain attempts
+   */
+  protected async createDataAcquisitionUIRequest(
+    missingFields: string[],
+    taskContext: TaskContext,
+    toolchainResults: Array<{ tool: string; success: boolean; reason: string }> = []
+  ): Promise<any> {
+    const config = this.agentConfig.data_acquisition_protocol;
+    
+    const fieldDefinitions = await this.createFieldDefinitionsForMissingData(missingFields, taskContext);
+    
+    // Ensure toolchainResults is always an array
+    const results = toolchainResults || [];
+    
+    return {
+      type: 'form',
+      title: 'Additional Information Required',
+      description: 'We need some additional information to continue with your request.',
+      fields: fieldDefinitions,
+      instructions: results.length > 0 
+        ? `We attempted to find this information automatically using ${results.length} different sources, but were unable to locate all required details. Please provide the missing information below.`
+        : 'Please provide the following information to continue with your request.',
+      context: {
+        reason: 'toolchain_acquisition_failed',
+        missingFields,
+        taskType: taskContext.currentState?.data?.taskType || 'general',
+        toolchainResults: results,
+        attemptedSources: results.map(r => r.tool)
+      }
+    };
+  }
+  
+  /**
+   * Helper method to safely parse JSON from strings
+   */
+  private safeJsonParse(content: any): any {
+    if (typeof content === 'object') {
+      return content;
+    }
+    
+    if (typeof content !== 'string') {
+      return null;
+    }
+    
+    try {
+      return JSON.parse(content);
+    } catch (error) {
+      // Try to extract JSON from markdown code blocks
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        try {
+          return JSON.parse(jsonMatch[1]);
+        } catch {}
+      }
+      return null;
+    }
+  }
+  
+  /**
+   * Create field definitions for missing data using LLM reasoning
+   */
+  private async createFieldDefinitionsForMissingData(
+    missingFields: string[],
+    taskContext: TaskContext
+  ): Promise<any[]> {
+    // Use LLM to generate appropriate field definitions based on context
+    const fieldGenerationPrompt = `
+Generate form field definitions for the following missing data fields.
+
+Missing fields:
+${missingFields.map(field => `- ${field}`).join('\n')}
+
+Task context:
+${JSON.stringify(taskContext.currentState?.data || {}, null, 2)}
+
+For each field, generate an appropriate form field definition with:
+- id: field identifier
+- label: human-readable label
+- type: appropriate input type (text, email, tel, select, textarea, etc.)
+- required: whether the field is required
+- placeholder: helpful placeholder text
+- help: brief help text
+- options: (for select fields only) array of {value, label} options
+
+Respond with a JSON array of field definitions.
+`;
+    
+    try {
+      const response = await this.llmProvider.complete({
+        prompt: fieldGenerationPrompt,
+        temperature: 0.3,
+        maxTokens: 1500,
+        responseFormat: 'json'
+      });
+      
+      const fieldDefinitions = this.safeJsonParse(response.content);
+      
+      if (Array.isArray(fieldDefinitions)) {
+        return fieldDefinitions;
+      }
+    } catch (error) {
+      logger.error('Failed to generate field definitions with LLM', {
+        error: error instanceof Error ? error.message : String(error),
+        missingFields
+      });
+    }
+    
+    // Fallback to generic field definitions if LLM fails
+    return missingFields.map(field => ({
+      id: field,
+      label: field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      type: 'text',
+      required: true,
+      placeholder: `Enter ${field.replace(/_/g, ' ')}`,
+      help: `Please provide the ${field.replace(/_/g, ' ')}`
+    }));
+  }
+
+   /**
    * Internal execution method (core reasoning engine)
    * This is the heart of agent intelligence - subclasses override for specialized behavior
    */

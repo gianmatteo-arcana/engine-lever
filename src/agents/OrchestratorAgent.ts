@@ -33,8 +33,10 @@ import {
   UIRequest,
   UITemplateType,
   OrchestratorRequest,
-  OrchestratorResponse
+  OrchestratorResponse,
+  TaskStatus
 } from '../types/engine-types';
+import { TASK_STATUS } from '../constants/task-status';
 
 /**
  * JSON Schema templates for consistent LLM responses
@@ -436,13 +438,43 @@ export class OrchestratorAgent extends BaseAgent {
           await this.handleProgressiveDisclosure(context, phaseResult.uiRequests);
         }
         
-        // 6. Check for critical failures that should stop execution
-        if (phaseResult.status === 'failed' || phaseResult.criticalError) {
+        // 6. Check if phase needs user input - pause execution
+        // CRITICAL: When ANY agent returns 'needs_input', we MUST:
+        // 1. Set task status to 'waiting_for_input' (NOT 'in_progress')
+        // 2. Stop execution immediately (don't process more phases)
+        // 3. Wait for user to provide the required input
+        // This prevents premature task completion and ensures proper UX
+        if (phaseResult.status === 'needs_input') { // Agent response status
+          logger.info('⏸️ Phase requires user input, pausing task execution', {
+            contextId: context.contextId,
+            phaseName: phase.name,
+            uiRequestCount: phaseResult.uiRequests?.length || 0
+          });
+          
+          // Update task status to waiting_for_input
+          // This tells the frontend that user action is REQUIRED to continue
+          // The task is NOT failed, NOT completed, just waiting
+          await this.updateTaskStatus(context, TASK_STATUS.WAITING_FOR_INPUT);
+          
+          // Also update the context state to reflect this
+          context.currentState.status = TASK_STATUS.WAITING_FOR_INPUT;
+          
+          // Don't mark as complete, exit orchestration loop
+          allPhasesCompleted = false;
+          break;
+        }
+        
+        // 7. Check for critical failures that should stop execution
+        if (phaseResult.status === 'failed' || phaseResult.criticalError) { // Agent response status
           logger.error(`Phase ${phaseIndex} failed critically, stopping execution`, {
             contextId: context.contextId,
             phaseName: phase.name,
             error: phaseResult.error
           });
+          
+          // Update task status to failed
+          await this.updateTaskStatus(context, TASK_STATUS.FAILED);
+          
           allPhasesCompleted = false;
           break;
         }
@@ -457,33 +489,84 @@ export class OrchestratorAgent extends BaseAgent {
         });
         await this.completeTaskContext(context);
       } else {
-        logger.warn('⚠️ Task execution incomplete - not all phases executed', {
+        // Check WHY we didn't complete all phases before logging
+        const currentStatus = context.currentState.status;
+        
+        // DEBUG: Log what status we actually have
+        logger.debug('Status check debug', {
           contextId: context.contextId,
-          phasesExecuted: phaseIndex,
-          totalPhases: executionPlan.phases.length
+          currentStatus,
+          waitingForInputConstant: TASK_STATUS.WAITING_FOR_INPUT,
+          statusMatch: currentStatus === TASK_STATUS.WAITING_FOR_INPUT
         });
-        // Update task status to 'failed' or 'incomplete'
-        await this.recordContextEntry(context, {
-          operation: 'task_incomplete',
-          data: {
-            phasesCompleted: phaseIndex,
+        
+        if (currentStatus === TASK_STATUS.WAITING_FOR_INPUT) {
+          // Task is not incomplete - it's intentionally paused waiting for user
+          logger.info('⏸️ Task execution paused - waiting for user input', {
+            contextId: context.contextId,
+            phasesExecuted: phaseIndex,
             totalPhases: executionPlan.phases.length,
-            reason: 'Phase execution failed or interrupted'
-          },
-          reasoning: 'Task could not complete all planned phases'
-        });
+            status: currentStatus
+          });
+          // Don't record as incomplete when waiting for input - this is expected behavior
+        } else if (currentStatus === TASK_STATUS.FAILED) {
+          // Task actually failed
+          logger.error('❌ Task execution failed', {
+            contextId: context.contextId,
+            phasesExecuted: phaseIndex,
+            totalPhases: executionPlan.phases.length,
+            status: currentStatus
+          });
+          await this.recordContextEntry(context, {
+            operation: `task_${TASK_STATUS.FAILED}`,
+            data: {
+              phasesCompleted: phaseIndex,
+              totalPhases: executionPlan.phases.length,
+              status: currentStatus,
+              reason: 'Phase execution failed'
+            },
+            reasoning: 'Task failed during phase execution'
+          });
+        } else {
+          // Some other unexpected state
+          logger.warn('⚠️ Task execution incomplete - unexpected state', {
+            contextId: context.contextId,
+            phasesExecuted: phaseIndex,
+            totalPhases: executionPlan.phases.length,
+            status: currentStatus
+          });
+          await this.recordContextEntry(context, {
+            operation: 'task_incomplete', // Keep as-is since there's no TASK_STATUS.INCOMPLETE
+            data: {
+              phasesCompleted: phaseIndex,
+              totalPhases: executionPlan.phases.length,
+              status: currentStatus,
+              reason: 'Unexpected execution state'
+            },
+            reasoning: 'Task could not complete all planned phases due to unexpected state'
+          });
+        }
       }
       
-      logger.info('Task orchestration completed', {
+      // Final summary log
+      const finalStatus = context.currentState.status;
+      const duration = Date.now() - startTime;
+      
+      logger.info('Task orchestration ended', {
         contextId: context.contextId,
-        duration: Date.now() - startTime
+        status: finalStatus,
+        duration,
+        phasesCompleted: phaseIndex,
+        totalPhases: executionPlan.phases.length
       });
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const stackTrace = error instanceof Error ? error.stack : 'No stack trace available';
       logger.error('Orchestration failed', {
         contextId: context.contextId,
-        error: errorMessage
+        error: errorMessage,
+        stack: stackTrace
       });
       
       // Apply resilience strategy
@@ -505,6 +588,48 @@ export class OrchestratorAgent extends BaseAgent {
       hasAgentRegistry: this.agentRegistry.size > 0
     });
     
+    // CRITICAL: Check for missing business data using toolchain-first approach
+    const taskType = context.currentState?.data?.taskType || 'general';
+    const businessProfile = (context as any).businessProfile || {};
+    const config = this.agentConfig.data_acquisition_protocol;
+    
+    // Dynamic field validation based on task type and current data state
+    const missingFields = taskType === 'user_onboarding' 
+      ? ['business_name', 'business_type'].filter(field => !businessProfile[field])
+      : [];
+    
+    if (missingFields.length > 0 && config?.strategy === 'toolchain_first_ui_fallback') {
+      logger.info('🔧 BUSINESS DATA MISSING - Starting toolchain-first acquisition', {
+        contextId: context.contextId,
+        missingFields,
+        taskType
+      });
+      
+      // Use BaseAgent's toolchain-first approach
+      const acquisitionResult = await this.acquireDataWithToolchain(missingFields, context);
+      
+      if (acquisitionResult.requiresUserInput) {
+        // Create UIRequest for remaining missing fields
+        const uiRequest = await this.createDataAcquisitionUIRequest(
+          acquisitionResult.stillMissing,
+          context,
+          acquisitionResult.toolResults
+        );
+        
+        // Return special plan that requests user input
+        return this.createUIRequestExecutionPlan(context, uiRequest, acquisitionResult);
+      } else {
+        // Update business profile with acquired data
+        Object.assign(businessProfile, acquisitionResult.acquiredData);
+        (context as any).businessProfile = businessProfile;
+        
+        logger.info('✅ All required business data acquired from toolchain', {
+          contextId: context.contextId,
+          acquiredFields: Object.keys(acquisitionResult.acquiredData)
+        });
+      }
+    }
+    
     // Ensure agent registry is initialized from YAML files (the ONLY source of truth)
     if (this.agentRegistry.size === 0) {
       logger.info('📋 Initializing agent registry from YAML...');
@@ -514,7 +639,7 @@ export class OrchestratorAgent extends BaseAgent {
     
     // Extract task information from the task data ONLY (no template references)
     // Template content should already be copied to task during creation
-    const taskType = context.currentState?.data?.taskType || 'general';
+    const _mainTaskType = context.currentState?.data?.taskType || 'general';
     const taskTitle = context.currentState?.data?.title || 'Unknown Task';
     const taskDescription = context.currentState?.data?.description || 'No description provided';
     const taskDefinition = context.metadata?.taskDefinition || {};
@@ -933,6 +1058,17 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     
     // Log phase completion with enhanced metrics
     const duration = Date.now() - phaseStart;
+    
+    // Determine phase status based on subtask results
+    // IMPORTANT: Phase status determination hierarchy:
+    // 1. If ANY subtask needs input -> phase status = 'needs_input' (highest priority)
+    // 2. Else if ANY subtask failed -> phase status = 'failed'
+    // 3. Else all completed -> phase status = 'completed'
+    // This ensures we NEVER mark a phase as complete when user input is needed
+    const needsInput = results.some((r: any) => r.status === 'needs_input');
+    const hasFailed = results.some((r: any) => r.status === 'failed' || r.status === 'error');
+    const phaseStatus = needsInput ? 'needs_input' : (hasFailed ? 'failed' : 'completed');
+    
     logger.info('✅ Phase execution completed', {
       contextId: context.contextId,
       phaseName: phase.name,
@@ -940,13 +1076,14 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       resultsCount: results.length,
       uiRequestCount: uiRequests.length,
       duration,
-      successRate: results.filter((r: any) => r.status === 'completed').length / results.length
+      successRate: results.filter((r: any) => r.status === 'completed').length / results.length,
+      phaseStatus
     });
     
     return {
       phaseId: (phase as any).id || phase.name,
       phaseName: phase.name,
-      status: 'completed',
+      status: phaseStatus,
       results,
       uiRequests,
       duration,
@@ -976,12 +1113,54 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       specificInstruction: subtask.specific_instruction?.substring(0, 150) + '...'
     });
     
-    // Find the agent in our registry
-    const agent = Array.from(this.agentRegistry.values())
+    // Try to find the agent in our registry first
+    let agent = Array.from(this.agentRegistry.values())
       .find(a => a.agentId === subtask.agent);
     
+    // If not in registry, try to discover it via discovery service
     if (!agent) {
-      throw new Error(`Agent ${subtask.agent} not found in registry`);
+      try {
+        // Import and use the agent discovery service to find the agent
+        const { agentDiscovery } = await import('../services/agent-discovery');
+        
+        // Ensure agents are discovered
+        await agentDiscovery.discoverAgents();
+        
+        // Get capabilities (returns an array, not a Map)
+        const capabilities = agentDiscovery.getCapabilities();
+        
+        // Find the agent in discovered capabilities
+        const agentCapability = capabilities.find(cap => cap.agentId === subtask.agent);
+        if (agentCapability) {
+          // Add to registry for future use - properly typed as AgentCapability
+          agent = {
+            agentId: subtask.agent,
+            role: agentCapability.role,
+            capabilities: agentCapability.skills || [],
+            availability: agentCapability.availability || 'available',
+            specialization: agentCapability.name || subtask.agent,
+            fallbackStrategy: 'user_input'
+          } as AgentCapability;
+          
+          this.agentRegistry.set(subtask.agent, agent);
+          
+          logger.info('✅ Agent discovered and registered via discovery service', {
+            agentId: subtask.agent,
+            role: agentCapability.role,
+            availability: agentCapability.availability
+          });
+        }
+      } catch (error) {
+        logger.warn('Failed to discover agent via discovery service', {
+          agentId: subtask.agent,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+    
+    // If still not found, throw error
+    if (!agent) {
+      throw new Error(`Agent ${subtask.agent} not found in registry or discovery service`);
     }
     
     if (agent.availability !== 'available') {
@@ -1342,16 +1521,31 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       types: requests.map(r => r.templateType)
     });
     
-    // Record UI requests in context
+    // Record FULL UI requests in context for proper persistence
+    // UI requests are now stored as task_context_events
+    // The recordContextEntry method will handle persistence and broadcasting
     await this.recordContextEntry(context, {
-      operation: 'ui_requests_sent',
+      operation: 'ui_requests_created',
       data: {
-        requests: requests.map(r => ({
-          id: r.requestId,
-          type: r.templateType
-        }))
+        // Store the complete UI request data for frontend consumption
+        uiRequests: requests,
+        // Keep summary for quick reference  
+        summary: {
+          count: requests.length,
+          types: requests.map(r => r.templateType),
+          requestIds: requests.map(r => r.requestId)
+        }
       },
       reasoning: 'Requesting user input for required information'
+    });
+    
+    // The recordContextEntry method already broadcasts the event via SSE
+    // No need for additional broadcasting - the frontend will receive the
+    // ui_requests_created event through the task context update stream
+    
+    logger.debug('UI requests created and broadcast via context event', {
+      contextId: context.contextId,
+      requestCount: requests.length
     });
   }
   
@@ -1393,6 +1587,31 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
   }
   
   /**
+   * Update task status in database
+   * Used to track task state transitions like waiting_for_input
+   */
+  private async updateTaskStatus(context: TaskContext, status: TaskStatus): Promise<void> {
+    logger.info(`📝 Updating task status to ${status.toUpperCase()}`, {
+      contextId: context.contextId
+    });
+    
+    try {
+      const taskService = TaskService.getInstance();
+      await taskService.updateTaskStatus(context.contextId, status);
+      
+      logger.info(`✅ Task status updated to ${status.toUpperCase()} in database`, {
+        contextId: context.contextId
+      });
+    } catch (error) {
+      logger.error('Failed to update task status', {
+        contextId: context.contextId,
+        status,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+  
+  /**
    * Complete task
    */
   private async completeTaskContext(context: TaskContext): Promise<void> {
@@ -1402,7 +1621,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     });
     
     // Update the context state to completed
-    context.currentState.status = 'completed';
+    context.currentState.status = TASK_STATUS.COMPLETED;
     context.currentState.completeness = 100;
     
     // Update task status in database via TaskService
@@ -1410,7 +1629,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       const taskService = new TaskService(DatabaseService.getInstance());
       const completedAt = new Date().toISOString();
       
-      await taskService.updateTaskStatus(context.contextId, 'completed', completedAt);
+      await taskService.updateTaskStatus(context.contextId, TASK_STATUS.COMPLETED, completedAt);
       
       logger.info('✅ Task status updated to COMPLETED in database', {
         contextId: context.contextId
@@ -1424,7 +1643,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     
     // Record completion in context with updated state
     await this.recordContextEntry(context, {
-      operation: 'task_completed',
+      operation: `task_${TASK_STATUS.COMPLETED}`,
       data: {
         completedAt: new Date().toISOString(),
         finalState: context.currentState,
@@ -2318,6 +2537,122 @@ Respond with JSON only:
     });
     
     return correctedPlan;
+  }
+  
+  /**
+   * =============================================================================
+   * TOOLCHAIN-FIRST UI REQUEST EXECUTION PLAN
+   * =============================================================================
+   * 
+   * Creates execution plan when toolchain acquisition fails and UI input is needed
+   */
+  
+  /**
+   * Create execution plan that requests user input after toolchain attempts
+   */
+  private async createUIRequestExecutionPlan(
+    context: TaskContext,
+    uiRequest: any,
+    acquisitionResult: any
+  ): Promise<ExecutionPlan> {
+    logger.info('🎯 Creating UI request execution plan after toolchain attempts', {
+      contextId: context.contextId,
+      stillMissingFields: acquisitionResult.stillMissingFields || acquisitionResult.stillMissing,
+      toolchainResults: acquisitionResult.toolResults?.length || 0
+    });
+    
+    // Record why we're requesting user input
+    await this.recordContextEntry(context, {
+      operation: 'toolchain_acquisition_failed_requesting_ui',
+      data: {
+        originalMissingFields: acquisitionResult.stillMissingFields || acquisitionResult.stillMissing,
+        toolchainResults: acquisitionResult.toolResults || [],
+        acquiredFromToolchain: acquisitionResult.acquiredData,
+        requestingUserInput: true
+      },
+      reasoning: `Toolchain attempted ${acquisitionResult.toolResults?.length || 0} tools but could not acquire all required data. Requesting user input for remaining fields.`
+    });
+    
+    // Create a single-phase plan that requests user input
+    const uiRequestPlan: ExecutionPlan = {
+      phases: [{
+        name: 'User Data Collection (Post-Toolchain)',
+        subtasks: [{
+          description: 'Collect remaining business information from user after toolchain attempts',
+          agent: 'profile_collection_agent',
+          specific_instruction: `Request the following business information from the user: ${(acquisitionResult.stillMissingFields || acquisitionResult.stillMissing || []).join(', ')}. Explain that we attempted to find this information automatically but need their input for accuracy.`,
+          input_data: {
+            missingFields: acquisitionResult.stillMissingFields || acquisitionResult.stillMissing || [],
+            toolchainResults: acquisitionResult.toolResults || [],
+            acquiredData: acquisitionResult.acquiredData || {},
+            context: 'toolchain_acquisition_failed'
+          },
+          expected_output: 'User-provided business data for remaining fields',
+          success_criteria: ['All required fields provided by user', 'Data validated and stored']
+        }],
+        parallel_execution: false,
+        dependencies: []
+      }],
+      reasoning: {
+        task_analysis: `Toolchain tools could not provide all required data. Still need: ${(acquisitionResult.stillMissingFields || acquisitionResult.stillMissing || []).join(', ')}`,
+        subtask_decomposition: [{
+          subtask: 'Collect remaining business information from user',
+          required_capabilities: ['user_input_collection', 'business_profile_management'],
+          assigned_agent: 'profile_collection_agent',
+          rationale: 'Specialized in collecting business information with user interaction after automated attempts'
+        }],
+        coordination_strategy: 'Single-phase user data collection as fallback after toolchain attempts'
+      }
+    } as any;
+    
+    // Add the UI request directly to the plan
+    (uiRequestPlan as any).immediateUIRequest = uiRequest;
+    
+    return uiRequestPlan;
+  }
+  
+  /**
+   * Dynamically identify missing required fields based on task type
+   * This replaces the hardcoded required_business_data configuration
+   */
+  private async identifyMissingRequiredFields(
+    context: TaskContext, 
+    taskType: string,
+    businessProfile: Record<string, any>
+  ): Promise<string[]> {
+    const missingFields: string[] = [];
+    
+    // Define minimum required fields based on task type
+    // This is now dynamically determined rather than hardcoded in YAML
+    const taskRequirements: Record<string, string[]> = {
+      'user_onboarding': ['business_name', 'business_type'],
+      'soi_filing': ['business_name', 'entity_type', 'registered_agent_name'],
+      'compliance_check': ['business_name', 'business_type', 'jurisdiction'],
+      'general': ['business_name']
+    };
+    
+    const requiredFields = taskRequirements[taskType] || taskRequirements['general'];
+    
+    // Check which fields are missing or empty
+    for (const field of requiredFields) {
+      const value = businessProfile[field];
+      if (!value || value === '' || value === null || value === undefined) {
+        missingFields.push(field);
+      }
+    }
+    
+    // Log what we found
+    if (missingFields.length > 0) {
+      logger.info('🔍 Identified missing required fields', {
+        contextId: context.contextId,
+        taskType,
+        requiredFields,
+        missingFields,
+        presentFields: requiredFields.filter(f => !missingFields.includes(f))
+      });
+    }
+    
+    return missingFields;
   }
   
 }
