@@ -36,6 +36,7 @@ import {
   OrchestratorResponse,
   TaskStatus
 } from '../types/engine-types';
+import { TASK_STATUS } from '../constants/task-status';
 
 /**
  * JSON Schema templates for consistent LLM responses
@@ -438,7 +439,12 @@ export class OrchestratorAgent extends BaseAgent {
         }
         
         // 6. Check if phase needs user input - pause execution
-        if (phaseResult.status === 'needs_input') {
+        // CRITICAL: When ANY agent returns 'needs_input', we MUST:
+        // 1. Set task status to 'waiting_for_input' (NOT 'in_progress')
+        // 2. Stop execution immediately (don't process more phases)
+        // 3. Wait for user to provide the required input
+        // This prevents premature task completion and ensures proper UX
+        if (phaseResult.status === 'needs_input') { // Agent response status
           logger.info('⏸️ Phase requires user input, pausing task execution', {
             contextId: context.contextId,
             phaseName: phase.name,
@@ -446,7 +452,9 @@ export class OrchestratorAgent extends BaseAgent {
           });
           
           // Update task status to waiting_for_input
-          await this.updateTaskStatus(context, 'waiting_for_input' as TaskStatus);
+          // This tells the frontend that user action is REQUIRED to continue
+          // The task is NOT failed, NOT completed, just waiting
+          await this.updateTaskStatus(context, TASK_STATUS.WAITING_FOR_INPUT);
           
           // Don't mark as complete, exit orchestration loop
           allPhasesCompleted = false;
@@ -454,12 +462,16 @@ export class OrchestratorAgent extends BaseAgent {
         }
         
         // 7. Check for critical failures that should stop execution
-        if (phaseResult.status === 'failed' || phaseResult.criticalError) {
+        if (phaseResult.status === 'failed' || phaseResult.criticalError) { // Agent response status
           logger.error(`Phase ${phaseIndex} failed critically, stopping execution`, {
             contextId: context.contextId,
             phaseName: phase.name,
             error: phaseResult.error
           });
+          
+          // Update task status to failed
+          await this.updateTaskStatus(context, TASK_STATUS.FAILED);
+          
           allPhasesCompleted = false;
           break;
         }
@@ -996,7 +1008,11 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     const duration = Date.now() - phaseStart;
     
     // Determine phase status based on subtask results
-    // If any subtask needs input, the phase needs input
+    // IMPORTANT: Phase status determination hierarchy:
+    // 1. If ANY subtask needs input -> phase status = 'needs_input' (highest priority)
+    // 2. Else if ANY subtask failed -> phase status = 'failed'
+    // 3. Else all completed -> phase status = 'completed'
+    // This ensures we NEVER mark a phase as complete when user input is needed
     const needsInput = results.some((r: any) => r.status === 'needs_input');
     const hasFailed = results.some((r: any) => r.status === 'failed' || r.status === 'error');
     const phaseStatus = needsInput ? 'needs_input' : (hasFailed ? 'failed' : 'completed');
@@ -1553,7 +1569,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     });
     
     // Update the context state to completed
-    context.currentState.status = 'completed';
+    context.currentState.status = TASK_STATUS.COMPLETED;
     context.currentState.completeness = 100;
     
     // Update task status in database via TaskService
@@ -1561,7 +1577,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       const taskService = new TaskService(DatabaseService.getInstance());
       const completedAt = new Date().toISOString();
       
-      await taskService.updateTaskStatus(context.contextId, 'completed', completedAt);
+      await taskService.updateTaskStatus(context.contextId, TASK_STATUS.COMPLETED, completedAt);
       
       logger.info('✅ Task status updated to COMPLETED in database', {
         contextId: context.contextId

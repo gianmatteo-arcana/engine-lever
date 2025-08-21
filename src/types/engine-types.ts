@@ -27,9 +27,19 @@ export interface TaskContext {
 
 /**
  * Current state of task execution
+ * 
+ * Status Semantics:
+ * - pending: Task created but not started
+ * - in_progress: Actively being processed by system
+ * - waiting_for_input: Paused, requires user action to continue
+ * - completed: Successfully finished all work
+ * - failed: Unrecoverable error occurred
+ * - cancelled: Explicitly stopped by user/system
+ * 
+ * @see docs/TASK_STATUS_GUIDE.md for detailed usage
  */
 export interface TaskState {
-  status: 'pending' | 'in_progress' | 'processing' | 'waiting_for_input' | 'gathering_user_info' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'in_progress' | 'waiting_for_input' | 'completed' | 'failed' | 'cancelled';
   phase: string;
   completeness: number; // 0-100
   data: Record<string, any>;

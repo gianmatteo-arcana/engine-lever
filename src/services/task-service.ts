@@ -19,6 +19,7 @@
 import { DatabaseService } from './database';
 import { StateComputer } from './state-computer';
 import { TaskStatus } from '../types/engine-types';
+import { TASK_STATUS } from '../constants/task-status';
 import { logger } from '../utils/logger';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -166,7 +167,7 @@ export class TaskService {
         
         // Current state computed from history
         currentState: {
-          status: 'pending',
+          status: TASK_STATUS.PENDING,
           phase: 'initialization',
           completeness: 0,
           data: request.initialData || {}
@@ -527,7 +528,7 @@ export class TaskService {
         task_type: request.task_type,
         business_id: request.business_id,
         template_id: request.template_id,
-        status: 'pending',
+        status: TASK_STATUS.PENDING,
         priority: request.priority || 'medium',
         deadline: request.deadline,
         metadata: request.metadata || {},

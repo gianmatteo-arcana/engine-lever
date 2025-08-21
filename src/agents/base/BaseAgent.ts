@@ -408,11 +408,20 @@ Your response MUST be valid JSON matching this EXACT schema:
   }
 }
 
-STATUS VALUES:
-- "completed": Task finished successfully
-- "needs_input": Requires user input to proceed  
-- "delegated": Passed to another agent
-- "error": Failed with error (include error details in reasoning)
+STATUS VALUES (CRITICAL - USE CORRECTLY):
+- "completed": Task/subtask finished successfully, all work done, no user input needed
+  Example: Successfully analyzed data, generated report, saved results
+  
+- "needs_input": MUST have user input to continue, cannot proceed without it
+  Example: Missing required business information, need user approval, require clarification
+  IMPORTANT: Always include a uiRequest when returning this status
+  
+- "delegated": Passed work to another specialized agent
+  Example: Forwarding compliance check to compliance_agent
+  
+- "error": Unrecoverable failure, cannot continue even with user input  
+  Example: API unavailable, invalid configuration, critical system error
+  IMPORTANT: This is terminal - use "needs_input" if user can help resolve it
 
 # Additional Response Requirements
 - Use ONLY the JSON format shown above - no additional text

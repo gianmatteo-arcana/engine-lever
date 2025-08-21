@@ -26,7 +26,7 @@ export interface DatabaseTask {
   template_id?: string;
   
   // Status and priority (from enums)
-  status: 'pending' | 'active' | 'paused' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'in_progress' | 'waiting_for_input' | 'completed' | 'failed' | 'cancelled';
   priority: 'critical' | 'high' | 'medium' | 'low';
   
   // Temporal fields

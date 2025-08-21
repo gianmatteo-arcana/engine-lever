@@ -30,7 +30,7 @@ describe('Type Safety Tests', () => {
         tenantId: 'tenant_123',
         createdAt: new Date().toISOString(),
         currentState: {
-          status: 'processing',
+          status: 'in_progress',
           phase: 'data_collection',
           completeness: 50,
           data: {}
@@ -279,7 +279,7 @@ describe('Type Safety Tests', () => {
   describe('TaskState Type Safety', () => {
     test('should enforce phase values', () => {
       const validState: TaskState = {
-        status: 'processing',
+        status: 'in_progress',
         phase: 'data_collection',
         completeness: 25,
         data: {
@@ -292,7 +292,7 @@ describe('Type Safety Tests', () => {
       expect(validState.phase).toBe('data_collection');
 
       const invalidPhase: TaskState = {
-        status: 'processing',
+        status: 'in_progress',
         phase: 'invalid_phase' as 'data_collection',
         completeness: 50,
         data: {}
@@ -303,7 +303,7 @@ describe('Type Safety Tests', () => {
 
     test('should enforce completeness range', () => {
       const validCompleteness: TaskState = {
-        status: 'processing',
+        status: 'in_progress',
         phase: 'verification',
         completeness: 100,
         data: {}
@@ -411,14 +411,14 @@ describe('Type Safety Tests', () => {
 
   describe('Type Inference Tests', () => {
     test('should properly infer union types', () => {
-      type Status = 'pending' | 'processing' | 'completed' | 'failed';
+      type Status = 'pending' | 'in_progress' | 'completed' | 'failed';
       
       const getStatusMessage = (status: Status): string => {
         switch (status) {
           case 'pending':
             return 'Task is pending';
-          case 'processing':
-            return 'Task is processing';
+          case 'in_progress':
+            return 'Task is in progress';
           case 'completed':
             return 'Task completed successfully';
           case 'failed':
