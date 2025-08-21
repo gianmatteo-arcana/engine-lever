@@ -25,7 +25,24 @@ jest.mock('../../../src/services/database', () => ({
       addContextEvent: jest.fn(),
       getContext: jest.fn(),
       createContextHistoryEntry: jest.fn(),
-      getUserClient: jest.fn()
+      getUserClient: jest.fn(),
+      getServiceClient: jest.fn(() => ({
+        from: jest.fn(() => ({
+          insert: jest.fn(() => ({
+            select: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ data: {}, error: null }))
+            }))
+          })),
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ data: {}, error: null }))
+            }))
+          })),
+          update: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({ data: {}, error: null }))
+          }))
+        }))
+      }))
     }))
   }
 }));

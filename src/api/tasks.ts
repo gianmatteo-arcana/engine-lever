@@ -719,43 +719,35 @@ router.get('/:taskId/status', requireAuth, async (req: AuthenticatedRequest, res
 router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { task_type: taskType, title, description, metadata, template_id: templateId } = req.body;
-    const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
+    const userToken = req.userToken!;
     const userId = req.userId!;
     
     logger.info('Creating universal task', { taskType, userId, templateId });
     
+    // Use TaskService to create task - this will load the template properly
+    const taskService = TaskService.getInstance();
+    const taskContext = await taskService.create({
+      templateId: templateId || taskType,
+      tenantId: userId,
+      userToken,
+      initialData: {
+        ...(metadata || {}),
+        taskId: undefined, // Will be generated
+        userId,
+        title: title || `${taskType} Task - ${new Date().toISOString()}`,
+        description: description || `Created via universal API`,
+        taskType: taskType,
+        source: metadata?.source || 'api',
+        createdAt: new Date().toISOString()
+      }
+    });
+    
+    // Get the created task from database
     const dbService = DatabaseService.getInstance();
-    
-    // Tasks are self-contained - agents reason from their YAML configs
-    // No templates needed - just create minimal task definition
-    const taskDefinition = {
-      id: templateId || taskType,
-      goals: ['Complete the task successfully'],
-      title: `${taskType} Task`,
-      description: `Standard ${taskType} workflow`
-    };
-    
-    // Create task with definition embedded in metadata
-    const taskMetadata = {
-      ...(metadata || {}),
-      taskDefinition,
-      source: metadata?.source || 'api',
-      createdAt: new Date().toISOString()
-    };
-    
     const taskRecord = await dbService.getServiceClient()
       .from('tasks')
-      .insert({
-        user_id: userId,
-        task_type: taskType,
-        title: title || `${taskType} Task`,
-        description: description || `Created via universal API`,
-        status: 'pending',
-        priority: 'medium',
-        metadata: taskMetadata,
-        template_id: templateId
-      })
-      .select()
+      .select('*')
+      .eq('id', taskContext.contextId)
       .single();
 
     if (taskRecord.error) {
