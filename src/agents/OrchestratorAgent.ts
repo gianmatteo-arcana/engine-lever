@@ -1020,12 +1020,52 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       specificInstruction: subtask.specific_instruction?.substring(0, 150) + '...'
     });
     
-    // Find the agent in our registry
-    const agent = Array.from(this.agentRegistry.values())
+    // Try to find the agent in our registry first
+    let agent = Array.from(this.agentRegistry.values())
       .find(a => a.agentId === subtask.agent);
     
+    // If not in registry, try to discover it via discovery service
     if (!agent) {
-      throw new Error(`Agent ${subtask.agent} not found in registry`);
+      try {
+        // Import and use the agent discovery service to find the agent
+        const { agentDiscovery } = await import('../services/agent-discovery');
+        
+        // Ensure agents are discovered
+        await agentDiscovery.discoverAgents();
+        
+        // Get capabilities (returns an array, not a Map)
+        const capabilities = agentDiscovery.getCapabilities();
+        
+        // Find the agent in discovered capabilities
+        const agentCapability = capabilities.find(cap => cap.agentId === subtask.agent);
+        if (agentCapability) {
+          // Add to registry for future use
+          agent = {
+            agentId: subtask.agent,
+            role: agentCapability.role,
+            availability: agentCapability.availability || 'available',
+            skills: agentCapability.skills || []
+          } as any;
+          
+          this.agentRegistry.set(subtask.agent, agent as any);
+          
+          logger.info('✅ Agent discovered and registered via discovery service', {
+            agentId: subtask.agent,
+            role: agentCapability.role,
+            availability: agentCapability.availability
+          });
+        }
+      } catch (error) {
+        logger.warn('Failed to discover agent via discovery service', {
+          agentId: subtask.agent,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+    
+    // If still not found, throw error
+    if (!agent) {
+      throw new Error(`Agent ${subtask.agent} not found in registry or discovery service`);
     }
     
     if (agent.availability !== 'available') {
