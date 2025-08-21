@@ -714,7 +714,7 @@ export class TaskService {
    * Update task status (internal use - service role)
    * Used by orchestrator to mark tasks as completed
    */
-  async updateTaskStatus(taskId: string, status: 'pending' | 'processing' | 'completed' | 'failed', completedAt?: string): Promise<void> {
+  async updateTaskStatus(taskId: string, status: 'pending' | 'processing' | 'completed' | 'failed' | 'waiting_for_input', completedAt?: string): Promise<void> {
     try {
       logger.info('Updating task status', { taskId, status });
       

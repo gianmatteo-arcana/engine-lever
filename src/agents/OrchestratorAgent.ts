@@ -436,7 +436,23 @@ export class OrchestratorAgent extends BaseAgent {
           await this.handleProgressiveDisclosure(context, phaseResult.uiRequests);
         }
         
-        // 6. Check for critical failures that should stop execution
+        // 6. Check if phase needs user input - pause execution
+        if (phaseResult.status === 'needs_input') {
+          logger.info('⏸️ Phase requires user input, pausing task execution', {
+            contextId: context.contextId,
+            phaseName: phase.name,
+            uiRequestCount: phaseResult.uiRequests?.length || 0
+          });
+          
+          // Update task status to waiting_for_input
+          await this.updateTaskStatus(context, 'waiting_for_input');
+          
+          // Don't mark as complete, exit orchestration loop
+          allPhasesCompleted = false;
+          break;
+        }
+        
+        // 7. Check for critical failures that should stop execution
         if (phaseResult.status === 'failed' || phaseResult.criticalError) {
           logger.error(`Phase ${phaseIndex} failed critically, stopping execution`, {
             contextId: context.contextId,
@@ -977,6 +993,13 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     
     // Log phase completion with enhanced metrics
     const duration = Date.now() - phaseStart;
+    
+    // Determine phase status based on subtask results
+    // If any subtask needs input, the phase needs input
+    const needsInput = results.some((r: any) => r.status === 'needs_input');
+    const hasFailed = results.some((r: any) => r.status === 'failed' || r.status === 'error');
+    const phaseStatus = needsInput ? 'needs_input' : (hasFailed ? 'failed' : 'completed');
+    
     logger.info('✅ Phase execution completed', {
       contextId: context.contextId,
       phaseName: phase.name,
@@ -984,13 +1007,14 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       resultsCount: results.length,
       uiRequestCount: uiRequests.length,
       duration,
-      successRate: results.filter((r: any) => r.status === 'completed').length / results.length
+      successRate: results.filter((r: any) => r.status === 'completed').length / results.length,
+      phaseStatus
     });
     
     return {
       phaseId: (phase as any).id || phase.name,
       phaseName: phase.name,
-      status: 'completed',
+      status: phaseStatus,
       results,
       uiRequests,
       duration,
@@ -1491,6 +1515,31 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     // Evaluate goal success criteria against current state
     // In real implementation, this would use expression evaluation
     return context.currentState.completeness >= 100;
+  }
+  
+  /**
+   * Update task status in database
+   * Used to track task state transitions like waiting_for_input
+   */
+  private async updateTaskStatus(context: TaskContext, status: string): Promise<void> {
+    logger.info(`📝 Updating task status to ${status.toUpperCase()}`, {
+      contextId: context.contextId
+    });
+    
+    try {
+      const taskService = TaskService.getInstance();
+      await taskService.updateTaskStatus(context.contextId, status as any);
+      
+      logger.info(`✅ Task status updated to ${status.toUpperCase()} in database`, {
+        contextId: context.contextId
+      });
+    } catch (error) {
+      logger.error('Failed to update task status', {
+        contextId: context.contextId,
+        status,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   }
   
   /**
