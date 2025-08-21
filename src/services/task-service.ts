@@ -27,16 +27,14 @@ import * as yaml from 'yaml';
 import {
   TaskContext,
   ContextEntry,
-  TaskState
-} from '../types/engine-types';
-import {
+  TaskState,
   DatabaseTask,
   CreateTaskRequest as DatabaseCreateTaskRequest,
   TaskApiResponse,
   TaskListApiResponse,
   TaskCreateApiResponse,
   validateCreateTaskRequest
-} from '../types/database-aligned-types';
+} from '../types/engine-types';
 
 export interface CreateTaskRequest {
   templateId: string;
