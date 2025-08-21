@@ -61,3 +61,6 @@ dump.rdb
 # Temporary files
 tmp/
 temp/
+
+# Development and debugging tools
+dev-tools/

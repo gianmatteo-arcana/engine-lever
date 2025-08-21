@@ -338,7 +338,7 @@ export class TaskInspector {
     }
 
     // Check for stuck state
-    if (context.currentState.status === 'processing' && 
+    if (context.currentState.status === 'in_progress' && 
         context.history.length > 10 &&
         context.currentState.completeness < 50) {
       anomalies.push({

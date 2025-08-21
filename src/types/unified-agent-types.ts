@@ -106,7 +106,7 @@ export function toEngineTaskContext(agentContext: AgentTaskContext): EngineTaskC
     tenantId: agentContext.tenantId || '',
     createdAt: agentContext.createdAt || new Date().toISOString(),
     currentState: agentContext.currentState || {
-      status: agentContext.status === 'active' ? 'processing' : 
+      status: agentContext.status === 'active' ? 'in_progress' : 
               agentContext.status === 'completed' ? 'completed' : 'failed',
       phase: agentContext.currentPhase || 'unknown',
       completeness: 0,
@@ -157,7 +157,7 @@ export function ensureAgentContext(context: AgentTaskContext): AgentTaskContext 
     version: context.version || 1,
     isComplete: context.isComplete || false,
     currentState: context.currentState || {
-      status: 'processing',
+      status: 'in_progress',
       phase: 'initial',
       completeness: 0,
       data: {}
@@ -191,7 +191,7 @@ export function createMinimalContext(overrides: Partial<AgentTaskContext> = {}):
     version: overrides.version || 1,
     isComplete: overrides.isComplete || false,
     currentState: overrides.currentState || {
-      status: 'processing',
+      status: 'in_progress',
       phase: 'initial',
       completeness: 0,
       data: {}

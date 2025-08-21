@@ -94,11 +94,11 @@ describe('TaskService - Core Functionality', () => {
       // Mock successful update
       mockClient.eq.mockResolvedValue({ error: null });
 
-      await taskService.updateTaskStatus(taskId, 'processing');
+      await taskService.updateTaskStatus(taskId, 'in_progress');
 
       expect(mockClient.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          status: 'processing',
+          status: 'in_progress',
           updated_at: expect.any(String)
         })
       );

@@ -18,6 +18,8 @@
 
 import { DatabaseService } from './database';
 import { StateComputer } from './state-computer';
+import { TaskStatus } from '../types/engine-types';
+import { TASK_STATUS } from '../constants/task-status';
 import { logger } from '../utils/logger';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -25,16 +27,14 @@ import * as yaml from 'yaml';
 import {
   TaskContext,
   ContextEntry,
-  TaskState
-} from '../types/engine-types';
-import {
+  TaskState,
   DatabaseTask,
   CreateTaskRequest as DatabaseCreateTaskRequest,
   TaskApiResponse,
   TaskListApiResponse,
   TaskCreateApiResponse,
   validateCreateTaskRequest
-} from '../types/database-aligned-types';
+} from '../types/engine-types';
 
 export interface CreateTaskRequest {
   templateId: string;
@@ -165,7 +165,7 @@ export class TaskService {
         
         // Current state computed from history
         currentState: {
-          status: 'pending',
+          status: TASK_STATUS.PENDING,
           phase: 'initialization',
           completeness: 0,
           data: request.initialData || {}
@@ -526,7 +526,7 @@ export class TaskService {
         task_type: request.task_type,
         business_id: request.business_id,
         template_id: request.template_id,
-        status: 'pending',
+        status: TASK_STATUS.PENDING,
         priority: request.priority || 'medium',
         deadline: request.deadline,
         metadata: request.metadata || {},
@@ -714,7 +714,7 @@ export class TaskService {
    * Update task status (internal use - service role)
    * Used by orchestrator to mark tasks as completed
    */
-  async updateTaskStatus(taskId: string, status: 'pending' | 'processing' | 'completed' | 'failed', completedAt?: string): Promise<void> {
+  async updateTaskStatus(taskId: string, status: TaskStatus, completedAt?: string): Promise<void> {
     try {
       logger.info('Updating task status', { taskId, status });
       
