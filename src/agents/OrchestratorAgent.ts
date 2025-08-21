@@ -503,10 +503,33 @@ export class OrchestratorAgent extends BaseAgent {
         });
       }
       
-      logger.info('Task orchestration completed', {
-        contextId: context.contextId,
-        duration: Date.now() - startTime
-      });
+      // Log appropriate message based on actual task status
+      const finalStatus = context.currentState.status;
+      if (finalStatus === TASK_STATUS.WAITING_FOR_INPUT) {
+        logger.info('⏸️ Task orchestration paused - waiting for user input', {
+          contextId: context.contextId,
+          status: finalStatus,
+          duration: Date.now() - startTime
+        });
+      } else if (finalStatus === TASK_STATUS.FAILED) {
+        logger.info('❌ Task orchestration ended - task failed', {
+          contextId: context.contextId,
+          status: finalStatus,
+          duration: Date.now() - startTime
+        });
+      } else if (finalStatus === TASK_STATUS.COMPLETED) {
+        logger.info('✅ Task orchestration completed successfully', {
+          contextId: context.contextId,
+          status: finalStatus,
+          duration: Date.now() - startTime
+        });
+      } else {
+        logger.info('Task orchestration ended', {
+          contextId: context.contextId,
+          status: finalStatus,
+          duration: Date.now() - startTime
+        });
+      }
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

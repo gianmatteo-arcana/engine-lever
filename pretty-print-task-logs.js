@@ -184,12 +184,40 @@ rl.on('close', () => {
   // Print final status
   console.log(`\n${colors.bright}${colors.cyan}════════════════════════════════════════════════════════════════════════${colors.reset}`);
   
-  const finalStatus = events.find(e => e.message?.includes('completed') || e.message?.includes('failed'));
-  if (finalStatus) {
-    if (finalStatus.message.includes('failed')) {
+  // Look for actual task status updates
+  const statusUpdates = events.filter(e => 
+    e.message?.includes('Task status updated to') || 
+    e.message?.includes('Updating task status to')
+  );
+  
+  const lastStatusUpdate = statusUpdates[statusUpdates.length - 1];
+  
+  if (lastStatusUpdate) {
+    const statusMatch = lastStatusUpdate.message.match(/to (\w+)/i);
+    const finalStatus = statusMatch ? statusMatch[1].toUpperCase() : 'UNKNOWN';
+    
+    // Check if there's a pending UI request
+    const hasUIRequest = events.some(e => 
+      e.message?.includes('Phase requires user input') ||
+      e.message?.includes('needs_input')
+    );
+    
+    if (finalStatus === 'WAITING_FOR_INPUT' || hasUIRequest) {
+      console.log(`${colors.bgYellow}${colors.black} ⏸️ WAITING FOR USER INPUT ${colors.reset}`);
+      console.log(`${colors.yellow}Task is paused and waiting for user to provide required information${colors.reset}`);
+    } else if (finalStatus === 'FAILED') {
       console.log(`${colors.bgRed}${colors.white} ❌ TASK FAILED ${colors.reset}`);
-    } else {
+    } else if (finalStatus === 'COMPLETED') {
       console.log(`${colors.bgGreen}${colors.white} ✅ TASK COMPLETED ${colors.reset}`);
+    } else {
+      console.log(`${colors.bgBlue}${colors.white} 📊 TASK STATUS: ${finalStatus} ${colors.reset}`);
+    }
+  } else {
+    // Fallback to checking orchestration completion
+    const orchestrationComplete = events.find(e => e.message?.includes('Task orchestration completed'));
+    if (orchestrationComplete) {
+      console.log(`${colors.bgCyan}${colors.white} 🔄 ORCHESTRATION FINISHED ${colors.reset}`);
+      console.log(`${colors.cyan}Check task status for current state${colors.reset}`);
     }
   }
   
