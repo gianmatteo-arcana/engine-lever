@@ -511,7 +511,9 @@ export class OrchestratorAgent extends BaseAgent {
     const config = this.agentConfig.data_acquisition_protocol;
     
     // Dynamic field validation based on task type and current data state
-    const missingFields = await this.identifyMissingRequiredFields(context, taskType, businessProfile);
+    const missingFields = taskType === 'user_onboarding' 
+      ? ['business_name', 'business_type'].filter(field => !businessProfile[field])
+      : [];
     
     if (missingFields.length > 0 && config?.strategy === 'toolchain_first_ui_fallback') {
       logger.info('🔧 BUSINESS DATA MISSING - Starting toolchain-first acquisition', {

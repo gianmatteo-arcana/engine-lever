@@ -957,7 +957,9 @@ Missing data needed:
 ${missingData.map(item => `- ${item}`).join('\n')}
 
 Available tools:
-${availableTools.map(tool => `- ${tool.name}: ${tool.description}\n  Capabilities: ${tool.capabilities.join(', ')}`).join('\n')}
+${Array.isArray(availableTools) && availableTools.length > 0 
+  ? availableTools.map(tool => `- ${tool.name}: ${tool.description}\n  Capabilities: ${tool.capabilities?.join(', ') || 'N/A'}`).join('\n')
+  : 'No tools currently available'}
 
 Task context:
 ${JSON.stringify(taskContext.currentState?.data || {}, null, 2)}
@@ -1079,7 +1081,7 @@ Respond with JSON:
         stillMissing,
         toolResults,
         toolsAttempted: toolPlan?.tool_plan?.length || 0,
-        successfulTools: toolResults.filter(r => r.success).length
+        successfulTools: toolResults?.filter(r => r.success).length || 0
       },
       reasoning: `Attempted to acquire missing data using ${toolPlan?.tool_plan?.length || 0} toolchain tools. ${Object.keys(acquiredData).length} fields acquired, ${stillMissing.length} still missing.`
     });
@@ -1098,24 +1100,29 @@ Respond with JSON:
   protected async createDataAcquisitionUIRequest(
     missingFields: string[],
     taskContext: TaskContext,
-    toolchainResults: Array<{ tool: string; success: boolean; reason: string }>
+    toolchainResults: Array<{ tool: string; success: boolean; reason: string }> = []
   ): Promise<any> {
     const config = this.agentConfig.data_acquisition_protocol;
     
     const fieldDefinitions = await this.createFieldDefinitionsForMissingData(missingFields, taskContext);
+    
+    // Ensure toolchainResults is always an array
+    const results = toolchainResults || [];
     
     return {
       type: 'form',
       title: 'Additional Information Required',
       description: 'We need some additional information to continue with your request.',
       fields: fieldDefinitions,
-      instructions: `We attempted to find this information automatically using ${toolchainResults.length} different sources, but were unable to locate all required details. Please provide the missing information below.`,
+      instructions: results.length > 0 
+        ? `We attempted to find this information automatically using ${results.length} different sources, but were unable to locate all required details. Please provide the missing information below.`
+        : 'Please provide the following information to continue with your request.',
       context: {
         reason: 'toolchain_acquisition_failed',
         missingFields,
         taskType: taskContext.currentState?.data?.taskType || 'general',
-        toolchainResults,
-        attemptedSources: toolchainResults.map(r => r.tool)
+        toolchainResults: results,
+        attemptedSources: results.map(r => r.tool)
       }
     };
   }
