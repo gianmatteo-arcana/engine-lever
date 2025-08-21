@@ -2419,7 +2419,7 @@ Respond with JSON only:
         dependencies: []
       }],
       reasoning: {
-        task_analysis: `Toolchain tools could not provide all required data. Still need: ${acquisitionResult.stillMissingFields.join(', ')}`,
+        task_analysis: `Toolchain tools could not provide all required data. Still need: ${(acquisitionResult.stillMissingFields || acquisitionResult.stillMissing || []).join(', ')}`,
         subtask_decomposition: [{
           subtask: 'Collect remaining business information from user',
           required_capabilities: ['user_input_collection', 'business_profile_management'],
