@@ -1386,16 +1386,31 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       types: requests.map(r => r.templateType)
     });
     
-    // Record UI requests in context
+    // Record FULL UI requests in context for proper persistence
+    // UI requests are now stored as task_context_events
+    // The recordContextEntry method will handle persistence and broadcasting
     await this.recordContextEntry(context, {
-      operation: 'ui_requests_sent',
+      operation: 'ui_requests_created',
       data: {
-        requests: requests.map(r => ({
-          id: r.requestId,
-          type: r.templateType
-        }))
+        // Store the complete UI request data for frontend consumption
+        uiRequests: requests,
+        // Keep summary for quick reference  
+        summary: {
+          count: requests.length,
+          types: requests.map(r => r.templateType),
+          requestIds: requests.map(r => r.requestId)
+        }
       },
       reasoning: 'Requesting user input for required information'
+    });
+    
+    // The recordContextEntry method already broadcasts the event via SSE
+    // No need for additional broadcasting - the frontend will receive the
+    // ui_requests_created event through the task context update stream
+    
+    logger.debug('UI requests created and broadcast via context event', {
+      contextId: context.contextId,
+      requestCount: requests.length
     });
   }
   
