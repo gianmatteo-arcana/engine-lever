@@ -1,0 +1,28 @@
+{
+  "taskId": "aec41dde-262a-47de-a31f-eb33e61c7b53",
+  "duration": 120.738,
+  "events": [
+    {
+      "timestamp": "2025-08-20T20:03:34.940Z",
+      "elapsed": 0,
+      "type": "TASK_CREATED",
+      "message": "New task created: aec41dde-262a-47de-a31f-eb33e61c7b53",
+      "data": {
+        "status": "pending",
+        "metadata": {
+          "createdAt": "2025-08-20T20:03:34.785Z",
+          "developer": true,
+          "source": "dev-toolkit",
+          "taskDefinition": {
+            "description": "Standard user_onboarding workflow",
+            "goals": [
+              "Complete the task successfully"
+            ],
+            "id": "user_onboarding",
+            "title": "user_onboarding Task"
+          }
+        }
+      }
+    }
+  ]
+}

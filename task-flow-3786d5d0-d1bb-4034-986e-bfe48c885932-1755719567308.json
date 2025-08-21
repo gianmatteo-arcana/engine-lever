@@ -1,0 +1,50 @@
+{
+  "taskId": "3786d5d0-d1bb-4034-986e-bfe48c885932",
+  "duration": 26.732,
+  "events": [
+    {
+      "timestamp": "2025-08-20T19:50:46.268Z",
+      "elapsed": 0,
+      "type": "TASK_CREATED",
+      "message": "New task created: 9ca982ff-7e1f-494f-8775-f2781a2a393a",
+      "data": {
+        "status": "pending",
+        "metadata": {
+          "createdAt": "2025-08-20T19:50:46.097Z",
+          "developer": true,
+          "source": "dev-toolkit",
+          "taskDefinition": {
+            "description": "Standard user_onboarding workflow",
+            "goals": [
+              "Complete the task successfully"
+            ],
+            "id": "user_onboarding",
+            "title": "user_onboarding Task"
+          }
+        }
+      }
+    },
+    {
+      "timestamp": "2025-08-20T19:52:20.576Z",
+      "elapsed": 0,
+      "type": "TASK_CREATED",
+      "message": "New task created: 3786d5d0-d1bb-4034-986e-bfe48c885932",
+      "data": {
+        "status": "pending",
+        "metadata": {
+          "createdAt": "2025-08-20T19:52:20.407Z",
+          "developer": true,
+          "source": "dev-toolkit",
+          "taskDefinition": {
+            "description": "Standard user_onboarding workflow",
+            "goals": [
+              "Complete the task successfully"
+            ],
+            "id": "user_onboarding",
+            "title": "user_onboarding Task"
+          }
+        }
+      }
+    }
+  ]
+}

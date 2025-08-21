@@ -68,7 +68,7 @@ import * as fs from 'fs';
 import * as yaml from 'yaml';
 import * as path from 'path';
 import { LLMProvider } from '../../services/llm-provider';
-import type { ToolChain } from '../../services/tool-chain';
+import type { ToolChain } from '../../toolchain/ToolChain';
 import { 
   BaseAgentTemplate,
   SpecializedAgentConfig,
@@ -99,7 +99,7 @@ import {
  * - Implements A2A AgentExecutor interface for event-driven execution
  */
 export abstract class BaseAgent implements AgentExecutor {
-  protected baseTemplate: BaseAgentTemplate;
+  protected agentConfig: BaseAgentTemplate;
   protected specializedTemplate: SpecializedAgentConfig;
   protected llmProvider!: LLMProvider;
   protected toolChain!: ToolChain;
@@ -120,7 +120,7 @@ export abstract class BaseAgent implements AgentExecutor {
       throw new Error('BaseAgent requires businessId for access control');
     }
     // Load base template (universal foundation)
-    this.baseTemplate = this.loadBaseTemplate();
+    this.agentConfig = this.loadBaseTemplate();
     
     // Load specialized configuration
     this.specializedTemplate = this.loadSpecializedConfig(specializedConfigPath);
@@ -289,7 +289,7 @@ Check the error message above for specific configuration issues.
    * to create a comprehensive prompt for the LLM
    */
   private buildInheritedPrompt(request: BaseAgentRequest): string {
-    const base = this.baseTemplate;
+    const base = this.agentConfig;
     const specialized = this.specializedTemplate.agent;
     
     // Extract business profile from TaskContext if available
@@ -741,7 +741,7 @@ Remember: You are an autonomous agent following the universal principles while a
    */
   getFullConfiguration(): { base: BaseAgentTemplate; specialized: SpecializedAgentConfig } {
     return {
-      base: this.baseTemplate,
+      base: this.agentConfig,
       specialized: this.specializedTemplate
     };
   }
@@ -754,7 +754,7 @@ Remember: You are an autonomous agent following the universal principles while a
     const warnings: string[] = [];
     
     // Check base template loaded
-    if (!this.baseTemplate) {
+    if (!this.agentConfig) {
       errors.push('Base template not loaded');
     }
     
@@ -933,11 +933,10 @@ Remember: You are an autonomous agent following the universal principles while a
     toolchainResults: Array<{ tool: string; success: boolean; reason: string }>;
     requiresUserInput: boolean;
   }> {
-    const config = this.baseTemplate.agent_template?.data_acquisition_protocol;
-    const taskConfig = config?.required_business_data?.[taskType] || config?.required_business_data?.general;
+    const config = this.agentConfig.data_acquisition_protocol;
     
-    if (!taskConfig) {
-      logger.warn('No data acquisition config found for task type', { taskType });
+    if (!config || !this.toolChain) {
+      logger.warn('No data acquisition config or toolchain available', { taskType });
       return {
         acquiredData: {},
         stillMissingFields: missingFields,
@@ -949,26 +948,34 @@ Remember: You are an autonomous agent following the universal principles while a
     logger.info('🔧 Starting toolchain-first data acquisition', {
       contextId: taskContext.contextId,
       missingFields,
-      taskType,
-      availableToolchainSources: taskConfig.toolchain_sources
+      taskType
     });
     
     const acquiredData: Record<string, any> = {};
     const toolchainResults: Array<{ tool: string; success: boolean; reason: string }> = [];
     const stillMissingFields: string[] = [...missingFields];
     
-    // Try each toolchain source
-    for (const toolName of taskConfig.toolchain_sources || []) {
+    // Find tools that can help with data acquisition
+    const availableTools = await this.toolChain.getAvailableTools();
+    const dataAcquisitionTools = availableTools.filter(tool => 
+      tool.capabilities.some(cap => 
+        cap.includes('data_lookup') || 
+        cap.includes('business_search') || 
+        cap.includes('validation') ||
+        cap.includes('public_records')
+      )
+    );
+    
+    // Try each available tool
+    for (const tool of dataAcquisitionTools) {
       try {
-        logger.info(`🔍 Attempting to use toolchain tool: ${toolName}`, {
+        logger.info(`🔍 Attempting to use toolchain tool: ${tool.name}`, {
           contextId: taskContext.contextId,
-          tool: toolName,
+          tool: tool.name,
           remainingFields: stillMissingFields
         });
         
-        // Check if tool is available in toolchain
-        if (this.toolChain && await this.isToolAvailable(toolName)) {
-          const toolResult = await this.executeToolchainTool(toolName, stillMissingFields, taskContext);
+        const toolResult = await this.executeToolchainTool(tool.id, stillMissingFields, taskContext);
           
           if (toolResult.success && toolResult.data) {
             // Merge acquired data
@@ -983,47 +990,36 @@ Remember: You are an autonomous agent following the universal principles while a
             }
             
             toolchainResults.push({
-              tool: toolName,
+              tool: tool.name,
               success: true,
               reason: `Successfully acquired: ${Object.keys(toolResult.data).join(', ')}`
             });
             
-            logger.info(`✅ Tool ${toolName} successfully provided data`, {
+            logger.info(`✅ Tool ${tool.name} successfully provided data`, {
               contextId: taskContext.contextId,
               acquiredFields: Object.keys(toolResult.data),
               remainingFields: stillMissingFields
             });
           } else {
             toolchainResults.push({
-              tool: toolName,
+              tool: tool.name,
               success: false,
               reason: toolResult.reason || 'Tool failed to provide data'
             });
             
-            logger.warn(`⚠️ Tool ${toolName} failed to provide data`, {
+            logger.warn(`⚠️ Tool ${tool.name} failed to provide data`, {
               contextId: taskContext.contextId,
               reason: toolResult.reason
             });
           }
-        } else {
-          toolchainResults.push({
-            tool: toolName,
-            success: false,
-            reason: 'Tool not available in current toolchain'
-          });
-          
-          logger.warn(`❌ Tool ${toolName} not available`, {
-            contextId: taskContext.contextId
-          });
-        }
       } catch (error) {
         toolchainResults.push({
-          tool: toolName,
+          tool: tool.name,
           success: false,
           reason: error instanceof Error ? error.message : 'Unknown error'
         });
         
-        logger.error(`💥 Error using tool ${toolName}`, {
+        logger.error(`💥 Error using tool ${tool.name}`, {
           contextId: taskContext.contextId,
           error: error instanceof Error ? error.message : String(error)
         });
@@ -1039,10 +1035,10 @@ Remember: You are an autonomous agent following the universal principles while a
         acquiredData,
         stillMissingFields,
         toolchainResults,
-        toolsAttempted: taskConfig.toolchain_sources?.length || 0,
+        toolsAttempted: dataAcquisitionTools.length,
         successfulTools: toolchainResults.filter(r => r.success).length
       },
-      reasoning: `Attempted to acquire missing data using ${taskConfig.toolchain_sources?.length || 0} toolchain tools. ${Object.keys(acquiredData).length} fields acquired, ${stillMissingFields.length} still missing.`
+      reasoning: `Attempted to acquire missing data using ${dataAcquisitionTools.length} toolchain tools. ${Object.keys(acquiredData).length} fields acquired, ${stillMissingFields.length} still missing.`
     });
     
     return {
@@ -1106,103 +1102,45 @@ Remember: You are an autonomous agent following the universal principles while a
         };
       }
       
-      // Extract business context for tool calls
+      // Extract business context for tool parameters
       const businessProfile = (taskContext as any).businessProfile || {};
-      const businessName = businessProfile.business_name || '';
       
-      // Map YAML tool names to actual ToolChain method calls
-      switch (toolName) {
-        case 'business_registry_lookup':
-        case 'secretary_of_state_lookup':
-        case 'business_registry_search':
-          if (businessName) {
-            const result = await this.toolChain.searchBusinessEntity(businessName);
-            if (result) {
-              const mappedData = this.mapBusinessEntityToFields(result, missingFields);
-              return {
-                success: Object.keys(mappedData).length > 0,
-                data: mappedData,
-                reason: `Found business entity: ${result.name}`
-              };
-            } else {
-              return {
-                success: false,
-                reason: `No business entity found for: ${businessName}`
-              };
-            }
-          } else {
-            return {
-              success: false,
-              reason: 'No business name available for registry lookup'
-            };
-          }
-          
-        case 'public_records_search':
-          if (businessName) {
-            const result = await this.toolChain.searchPublicRecords(businessName);
-            if (result) {
-              const mappedData = this.mapBusinessEntityToFields(result, missingFields);
-              return {
-                success: Object.keys(mappedData).length > 0,
-                data: mappedData,
-                reason: `Found public records for: ${result.name}`
-              };
-            } else {
-              return {
-                success: false,
-                reason: `No public records found for: ${businessName}`
-              };
-            }
-          } else {
-            return {
-              success: false,
-              reason: 'No business name available for public records search'
-            };
-          }
-          
-        case 'email_validation':
-          if (businessProfile.contact_email) {
-            const isValid = this.toolChain.validateEmail(businessProfile.contact_email);
-            return {
-              success: isValid,
-              data: isValid ? { contact_email: businessProfile.contact_email } : {},
-              reason: isValid ? 'Email format is valid' : 'Email format is invalid'
-            };
-          } else {
-            return {
-              success: false,
-              reason: 'No email available for validation'
-            };
-          }
-          
-        case 'ein_validation':
-          if (businessProfile.ein) {
-            const isValid = this.toolChain.validateEIN(businessProfile.ein);
-            return {
-              success: isValid,
-              data: isValid ? { ein: businessProfile.ein } : {},
-              reason: isValid ? 'EIN format is valid' : 'EIN format is invalid'
-            };
-          } else {
-            return {
-              success: false,
-              reason: 'No EIN available for validation'
-            };
-          }
-          
-        case 'domain_whois_lookup':
-        case 'social_media_discovery':
-        case 'registered_agent_directory':
-          return {
-            success: false,
-            reason: `Tool ${toolName} not yet implemented in ToolChain`
-          };
-          
-        default:
-          return {
-            success: false,
-            reason: `Unknown tool: ${toolName}`
-          };
+      // Check if tool is available
+      const isAvailable = await this.toolChain.isToolAvailable(toolName);
+      if (!isAvailable) {
+        return {
+          success: false,
+          reason: `Tool ${toolName} is not available in the toolchain`
+        };
+      }
+      
+      // Prepare parameters based on tool name and missing fields
+      const toolParams: Record<string, unknown> = {
+        missingFields,
+        businessProfile,
+        taskContext: {
+          taskId: taskContext.contextId,  // TaskContext doesn't have taskId, use contextId
+          taskType: taskContext.currentState?.data?.taskType || 'general',
+          contextId: taskContext.contextId
+        }
+      };
+      
+      // Execute the tool through the ToolChain interface
+      const result = await this.toolChain.executeTool(toolName, toolParams);
+      
+      if (result.success && result.data) {
+        // Extract relevant fields from tool result
+        const mappedData = this.mapToolResultToFields(result.data, missingFields);
+        return {
+          success: Object.keys(mappedData).length > 0,
+          data: mappedData,
+          reason: (result.metadata?.description as string) || 'Successfully acquired data from toolchain'
+        };
+      } else {
+        return {
+          success: false,
+          reason: result.error || 'Tool execution failed'
+        };
       }
     } catch (error) {
       logger.error(`Error executing toolchain tool: ${toolName}`, {
@@ -1218,55 +1156,36 @@ Remember: You are an autonomous agent following the universal principles while a
   }
   
   /**
-   * Map BusinessEntity result to missing fields
+   * Map tool result data to missing fields
    */
-  private mapBusinessEntityToFields(
-    entity: any,
+  private mapToolResultToFields(
+    toolData: any,
     missingFields: string[]
   ): Record<string, any> {
     const mappedData: Record<string, any> = {};
     
-    // Map business entity fields to our expected field names
+    // Attempt to map tool result data to our expected field names
+    // This is a generic mapping that looks for common field patterns
     for (const field of missingFields) {
-      switch (field) {
-        case 'business_name':
-          if (entity.name) mappedData.business_name = entity.name;
+      // Direct mapping - if tool result has the exact field
+      if (toolData[field] !== undefined) {
+        mappedData[field] = toolData[field];
+        continue;
+      }
+      
+      // Try common field name variations
+      const variations = [
+        field,
+        field.replace(/_/g, ''),  // Remove underscores
+        field.replace(/_/g, '-'),  // Replace underscores with hyphens
+        field.split('_').map((w, i) => i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(''), // camelCase
+      ];
+      
+      for (const variation of variations) {
+        if (toolData[variation] !== undefined) {
+          mappedData[field] = toolData[variation];
           break;
-          
-        case 'business_type':
-        case 'entity_type':
-          if (entity.entityType) {
-            // Map ToolChain entity types to our business types
-            const typeMapping: Record<string, string> = {
-              'LLC': 'llc',
-              'Corporation': 'corporation',
-              'Sole Proprietorship': 'sole_proprietorship',
-              'Partnership': 'partnership'
-            };
-            const mappedType = typeMapping[entity.entityType] || entity.entityType.toLowerCase();
-            mappedData[field] = mappedType;
-          }
-          break;
-          
-        case 'address':
-        case 'business_address':
-          if (entity.address) {
-            const address = `${entity.address.street}, ${entity.address.city}, ${entity.address.state} ${entity.address.zip}`;
-            mappedData[field] = address;
-          }
-          break;
-          
-        case 'ein':
-          if (entity.ein) mappedData.ein = entity.ein;
-          break;
-          
-        case 'formation_date':
-          if (entity.formationDate) mappedData.formation_date = entity.formationDate;
-          break;
-          
-        case 'status':
-          if (entity.status) mappedData.status = entity.status.toLowerCase();
-          break;
+        }
       }
     }
     
@@ -1281,15 +1200,14 @@ Remember: You are an autonomous agent following the universal principles while a
     taskType: string,
     toolchainResults: Array<{ tool: string; success: boolean; reason: string }>
   ): any {
-    const config = this.baseTemplate.agent_template?.data_acquisition_protocol;
-    const taskConfig = config?.required_business_data?.[taskType] || config?.required_business_data?.general;
+    const config = this.agentConfig.data_acquisition_protocol;
     
     const fieldDefinitions = this.createFieldDefinitionsForMissingData(missingFields);
     
     return {
       type: 'form',
       title: 'Additional Information Required',
-      description: taskConfig?.fallback_ui_message || 'We need some additional information to continue.',
+      description: 'We need some additional information to continue with your request.',
       fields: fieldDefinitions,
       instructions: `We attempted to find this information automatically using ${toolchainResults.length} different sources, but were unable to locate all required details. Please provide the missing information below.`,
       context: {

@@ -505,55 +505,43 @@ export class OrchestratorAgent extends BaseAgent {
       hasAgentRegistry: this.agentRegistry.size > 0
     });
     
-    // CRITICAL: Use BaseAgent toolchain-first data acquisition
+    // CRITICAL: Check for missing business data using toolchain-first approach
     const taskType = context.currentState?.data?.taskType || 'general';
     const businessProfile = (context as any).businessProfile || {};
-    const config = this.baseTemplate.agent_template?.data_acquisition_protocol;
-    const taskConfig = config?.required_business_data?.[taskType] || config?.required_business_data?.general;
+    const config = this.agentConfig.data_acquisition_protocol;
     
-    if (taskConfig?.critical_fields) {
-      const missingFields: string[] = [];
+    // Dynamic field validation based on task type and current data state
+    const missingFields = await this.identifyMissingRequiredFields(context, taskType, businessProfile);
+    
+    if (missingFields.length > 0 && config?.strategy === 'toolchain_first_ui_fallback') {
+      logger.info('🔧 BUSINESS DATA MISSING - Starting toolchain-first acquisition', {
+        contextId: context.contextId,
+        missingFields,
+        taskType
+      });
       
-      // Check which critical fields are missing
-      for (const field of taskConfig.critical_fields) {
-        if (!businessProfile[field] || 
-            businessProfile[field] === '' || 
-            businessProfile[field] === null || 
-            businessProfile[field] === undefined) {
-          missingFields.push(field);
-        }
-      }
+      // Use BaseAgent's toolchain-first approach
+      const acquisitionResult = await this.acquireDataWithToolchain(missingFields, context, taskType);
       
-      if (missingFields.length > 0) {
-        logger.info('🔧 BUSINESS DATA MISSING - Starting toolchain-first acquisition', {
+      if (acquisitionResult.requiresUserInput) {
+        // Create UIRequest for remaining missing fields
+        const uiRequest = this.createDataAcquisitionUIRequest(
+          acquisitionResult.stillMissingFields,
+          taskType,
+          acquisitionResult.toolchainResults
+        );
+        
+        // Return special plan that requests user input
+        return this.createUIRequestExecutionPlan(context, uiRequest, acquisitionResult);
+      } else {
+        // Update business profile with acquired data
+        Object.assign(businessProfile, acquisitionResult.acquiredData);
+        (context as any).businessProfile = businessProfile;
+        
+        logger.info('✅ All required business data acquired from toolchain', {
           contextId: context.contextId,
-          missingFields,
-          taskType
+          acquiredFields: Object.keys(acquisitionResult.acquiredData)
         });
-        
-        // Use BaseAgent's toolchain-first approach
-        const acquisitionResult = await this.acquireDataWithToolchain(missingFields, context, taskType);
-        
-        if (acquisitionResult.requiresUserInput) {
-          // Create UIRequest for remaining missing fields
-          const uiRequest = this.createDataAcquisitionUIRequest(
-            acquisitionResult.stillMissingFields,
-            taskType,
-            acquisitionResult.toolchainResults
-          );
-          
-          // Return special plan that requests user input
-          return this.createUIRequestExecutionPlan(context, uiRequest, acquisitionResult);
-        } else {
-          // Update business profile with acquired data
-          Object.assign(businessProfile, acquisitionResult.acquiredData);
-          (context as any).businessProfile = businessProfile;
-          
-          logger.info('✅ All required business data acquired from toolchain', {
-            contextId: context.contextId,
-            acquiredFields: Object.keys(acquisitionResult.acquiredData)
-          });
-        }
       }
     }
     
@@ -2442,6 +2430,50 @@ Respond with JSON only:
     (uiRequestPlan as any).immediateUIRequest = uiRequest;
     
     return uiRequestPlan;
+  }
+  
+  /**
+   * Dynamically identify missing required fields based on task type
+   * This replaces the hardcoded required_business_data configuration
+   */
+  private async identifyMissingRequiredFields(
+    context: TaskContext, 
+    taskType: string,
+    businessProfile: Record<string, any>
+  ): Promise<string[]> {
+    const missingFields: string[] = [];
+    
+    // Define minimum required fields based on task type
+    // This is now dynamically determined rather than hardcoded in YAML
+    const taskRequirements: Record<string, string[]> = {
+      'user_onboarding': ['business_name', 'business_type'],
+      'soi_filing': ['business_name', 'entity_type', 'registered_agent_name'],
+      'compliance_check': ['business_name', 'business_type', 'jurisdiction'],
+      'general': ['business_name']
+    };
+    
+    const requiredFields = taskRequirements[taskType] || taskRequirements['general'];
+    
+    // Check which fields are missing or empty
+    for (const field of requiredFields) {
+      const value = businessProfile[field];
+      if (!value || value === '' || value === null || value === undefined) {
+        missingFields.push(field);
+      }
+    }
+    
+    // Log what we found
+    if (missingFields.length > 0) {
+      logger.info('🔍 Identified missing required fields', {
+        contextId: context.contextId,
+        taskType,
+        requiredFields,
+        missingFields,
+        presentFields: requiredFields.filter(f => !missingFields.includes(f))
+      });
+    }
+    
+    return missingFields;
   }
   
 }

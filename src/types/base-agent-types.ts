@@ -84,24 +84,15 @@ export interface BaseAgentTemplate {
     required_metrics: string[];
     logging_pattern: string;
   };
-  agent_template?: {
-    data_acquisition_protocol?: {
-      strategy?: string;
-      description?: string;
-      toolchain_consultation?: {
-        priority?: string;
-        instruction?: string;
-      };
-      ui_request_criteria?: {
-        generate_only_when?: string;
-      };
-      required_business_data?: {
-        [taskType: string]: {
-          critical_fields?: string[];
-          toolchain_sources?: string[];
-          fallback_ui_message?: string;
-        };
-      };
+  data_acquisition_protocol?: {
+    strategy?: string;
+    description?: string;
+    toolchain_consultation?: {
+      priority?: string;
+      instruction?: string;
+    };
+    ui_request_criteria?: {
+      generate_only_when?: string;
     };
   };
 }
