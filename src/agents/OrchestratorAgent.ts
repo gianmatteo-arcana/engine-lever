@@ -521,14 +521,14 @@ export class OrchestratorAgent extends BaseAgent {
       });
       
       // Use BaseAgent's toolchain-first approach
-      const acquisitionResult = await this.acquireDataWithToolchain(missingFields, context, taskType);
+      const acquisitionResult = await this.acquireDataWithToolchain(missingFields, context);
       
       if (acquisitionResult.requiresUserInput) {
         // Create UIRequest for remaining missing fields
-        const uiRequest = this.createDataAcquisitionUIRequest(
-          acquisitionResult.stillMissingFields,
-          taskType,
-          acquisitionResult.toolchainResults
+        const uiRequest = await this.createDataAcquisitionUIRequest(
+          acquisitionResult.stillMissing,
+          context,
+          acquisitionResult.toolResults
         );
         
         // Return special plan that requests user input

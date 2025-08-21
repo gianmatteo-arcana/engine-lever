@@ -292,8 +292,8 @@ Check the error message above for specific configuration issues.
     const base = this.agentConfig;
     const specialized = this.specializedTemplate.agent;
     
-    // Extract business profile from TaskContext if available
-    const businessProfile = request.taskContext?.businessProfile || {};
+    // Extract context data from TaskContext if available
+    const contextData = request.taskContext?.currentState?.data || {};
     const taskHistory = request.taskContext?.history || [];
     
     return `
@@ -308,18 +308,18 @@ ${base.universal_principles.decision_priority}
 ## Ethical Boundaries
 ${base.universal_principles.ethical_boundaries}
 
-# Business Context
+# Task Context
 
-## Business Information
+## Context Information
 - Business ID: ${this.businessId}
 - User ID: ${this.userId || 'System'}
-${businessProfile.name ? `- Business Name: ${businessProfile.name}` : ''}
-${businessProfile.entityType ? `- Entity Type: ${businessProfile.entityType}` : ''}
-${businessProfile.industry ? `- Industry: ${businessProfile.industry}` : ''}
-${businessProfile.state ? `- State: ${businessProfile.state}` : ''}
+${contextData.name ? `- Name: ${contextData.name}` : ''}
+${contextData.type ? `- Type: ${contextData.type}` : ''}
+${contextData.taskType ? `- Task Type: ${contextData.taskType}` : ''}
+${contextData.state ? `- State: ${contextData.state}` : ''}
 
-## Business Profile
-${JSON.stringify(businessProfile, null, 2)}
+## Context Data
+${JSON.stringify(contextData, null, 2)}
 
 # Your Specialization
 
@@ -920,109 +920,153 @@ Remember: You are an autonomous agent following the universal principles while a
    */
   
   /**
-   * Attempt to acquire missing data using toolchain-first approach
-   * This is called by agents when they need data to proceed
+   * Intelligently acquire missing data using LLM reasoning and available tools
    */
   protected async acquireDataWithToolchain(
-    missingFields: string[],
-    taskContext: TaskContext,
-    taskType: string = 'general'
+    missingData: string[],
+    taskContext: TaskContext
   ): Promise<{
     acquiredData: Record<string, any>;
-    stillMissingFields: string[];
-    toolchainResults: Array<{ tool: string; success: boolean; reason: string }>;
+    stillMissing: string[];
+    toolResults: Array<{ tool: string; success: boolean; reason: string }>;
     requiresUserInput: boolean;
   }> {
-    const config = this.agentConfig.data_acquisition_protocol;
-    
-    if (!config || !this.toolChain) {
-      logger.warn('No data acquisition config or toolchain available', { taskType });
+    if (!this.toolChain) {
+      logger.warn('ToolChain not available for data acquisition');
       return {
         acquiredData: {},
-        stillMissingFields: missingFields,
-        toolchainResults: [],
+        stillMissing: missingData,
+        toolResults: [],
         requiresUserInput: true
       };
     }
     
-    logger.info('🔧 Starting toolchain-first data acquisition', {
+    logger.info('🧠 Using LLM reasoning to acquire missing data', {
       contextId: taskContext.contextId,
-      missingFields,
-      taskType
+      missingData
     });
     
-    const acquiredData: Record<string, any> = {};
-    const toolchainResults: Array<{ tool: string; success: boolean; reason: string }> = [];
-    const stillMissingFields: string[] = [...missingFields];
-    
-    // Find tools that can help with data acquisition
+    // Get all available tools from the toolchain
     const availableTools = await this.toolChain.getAvailableTools();
-    const dataAcquisitionTools = availableTools.filter(tool => 
-      tool.capabilities.some(cap => 
-        cap.includes('data_lookup') || 
-        cap.includes('business_search') || 
-        cap.includes('validation') ||
-        cap.includes('public_records')
-      )
-    );
     
-    // Try each available tool
-    for (const tool of dataAcquisitionTools) {
-      try {
-        logger.info(`🔍 Attempting to use toolchain tool: ${tool.name}`, {
-          contextId: taskContext.contextId,
-          tool: tool.name,
-          remainingFields: stillMissingFields
-        });
-        
-        const toolResult = await this.executeToolchainTool(tool.id, stillMissingFields, taskContext);
+    // Use LLM to reason about which tools can help
+    const toolSelectionPrompt = `
+You are an intelligent agent that needs to acquire missing data.
+
+Missing data needed:
+${missingData.map(item => `- ${item}`).join('\n')}
+
+Available tools:
+${availableTools.map(tool => `- ${tool.name}: ${tool.description}\n  Capabilities: ${tool.capabilities.join(', ')}`).join('\n')}
+
+Task context:
+${JSON.stringify(taskContext.currentState?.data || {}, null, 2)}
+
+Analyze which tools could help acquire the missing data.
+For each piece of missing data, identify the best tool to use.
+
+Respond with a JSON object:
+{
+  "reasoning": "Your analysis of how to acquire the data",
+  "tool_plan": [
+    {
+      "missing_item": "name of missing data",
+      "tool_id": "id of tool to use",
+      "tool_name": "name of tool",
+      "parameters": {}
+    }
+  ],
+  "cannot_acquire": ["list of items that no tool can help with"]
+}
+`;
+    
+    const toolSelectionResponse = await this.llmProvider.complete({
+      prompt: toolSelectionPrompt,
+      temperature: 0.3,
+      maxTokens: 1000,
+      responseFormat: 'json'
+    });
+    
+    const toolPlan = this.safeJsonParse(toolSelectionResponse.content);
+    
+    // Execute the tool plan determined by LLM reasoning
+    const acquiredData: Record<string, any> = {};
+    const toolResults: Array<{ tool: string; success: boolean; reason: string }> = [];
+    const stillMissing: string[] = [...missingData];
+    
+    if (toolPlan?.tool_plan) {
+      for (const step of toolPlan.tool_plan) {
+        try {
+          logger.info(`🔍 Executing tool: ${step.tool_name} for ${step.missing_item}`, {
+            contextId: taskContext.contextId
+          });
           
-          if (toolResult.success && toolResult.data) {
-            // Merge acquired data
-            Object.assign(acquiredData, toolResult.data);
+          const result = await this.toolChain.executeTool(step.tool_id, step.parameters || {});
+          
+          if (result.success && result.data) {
+            // Use LLM to extract relevant data from tool result
+            const extractionPrompt = `
+Tool ${step.tool_name} returned this data:
+${JSON.stringify(result.data, null, 2)}
+
+Extract the value for: ${step.missing_item}
+
+Respond with JSON:
+{
+  "found": true/false,
+  "value": "extracted value or null",
+  "confidence": 0.0-1.0
+}
+`;
             
-            // Remove fields that were successfully acquired
-            for (const field of Object.keys(toolResult.data)) {
-              const index = stillMissingFields.indexOf(field);
-              if (index > -1) {
-                stillMissingFields.splice(index, 1);
-              }
+            const extraction = await this.llmProvider.complete({
+              prompt: extractionPrompt,
+              temperature: 0.1,
+              maxTokens: 200,
+              responseFormat: 'json'
+            });
+            
+            const extracted = this.safeJsonParse(extraction.content);
+            if (extracted?.found && extracted.value) {
+              acquiredData[step.missing_item] = extracted.value;
+              const index = stillMissing.indexOf(step.missing_item);
+              if (index > -1) stillMissing.splice(index, 1);
+              
+              toolResults.push({
+                tool: step.tool_name,
+                success: true,
+                reason: `Acquired ${step.missing_item} with confidence ${extracted.confidence}`
+              });
+            } else {
+              toolResults.push({
+                tool: step.tool_name,
+                success: false,
+                reason: `Could not extract ${step.missing_item} from tool result`
+              });
             }
-            
-            toolchainResults.push({
-              tool: tool.name,
-              success: true,
-              reason: `Successfully acquired: ${Object.keys(toolResult.data).join(', ')}`
-            });
-            
-            logger.info(`✅ Tool ${tool.name} successfully provided data`, {
-              contextId: taskContext.contextId,
-              acquiredFields: Object.keys(toolResult.data),
-              remainingFields: stillMissingFields
-            });
           } else {
-            toolchainResults.push({
-              tool: tool.name,
+            toolResults.push({
+              tool: step.tool_name,
               success: false,
-              reason: toolResult.reason || 'Tool failed to provide data'
-            });
-            
-            logger.warn(`⚠️ Tool ${tool.name} failed to provide data`, {
-              contextId: taskContext.contextId,
-              reason: toolResult.reason
+              reason: result.error || 'Tool execution failed'
             });
           }
-      } catch (error) {
-        toolchainResults.push({
-          tool: tool.name,
-          success: false,
-          reason: error instanceof Error ? error.message : 'Unknown error'
-        });
-        
-        logger.error(`💥 Error using tool ${tool.name}`, {
-          contextId: taskContext.contextId,
-          error: error instanceof Error ? error.message : String(error)
-        });
+        } catch (error) {
+          toolResults.push({
+            tool: step.tool_name || 'unknown',
+            success: false,
+            reason: error instanceof Error ? error.message : 'Unknown error'
+          });
+        }
+      }
+    }
+    
+    // Add items that cannot be acquired to stillMissing
+    if (toolPlan?.cannot_acquire) {
+      for (const item of toolPlan.cannot_acquire) {
+        if (!stillMissing.includes(item)) {
+          stillMissing.push(item);
+        }
       }
     }
     
@@ -1030,179 +1074,35 @@ Remember: You are an autonomous agent following the universal principles while a
     await this.recordContextEntry(taskContext, {
       operation: 'toolchain_data_acquisition',
       data: {
-        taskType,
-        requestedFields: missingFields,
+        requestedFields: missingData,
         acquiredData,
-        stillMissingFields,
-        toolchainResults,
-        toolsAttempted: dataAcquisitionTools.length,
-        successfulTools: toolchainResults.filter(r => r.success).length
+        stillMissing,
+        toolResults,
+        toolsAttempted: toolPlan?.tool_plan?.length || 0,
+        successfulTools: toolResults.filter(r => r.success).length
       },
-      reasoning: `Attempted to acquire missing data using ${dataAcquisitionTools.length} toolchain tools. ${Object.keys(acquiredData).length} fields acquired, ${stillMissingFields.length} still missing.`
+      reasoning: `Attempted to acquire missing data using ${toolPlan?.tool_plan?.length || 0} toolchain tools. ${Object.keys(acquiredData).length} fields acquired, ${stillMissing.length} still missing.`
     });
     
     return {
       acquiredData,
-      stillMissingFields,
-      toolchainResults,
-      requiresUserInput: stillMissingFields.length > 0
+      stillMissing,
+      toolResults,
+      requiresUserInput: stillMissing.length > 0
     };
-  }
-  
-  /**
-   * Check if a tool is available in the current toolchain
-   */
-  private async isToolAvailable(toolName: string): Promise<boolean> {
-    try {
-      if (!this.toolChain) {
-        return false;
-      }
-      
-      // Map YAML tool names to actual ToolChain methods
-      const availableTools = [
-        'business_registry_lookup',    // Maps to searchBusinessEntity
-        'public_records_search',       // Maps to searchPublicRecords  
-        'secretary_of_state_lookup',   // Maps to searchBusinessEntity
-        'business_registry_search',    // Maps to searchBusinessEntity
-        'domain_whois_lookup',         // TODO: Implement in ToolChain
-        'social_media_discovery',      // TODO: Implement in ToolChain
-        'registered_agent_directory',  // TODO: Implement in ToolChain
-        'email_validation',            // Maps to validateEmail
-        'ein_validation'               // Maps to validateEIN
-      ];
-      
-      return availableTools.includes(toolName);
-    } catch (error) {
-      logger.error('Error checking tool availability', {
-        toolName,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      return false;
-    }
-  }
-  
-  /**
-   * Execute a specific toolchain tool to acquire data
-   */
-  private async executeToolchainTool(
-    toolName: string,
-    missingFields: string[],
-    taskContext: TaskContext
-  ): Promise<{ success: boolean; data?: Record<string, any>; reason?: string }> {
-    try {
-      logger.info(`🚀 Executing toolchain tool: ${toolName}`, {
-        contextId: taskContext.contextId,
-        missingFields
-      });
-      
-      if (!this.toolChain) {
-        return {
-          success: false,
-          reason: 'ToolChain not available'
-        };
-      }
-      
-      // Extract business context for tool parameters
-      const businessProfile = (taskContext as any).businessProfile || {};
-      
-      // Check if tool is available
-      const isAvailable = await this.toolChain.isToolAvailable(toolName);
-      if (!isAvailable) {
-        return {
-          success: false,
-          reason: `Tool ${toolName} is not available in the toolchain`
-        };
-      }
-      
-      // Prepare parameters based on tool name and missing fields
-      const toolParams: Record<string, unknown> = {
-        missingFields,
-        businessProfile,
-        taskContext: {
-          taskId: taskContext.contextId,  // TaskContext doesn't have taskId, use contextId
-          taskType: taskContext.currentState?.data?.taskType || 'general',
-          contextId: taskContext.contextId
-        }
-      };
-      
-      // Execute the tool through the ToolChain interface
-      const result = await this.toolChain.executeTool(toolName, toolParams);
-      
-      if (result.success && result.data) {
-        // Extract relevant fields from tool result
-        const mappedData = this.mapToolResultToFields(result.data, missingFields);
-        return {
-          success: Object.keys(mappedData).length > 0,
-          data: mappedData,
-          reason: (result.metadata?.description as string) || 'Successfully acquired data from toolchain'
-        };
-      } else {
-        return {
-          success: false,
-          reason: result.error || 'Tool execution failed'
-        };
-      }
-    } catch (error) {
-      logger.error(`Error executing toolchain tool: ${toolName}`, {
-        contextId: taskContext.contextId,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      
-      return {
-        success: false,
-        reason: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
-  }
-  
-  /**
-   * Map tool result data to missing fields
-   */
-  private mapToolResultToFields(
-    toolData: any,
-    missingFields: string[]
-  ): Record<string, any> {
-    const mappedData: Record<string, any> = {};
-    
-    // Attempt to map tool result data to our expected field names
-    // This is a generic mapping that looks for common field patterns
-    for (const field of missingFields) {
-      // Direct mapping - if tool result has the exact field
-      if (toolData[field] !== undefined) {
-        mappedData[field] = toolData[field];
-        continue;
-      }
-      
-      // Try common field name variations
-      const variations = [
-        field,
-        field.replace(/_/g, ''),  // Remove underscores
-        field.replace(/_/g, '-'),  // Replace underscores with hyphens
-        field.split('_').map((w, i) => i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(''), // camelCase
-      ];
-      
-      for (const variation of variations) {
-        if (toolData[variation] !== undefined) {
-          mappedData[field] = toolData[variation];
-          break;
-        }
-      }
-    }
-    
-    return mappedData;
   }
   
   /**
    * Create a UIRequest for missing data after toolchain attempts
    */
-  protected createDataAcquisitionUIRequest(
+  protected async createDataAcquisitionUIRequest(
     missingFields: string[],
-    taskType: string,
+    taskContext: TaskContext,
     toolchainResults: Array<{ tool: string; success: boolean; reason: string }>
-  ): any {
+  ): Promise<any> {
     const config = this.agentConfig.data_acquisition_protocol;
     
-    const fieldDefinitions = this.createFieldDefinitionsForMissingData(missingFields);
+    const fieldDefinitions = await this.createFieldDefinitionsForMissingData(missingFields, taskContext);
     
     return {
       type: 'form',
@@ -1213,7 +1113,7 @@ Remember: You are an autonomous agent following the universal principles while a
       context: {
         reason: 'toolchain_acquisition_failed',
         missingFields,
-        taskType,
+        taskType: taskContext.currentState?.data?.taskType || 'general',
         toolchainResults,
         attemptedSources: toolchainResults.map(r => r.tool)
       }
@@ -1221,62 +1121,89 @@ Remember: You are an autonomous agent following the universal principles while a
   }
   
   /**
-   * Create field definitions for missing data
+   * Helper method to safely parse JSON from strings
    */
-  private createFieldDefinitionsForMissingData(missingFields: string[]): any[] {
-    const fieldMapping: Record<string, any> = {
-      'business_name': {
-        id: 'business_name',
-        label: 'Business Name',
-        type: 'text',
-        required: true,
-        placeholder: 'Enter your business name',
-        help: 'The legal name of your business as registered'
-      },
-      'business_type': {
-        id: 'business_type',
-        label: 'Business Type',
-        type: 'select',
-        required: true,
-        options: [
-          { value: 'sole_proprietorship', label: 'Sole Proprietorship' },
-          { value: 'partnership', label: 'Partnership' },
-          { value: 'llc', label: 'Limited Liability Company (LLC)' },
-          { value: 'corporation', label: 'Corporation' },
-          { value: 'nonprofit', label: 'Nonprofit Organization' },
-          { value: 'other', label: 'Other' }
-        ],
-        help: 'The legal structure of your business'
-      },
-      'address': {
-        id: 'address',
-        label: 'Business Address',
-        type: 'textarea',
-        required: true,
-        placeholder: '123 Business St, City, State, ZIP',
-        help: 'The physical address of your business'
-      },
-      'contact_email': {
-        id: 'contact_email',
-        label: 'Contact Email',
-        type: 'email',
-        required: true,
-        placeholder: 'business@example.com',
-        help: 'Primary email address for business communications'
-      },
-      'contact_phone': {
-        id: 'contact_phone',
-        label: 'Contact Phone',
-        type: 'tel',
-        required: true,
-        placeholder: '(555) 123-4567',
-        help: 'Primary phone number for business communications'
-      }
-    };
+  private safeJsonParse(content: any): any {
+    if (typeof content === 'object') {
+      return content;
+    }
     
-    return missingFields
-      .map(field => fieldMapping[field])
-      .filter(field => field !== undefined);
+    if (typeof content !== 'string') {
+      return null;
+    }
+    
+    try {
+      return JSON.parse(content);
+    } catch (error) {
+      // Try to extract JSON from markdown code blocks
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        try {
+          return JSON.parse(jsonMatch[1]);
+        } catch {}
+      }
+      return null;
+    }
+  }
+  
+  /**
+   * Create field definitions for missing data using LLM reasoning
+   */
+  private async createFieldDefinitionsForMissingData(
+    missingFields: string[],
+    taskContext: TaskContext
+  ): Promise<any[]> {
+    // Use LLM to generate appropriate field definitions based on context
+    const fieldGenerationPrompt = `
+Generate form field definitions for the following missing data fields.
+
+Missing fields:
+${missingFields.map(field => `- ${field}`).join('\n')}
+
+Task context:
+${JSON.stringify(taskContext.currentState?.data || {}, null, 2)}
+
+For each field, generate an appropriate form field definition with:
+- id: field identifier
+- label: human-readable label
+- type: appropriate input type (text, email, tel, select, textarea, etc.)
+- required: whether the field is required
+- placeholder: helpful placeholder text
+- help: brief help text
+- options: (for select fields only) array of {value, label} options
+
+Respond with a JSON array of field definitions.
+`;
+    
+    try {
+      const response = await this.llmProvider.complete({
+        prompt: fieldGenerationPrompt,
+        temperature: 0.3,
+        maxTokens: 1500,
+        responseFormat: 'json'
+      });
+      
+      const fieldDefinitions = this.safeJsonParse(response.content);
+      
+      if (Array.isArray(fieldDefinitions)) {
+        return fieldDefinitions;
+      }
+    } catch (error) {
+      logger.error('Failed to generate field definitions with LLM', {
+        error: error instanceof Error ? error.message : String(error),
+        missingFields
+      });
+    }
+    
+    // Fallback to generic field definitions if LLM fails
+    return missingFields.map(field => ({
+      id: field,
+      label: field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      type: 'text',
+      required: true,
+      placeholder: `Enter ${field.replace(/_/g, ' ')}`,
+      help: `Please provide the ${field.replace(/_/g, ' ')}`
+    }));
   }
 
    /**
