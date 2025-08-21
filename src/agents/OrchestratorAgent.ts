@@ -33,7 +33,8 @@ import {
   UIRequest,
   UITemplateType,
   OrchestratorRequest,
-  OrchestratorResponse
+  OrchestratorResponse,
+  TaskStatus
 } from '../types/engine-types';
 
 /**
@@ -1521,14 +1522,14 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
    * Update task status in database
    * Used to track task state transitions like waiting_for_input
    */
-  private async updateTaskStatus(context: TaskContext, status: string): Promise<void> {
+  private async updateTaskStatus(context: TaskContext, status: TaskStatus): Promise<void> {
     logger.info(`📝 Updating task status to ${status.toUpperCase()}`, {
       contextId: context.contextId
     });
     
     try {
       const taskService = TaskService.getInstance();
-      await taskService.updateTaskStatus(context.contextId, status as any);
+      await taskService.updateTaskStatus(context.contextId, status);
       
       logger.info(`✅ Task status updated to ${status.toUpperCase()} in database`, {
         contextId: context.contextId
