@@ -8,7 +8,7 @@
  * - Works identically for onboarding, SOI, any task type
  */
 
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { logger } from '../utils/logger';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
@@ -16,6 +16,7 @@ import { DatabaseService } from '../services/database';
 import { TaskService } from '../services/task-service';
 import { OrchestratorAgent } from '../agents/OrchestratorAgent';
 import { emitTaskEvent } from '../services/task-events';
+import { validateJWT } from '../utils/jwt-validator';
 
 const router = Router();
 
@@ -364,6 +365,79 @@ router.post('/:taskId/events', requireAuth, async (req: AuthenticatedRequest, re
   } catch (error) {
     logger.error('Failed to emit task event', error);
     res.status(500).json({ error: 'Failed to emit task event' });
+  }
+});
+
+/**
+ * GET /api/tasks/:taskId/events
+ * 
+ * Simplified Server-Sent Events endpoint for real-time task updates
+ * Uses query parameter authentication since EventSource doesn't support headers
+ */
+router.get('/:taskId/events', async (req: Request, res: Response) => {
+  const { taskId } = req.params;
+  const authToken = req.query.auth as string;
+  
+  try {
+    // Validate token from query parameter
+    if (!authToken) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    // Validate JWT
+    const user = await validateJWT(authToken);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
+    const userId = user.id;
+    logger.info('[SSE] Client connecting to task events stream', { taskId, userId });
+    
+    const dbService = DatabaseService.getInstance();
+    
+    // Verify user owns this task
+    const task = await dbService.getTask(userId, taskId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    // Set SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+    
+    // Send initial task state
+    res.write(`event: CONTEXT_INITIALIZED\n`);
+    res.write(`data: ${JSON.stringify({
+      taskId: task.id,
+      status: task.status,
+      metadata: task.metadata || {},
+      createdAt: task.created_at,
+      updatedAt: task.updated_at
+    })}\n\n`);
+    
+    // Heartbeat to keep connection alive
+    const heartbeat = setInterval(() => {
+      res.write(':heartbeat\n\n');
+    }, 30000);
+    
+    // TODO: Set up real-time listeners here when events are triggered
+    // For now, just keep the connection open
+    
+    // Cleanup on disconnect
+    req.on('close', () => {
+      logger.info('[SSE] Client disconnected from events stream', { taskId, userId });
+      clearInterval(heartbeat);
+    });
+    
+  } catch (error) {
+    logger.error('[SSE] Failed to setup events stream', { taskId, error });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to setup events stream' });
+    }
   }
 });
 
