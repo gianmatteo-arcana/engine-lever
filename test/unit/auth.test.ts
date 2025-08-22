@@ -172,7 +172,7 @@ describe('Authentication Middleware', () => {
         message: 'Invalid user ID format',
         userId: 'invalid-user-id'
       });
-      expect(logger.warn).toHaveBeenCalledWith('Invalid user ID format: invalid-user-id');
+      expect(logger.warn).toHaveBeenCalledWith('[Auth] ❌ Invalid user ID format: invalid-user-id');
     });
 
     it('should validate UUID format correctly', () => {

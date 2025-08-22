@@ -38,10 +38,15 @@ export const extractUserContext = async (
   try {
     // Extract JWT token from Authorization header
     const authHeader = req.headers['authorization'] as string;
+    logger.debug('[Auth] Processing extractUserContext', { 
+      hasAuthHeader: !!authHeader,
+      path: req.path 
+    });
     const token = extractTokenFromHeader(authHeader);
     
     if (token) {
       req.userToken = token;
+      logger.debug('[Auth] Token extracted, validating...', { tokenLength: token.length });
       
       // Validate JWT and extract user info
       const user = await validateJWT(token);
@@ -51,9 +56,9 @@ export const extractUserContext = async (
         req.userEmail = user.email;
         req.userRole = user.role;
         
-        logger.debug(`Authenticated request from user: ${req.userId} (${req.userEmail})`);
+        logger.debug(`[Auth] ✅ JWT validation successful: ${req.userId} (${req.userEmail})`);
       } else {
-        logger.debug('Invalid JWT token provided');
+        logger.debug('[Auth] ❌ Invalid JWT token provided');
       }
     }
     
@@ -106,9 +111,15 @@ export const requireAuth = (
   res: Response, 
   next: NextFunction
 ): void | Response => {
+  logger.debug('[Auth] requireAuth check', { 
+    hasUserId: !!req.userId, 
+    hasUserToken: !!req.userToken,
+    path: req.path 
+  });
+  
   // Check for user ID (should be set by extractUserContext)
   if (!req.userId) {
-    logger.warn(`Unauthorized request to ${req.path} - no user ID`);
+    logger.warn(`[Auth] ❌ Unauthorized request to ${req.path} - no user ID`);
     return res.status(401).json({
       error: 'Authentication required',
       message: 'You must be logged in to access this resource',
@@ -118,7 +129,7 @@ export const requireAuth = (
   
   // Check for JWT token (required for database operations)
   if (!req.userToken) {
-    logger.warn(`Unauthorized request to ${req.path} - no JWT token`);
+    logger.warn(`[Auth] ❌ Unauthorized request to ${req.path} - no JWT token`);
     return res.status(401).json({
       error: 'Authentication required',
       message: 'You must provide a valid JWT token to access this resource',
@@ -129,7 +140,7 @@ export const requireAuth = (
   // Verify user ID format (should be a UUID)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(req.userId)) {
-    logger.warn(`Invalid user ID format: ${req.userId}`);
+    logger.warn(`[Auth] ❌ Invalid user ID format: ${req.userId}`);
     return res.status(401).json({
       error: 'Invalid authentication',
       message: 'Invalid user ID format',
@@ -138,6 +149,6 @@ export const requireAuth = (
   }
   
   // Authentication is valid
-  logger.debug(`Auth check passed for user: ${req.userId}`);
+  logger.debug(`[Auth] ✅ Auth check passed for user: ${req.userId}`);
   next();
 };
