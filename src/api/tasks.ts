@@ -495,7 +495,18 @@ router.get('/:taskId/events',
  * 
  * Implements the RIGHT way - Server-Sent Events instead of polling
  */
-router.get('/:taskId/context/stream', requireAuth, async (req: AuthenticatedRequest, res) => {
+router.get('/:taskId/context/stream', 
+  // Middleware to convert query param auth to header for EventSource
+  (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    const authToken = req.query.auth as string;
+    if (authToken) {
+      req.headers['authorization'] = `Bearer ${authToken}`;
+    }
+    next();
+  },
+  extractUserContext,
+  requireAuth, 
+  async (req: AuthenticatedRequest, res) => {
   const { taskId } = req.params;
   const userId = req.userId!;
   
