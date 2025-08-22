@@ -798,6 +798,7 @@ router.get('/:taskId/context/stream',
     
     try {
       // Subscribe to task-specific A2A events
+      // Note: We pass skipHistory=true because the client fetches historical events separately via REST API
       unsubscribe = a2aEventBus.subscribe(
         taskId,
         (event) => {
@@ -831,7 +832,8 @@ router.get('/:taskId/context/stream',
             logger.error('[SSE] Error sending A2A event to client', { taskId, error });
           }
         },
-        `sse-client-${userId}-${Date.now()}`
+        `sse-client-${userId}-${Date.now()}`,
+        true // skipHistory = true, to avoid sending duplicate events that client fetches from DB
       );
       
       logger.info('[SSE] A2A subscription established', { 
@@ -869,6 +871,56 @@ router.get('/:taskId/context/stream',
     if (!res.headersSent) {
       res.status(500).json({ error: 'Failed to setup context stream' });
     }
+  }
+});
+
+/**
+ * GET /api/tasks/:taskId/context/events
+ * 
+ * REST endpoint for fetching task context events
+ * Used by OrchestrationFlow to get historical events
+ */
+router.get('/:taskId/context/events', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { taskId } = req.params;
+  const userId = req.userId!;
+  
+  try {
+    logger.info('[REST] Fetching context events for task', { taskId, userId });
+    
+    const dbService = DatabaseService.getInstance();
+    
+    // Verify user owns this task
+    const task = await dbService.getTask(userId, taskId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    // Get all events for this task
+    const serviceClient = await dbService.getServiceClient();
+    const { data: events, error } = await serviceClient
+      .from('task_context_events')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: true });
+    
+    if (error) {
+      logger.error('[REST] Failed to fetch context events', { taskId, error });
+      return res.status(500).json({ error: 'Failed to fetch events' });
+    }
+    
+    logger.info('[REST] Fetched context events', { 
+      taskId, 
+      count: events?.length || 0 
+    });
+    
+    res.json({ 
+      taskId,
+      events: events || [],
+      count: events?.length || 0
+    });
+  } catch (error) {
+    logger.error('[REST] Error fetching context events', { taskId, error });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

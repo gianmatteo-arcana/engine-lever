@@ -100,18 +100,21 @@ export class A2AEventBus extends EventEmitter {
   /**
    * Subscribe to events for a specific task
    * Used by SSE endpoints to receive real-time updates
+   * @param skipHistory - If true, won't send historical events (useful when client fetches history separately)
    */
   public subscribe(
     taskId: string, 
     callback: (event: A2AEvent) => void,
-    subscriberId: string = `subscriber-${Date.now()}`
+    subscriberId: string = `subscriber-${Date.now()}`,
+    skipHistory: boolean = false
   ): () => void {
     const channelName = this.getChannelName(taskId);
     
     logger.info('👂 A2A Subscription created', {
       taskId,
       subscriberId,
-      channel: channelName
+      channel: channelName,
+      skipHistory
     });
 
     // Create subscription
@@ -130,19 +133,26 @@ export class A2AEventBus extends EventEmitter {
     // Add listener
     this.on(channelName, callback);
 
-    // Send history to new subscriber (catch-up)
-    const history = this.eventHistory.get(taskId) || [];
-    if (history.length > 0) {
-      logger.debug('📚 Sending event history to new subscriber', {
+    // Send history to new subscriber (catch-up) - unless skipHistory is true
+    if (!skipHistory) {
+      const history = this.eventHistory.get(taskId) || [];
+      if (history.length > 0) {
+        logger.debug('📚 Sending event history to new subscriber', {
+          taskId,
+          subscriberId,
+          eventCount: history.length
+        });
+        
+        // Send history events with slight delay to avoid overwhelming
+        setTimeout(() => {
+          history.forEach(event => callback(event));
+        }, 100);
+      }
+    } else {
+      logger.debug('⏭️ Skipping event history for subscriber', {
         taskId,
-        subscriberId,
-        eventCount: history.length
+        subscriberId
       });
-      
-      // Send history events with slight delay to avoid overwhelming
-      setTimeout(() => {
-        history.forEach(event => callback(event));
-      }, 100);
     }
 
     // Return unsubscribe function
