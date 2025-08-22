@@ -8,15 +8,15 @@
  * - Works identically for onboarding, SOI, any task type
  */
 
-import { Router, Request, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { logger } from '../utils/logger';
-import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
+import { requireAuth, AuthenticatedRequest, extractUserContext } from '../middleware/auth';
 import { DatabaseService } from '../services/database';
 import { TaskService } from '../services/task-service';
 import { OrchestratorAgent } from '../agents/OrchestratorAgent';
 import { emitTaskEvent } from '../services/task-events';
-import { validateJWT } from '../utils/jwt-validator';
+// import { validateJWT } from '../utils/jwt-validator'; - Not needed, using middleware
 
 const router = Router();
 
@@ -374,23 +374,24 @@ router.post('/:taskId/events', requireAuth, async (req: AuthenticatedRequest, re
  * Simplified Server-Sent Events endpoint for real-time task updates
  * Uses query parameter authentication since EventSource doesn't support headers
  */
-router.get('/:taskId/events', async (req: Request, res: Response) => {
+router.get('/:taskId/events', 
+  // Middleware to convert query param auth to header
+  (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    const authToken = req.query.auth as string;
+    if (authToken) {
+      // Convert query param to header for standard auth middleware
+      req.headers['authorization'] = `Bearer ${authToken}`;
+    }
+    next();
+  },
+  extractUserContext,
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
   const { taskId } = req.params;
-  const authToken = req.query.auth as string;
   
   try {
-    // Validate token from query parameter
-    if (!authToken) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-    
-    // Validate JWT
-    const user = await validateJWT(authToken);
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    
-    const userId = user.id;
+    const userId = req.userId!;
+    // const userToken = req.userToken!; - Available if needed
     logger.info('[SSE] Client connecting to task events stream', { taskId, userId });
     
     const dbService = DatabaseService.getInstance();
