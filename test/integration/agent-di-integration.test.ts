@@ -29,6 +29,7 @@ import { DIContainer, initializeAgents } from '../../src/services/dependency-inj
 import { OrchestratorAgent } from '../../src/agents/OrchestratorAgent';
 import { DatabaseService } from '../../src/services/database';
 import { logger } from '../../src/utils/logger';
+import { a2aEventBus } from '../../src/services/a2a-event-bus';
 
 // Mock dependencies
 jest.mock('../../src/services/database');
@@ -58,10 +59,23 @@ jest.mock('yaml');
 describe('Agent DI Integration', () => {
   let orchestrator: OrchestratorAgent;
   let mockDbService: jest.Mocked<DatabaseService>;
+  let mockA2AEventBus: any;
   
   beforeEach(() => {
     jest.clearAllMocks();
     DIContainer.clear();
+    
+    // Mock A2A Event Bus
+    mockA2AEventBus = {
+      broadcast: jest.fn().mockResolvedValue(undefined),
+      subscribe: jest.fn().mockReturnValue(() => {}),
+      unsubscribe: jest.fn(),
+      getEventHistory: jest.fn().mockReturnValue([])
+    };
+    (a2aEventBus as any).broadcast = mockA2AEventBus.broadcast;
+    (a2aEventBus as any).subscribe = mockA2AEventBus.subscribe;
+    (a2aEventBus as any).unsubscribe = mockA2AEventBus.unsubscribe;
+    (a2aEventBus as any).getEventHistory = mockA2AEventBus.getEventHistory;
     
     // Mock DatabaseService.getInstance()
     mockDbService = {
@@ -319,12 +333,11 @@ schemas:
         expect.any(Function)
       );
       
-      // Verify agent announced readiness
-      expect(mockDbService.notifyTaskContextUpdate).toHaveBeenCalledWith(
-        taskId,
-        'AGENT_READY',
+      // Verify agent announced readiness via A2A Event Bus
+      expect(mockA2AEventBus.broadcast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'AGENT_READY',
+          taskId,
           agentId: 'business_discovery_agent',
           timestamp: expect.any(String)
         })
@@ -374,15 +387,17 @@ schemas:
       // Configure agents for execution (this broadcasts the plan)
       await (orchestrator as any).configureAgentsForExecution(plan, taskId);
       
-      // Verify execution plan was broadcast
-      expect(mockDbService.notifyTaskContextUpdate).toHaveBeenCalledWith(
-        taskId,
-        'EXECUTION_PLAN',
+      // Verify execution plan was broadcast via A2A Event Bus
+      expect(mockA2AEventBus.broadcast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'EXECUTION_PLAN',
-          plan: expect.objectContaining({
-            taskId,
-            phases: plan.phases
+          taskId,
+          data: expect.objectContaining({
+            type: 'EXECUTION_PLAN',
+            plan: expect.objectContaining({
+              taskId,
+              phases: plan.phases
+            })
           })
         })
       );
@@ -489,11 +504,14 @@ schemas:
         expect.any(Function)
       );
       
-      // Verify agent announced readiness
-      expect(mockDbService.notifyTaskContextUpdate).toHaveBeenCalledWith(
-        taskId,
-        'AGENT_READY',
-        expect.any(Object)
+      // Verify agent announced readiness via A2A Event Bus
+      expect(mockA2AEventBus.broadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'AGENT_READY',
+          taskId,
+          agentId: expect.any(String),
+          timestamp: expect.any(String)
+        })
       );
     });
     
@@ -516,10 +534,10 @@ schemas:
       // Verify each agent set up its own subscription
       expect(mockDbService.listenForTaskUpdates).toHaveBeenCalledTimes(3);
       
-      // Verify each agent announced readiness
-      const readyAnnouncements = (mockDbService.notifyTaskContextUpdate as jest.Mock)
+      // Verify each agent announced readiness via A2A Event Bus
+      const readyAnnouncements = (mockA2AEventBus.broadcast as jest.Mock)
         .mock.calls
-        .filter(call => call[1] === 'AGENT_READY');
+        .filter(call => call[0].type === 'AGENT_READY');
       expect(readyAnnouncements).toHaveLength(3);
     });
   });
