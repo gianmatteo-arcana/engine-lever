@@ -79,6 +79,7 @@ import {
 import { TaskContext, OrchestratorRequest, OrchestratorResponse } from '../../types/engine-types';
 import { DatabaseService } from '../../services/database';
 import { logger } from '../../utils/logger';
+import { a2aEventBus } from '../../services/a2a-event-bus';
 import {
   AgentExecutor,
   RequestContext,
@@ -1463,11 +1464,19 @@ Respond with a JSON array of field definitions.
    */
   protected async broadcastTaskEvent(taskId: string, event: any): Promise<void> {
     try {
-      const dbService = DatabaseService.getInstance();
-      // Use PostgreSQL NOTIFY to broadcast to all SSE subscribers
-      await dbService.notifyTaskContextUpdate(taskId, event.type || 'AGENT_UPDATE', event);
+      // Use A2A Event Bus for broadcasting (pure messaging, no database dependency)
+      await a2aEventBus.broadcast({
+        type: event.type || 'AGENT_UPDATE',
+        taskId,
+        agentId: this.specializedTemplate.agent.id,
+        operation: event.operation,
+        data: event.data || event,
+        reasoning: event.reasoning,
+        timestamp: event.timestamp || new Date().toISOString(),
+        metadata: event.metadata
+      });
       
-      logger.debug('Task event broadcast via SSE', {
+      logger.debug('Task event broadcast via A2A', {
         agentId: this.specializedTemplate.agent.id,
         taskId,
         eventType: event.type

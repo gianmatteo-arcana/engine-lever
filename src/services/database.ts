@@ -1214,7 +1214,7 @@ export class DatabaseService {
     try {
       const serviceClient = this.getServiceClient();
       
-      // Use PostgreSQL NOTIFY to send real-time updates
+      // Use Supabase Realtime broadcast to send real-time updates
       // The channel name is task-specific to avoid cross-contamination
       const channelName = `task_${taskId.replace(/-/g, '_')}`;
       const payload = {
@@ -1224,17 +1224,60 @@ export class DatabaseService {
         timestamp: new Date().toISOString()
       };
 
-      // Execute NOTIFY command via RPC function
-      const { error } = await serviceClient.rpc('notify_task_update', {
-        channel_name: channelName,
-        payload: JSON.stringify(payload)
+      // Create a channel for broadcasting
+      const channel = serviceClient.channel(channelName);
+      
+      logger.info('[Broadcast] Attempting to send broadcast', { 
+        taskId, 
+        channelName, 
+        eventType,
+        payloadKeys: Object.keys(payload)
       });
-
-      if (error) {
-        logger.error('Failed to send NOTIFY', { taskId, channelName, error });
-      } else {
-        logger.debug('Sent PostgreSQL NOTIFY', { taskId, channelName, eventType });
-      }
+      
+      // Subscribe and then broadcast with a promise to ensure it completes
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          logger.warn('[Broadcast] Timeout waiting for subscription', { channelName });
+          channel.unsubscribe();
+          reject(new Error('Broadcast timeout'));
+        }, 5000);
+        
+        channel.subscribe((status) => {
+          logger.info('[Broadcast] Subscription status changed', { channelName, status });
+          
+          if (status === 'SUBSCRIBED') {
+            logger.info('[Broadcast] Channel subscribed, sending broadcast', { channelName });
+            
+            channel.send({
+              type: 'broadcast',
+              event: 'task_update',
+              payload: payload
+            }).then(() => {
+              clearTimeout(timeout);
+              logger.info('[Broadcast] ✅ Successfully sent Realtime broadcast', { 
+                taskId, 
+                channelName, 
+                eventType 
+              });
+              // Clean up after broadcast
+              setTimeout(() => {
+                channel.unsubscribe();
+                logger.debug('[Broadcast] Channel unsubscribed after broadcast', { channelName });
+              }, 100);
+              resolve();
+            }).catch((error) => {
+              clearTimeout(timeout);
+              logger.error('[Broadcast] ❌ Failed to send broadcast', { 
+                taskId, 
+                channelName, 
+                error: error.message 
+              });
+              channel.unsubscribe();
+              reject(error);
+            });
+          }
+        });
+      });
     } catch (error) {
       logger.error('Error sending task context notification', { taskId, eventType, error });
     }
@@ -1275,22 +1318,39 @@ export class DatabaseService {
       const serviceClient = this.getServiceClient();
       const channelName = `task_${taskId.replace(/-/g, '_')}`;
 
+      logger.info('[SSE Listener] Setting up Realtime subscription', { taskId, channelName });
+
       // Subscribe to the task-specific channel
       const subscription = serviceClient
         .channel(channelName)
         .on('broadcast', { event: 'task_update' }, (payload) => {
           try {
+            logger.info('[SSE Listener] Received broadcast event', { 
+              channelName, 
+              payloadType: typeof payload.payload,
+              hasPayload: !!payload.payload 
+            });
+            
             const parsedPayload = typeof payload.payload === 'string' 
               ? JSON.parse(payload.payload) 
               : payload.payload;
+            
+            logger.info('[SSE Listener] Forwarding to SSE callback', { 
+              taskId,
+              eventType: parsedPayload?.type,
+              hasData: !!parsedPayload?.data
+            });
+            
             callback(parsedPayload);
           } catch (error) {
             logger.error('Failed to parse NOTIFY payload', { channelName, error });
           }
         })
-        .subscribe();
+        .subscribe((status) => {
+          logger.info('[SSE Listener] Realtime subscription status', { channelName, status });
+        });
 
-      logger.debug('Listening for task updates', { taskId, channelName });
+      logger.info('[SSE Listener] Realtime listener configured', { taskId, channelName });
 
       return () => {
         subscription.unsubscribe();

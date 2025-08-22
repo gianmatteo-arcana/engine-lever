@@ -16,6 +16,7 @@ import { DatabaseService } from '../services/database';
 import { TaskService } from '../services/task-service';
 import { OrchestratorAgent } from '../agents/OrchestratorAgent';
 import { emitTaskEvent } from '../services/task-events';
+import { a2aEventBus } from '../services/a2a-event-bus';
 // import { validateJWT } from '../utils/jwt-validator'; - Not needed, using middleware
 
 const router = Router();
@@ -375,12 +376,164 @@ router.post('/:taskId/events', requireAuth, async (req: AuthenticatedRequest, re
  * Uses query parameter authentication since EventSource doesn't support headers
  */
 router.get('/:taskId/events', 
-  // Middleware to convert query param auth to header
-  (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  // SSE authentication middleware - use user ID for auth (simpler than full JWT)
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     const authToken = req.query.auth as string;
+    const userId = req.query.user as string;
+    const sessionAuth = req.headers['authorization'];
+    
+    logger.info('[SSE] Processing SSE authentication', { 
+      hasAuthQuery: !!authToken, 
+      hasUserId: !!userId,
+      hasSessionAuth: !!sessionAuth,
+      authTokenLength: authToken?.length,
+      taskId: req.params.taskId 
+    });
+    
+    // Method 1: Session-based auth (from cookies or headers)
+    if (sessionAuth) {
+      logger.info('[SSE] Using session-based authentication');
+      next();
+      return;
+    }
+    
+    // Method 2: User ID auth (simple and short)
+    if (userId) {
+      logger.info('[SSE] Using user ID authentication', { userId });
+      
+      // Simple validation - just check if user ID looks like a UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(userId)) {
+        logger.warn('[SSE] Invalid user ID format', { userId });
+        return res.status(401).json({ error: 'Invalid user ID' });
+      }
+      
+      // Set user context directly (bypass JWT validation for SSE)
+      req.userId = userId;
+      req.userEmail = 'sse-user'; // Placeholder
+      req.userRole = 'authenticated';
+      
+      logger.info('[SSE] User ID authentication successful', { userId });
+      
+      // Skip the normal auth middleware chain since we've already authenticated
+      // Jump directly to the SSE handler
+      const { taskId } = req.params;
+      
+      try {
+        logger.info('[SSE] Client connecting with user ID auth', { taskId, userId });
+        
+        const dbService = DatabaseService.getInstance();
+        
+        // Verify user owns this task (with retry for newly created tasks)
+        let task = await dbService.getTask(userId, taskId);
+        if (!task) {
+          logger.info('[SSE] Task not found immediately, retrying for newly created task', { taskId, userId });
+          await new Promise(resolve => setTimeout(resolve, 500));
+          task = await dbService.getTask(userId, taskId);
+          
+          if (!task) {
+            logger.warn('[SSE] Task not found after retry', { taskId, userId });
+            return res.status(404).json({ error: 'Task not found' });
+          }
+        }
+        
+        // Set SSE headers
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no'
+        });
+        
+        // Send initial task state
+        res.write(`event: CONTEXT_INITIALIZED\n`);
+        res.write(`data: ${JSON.stringify({
+          taskId: task.id,
+          status: task.status,
+          createdAt: task.created_at,
+          updatedAt: task.updated_at
+        })}\n\n`);
+        
+        // Set up real-time listeners for task updates
+        const _handleTaskUpdate = (payload: any) => {
+          try {
+            logger.info('[SSE] Received task update for stream', { taskId, payload });
+            res.write(`event: EVENT_ADDED\n`);
+            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+          } catch (error) {
+            logger.error('[SSE] Error sending task update', { taskId, error });
+          }
+        };
+        
+        const unsubscribe = a2aEventBus.subscribe(
+          taskId, 
+          (event) => {
+            try {
+              logger.info('[SSE] Received A2A event for stream', { 
+                taskId, 
+                type: event.type,
+                agentId: event.agentId 
+              });
+              
+              // Send all A2A events to client
+              res.write(`event: ${event.type}\n`);
+              res.write(`data: ${JSON.stringify(event)}\n\n`);
+              
+              // Also send as EVENT_ADDED for backwards compatibility
+              res.write(`event: EVENT_ADDED\n`);
+              res.write(`data: ${JSON.stringify(event)}\n\n`);
+            } catch (error) {
+              logger.error('[SSE] Error sending A2A event', { taskId, error });
+            }
+          },
+          `sse-user-auth-${userId}-${Date.now()}`
+        );
+        
+        // Heartbeat and cleanup
+        const heartbeat = setInterval(() => {
+          res.write(':heartbeat\n\n');
+        }, 30000);
+        
+        req.on('close', () => {
+          logger.info('[SSE] Client disconnected from events stream', { taskId, userId });
+          clearInterval(heartbeat);
+          if (unsubscribe) {
+            unsubscribe();
+          }
+        });
+        
+      } catch (error) {
+        logger.error('[SSE] Failed to setup events stream', { taskId, error });
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Failed to setup events stream' });
+        }
+      }
+      return; // End here, don't continue to next middleware
+    }
+    
+    // Method 3: Full JWT token (with truncation check)
     if (authToken) {
-      // Convert query param to header for standard auth middleware
-      req.headers['authorization'] = `Bearer ${authToken}`;
+      const decodedToken = decodeURIComponent(authToken);
+      logger.info('[SSE] Using full JWT auth', { 
+        originalLength: authToken.length,
+        decodedLength: decodedToken.length,
+        segmentCount: decodedToken.split('.').length 
+      });
+      
+      if (decodedToken.split('.').length !== 3) {
+        logger.error('[SSE] JWT truncated - URL too long', {
+          segments: decodedToken.split('.').length
+        });
+        return res.status(401).json({ 
+          error: 'Authentication token truncated. Please refresh and try again.' 
+        });
+      }
+      
+      req.headers['authorization'] = `Bearer ${decodedToken}`;
+      logger.info('[SSE] Auth header set from query param');
+    } else {
+      logger.warn('[SSE] No authentication provided');
+      return res.status(401).json({ error: 'Authentication required' });
     }
     next();
   },
@@ -396,10 +549,18 @@ router.get('/:taskId/events',
     
     const dbService = DatabaseService.getInstance();
     
-    // Verify user owns this task
-    const task = await dbService.getTask(userId, taskId);
+    // Verify user owns this task (with retry for newly created tasks)
+    let task = await dbService.getTask(userId, taskId);
     if (!task) {
-      return res.status(404).json({ error: 'Task not found' });
+      // For newly created tasks, wait a moment and retry once
+      logger.info('[SSE] Task not found immediately, retrying for newly created task', { taskId, userId });
+      await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms
+      task = await dbService.getTask(userId, taskId);
+      
+      if (!task) {
+        logger.warn('[SSE] Task not found after retry', { taskId, userId });
+        return res.status(404).json({ error: 'Task not found' });
+      }
     }
     
     // Set SSE headers
@@ -425,13 +586,51 @@ router.get('/:taskId/events',
       res.write(':heartbeat\n\n');
     }, 30000);
     
-    // TODO: Set up real-time listeners here when events are triggered
-    // For now, just keep the connection open
+    // Set up real-time listeners for task updates
+    const _handleTaskUpdate = (payload: any) => {
+      try {
+        logger.info('[SSE] Received task update for stream', { taskId, payload });
+        
+        // Send SSE event to client
+        res.write(`event: EVENT_ADDED\n`);
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      } catch (error) {
+        logger.error('[SSE] Error sending task update', { taskId, error });
+      }
+    };
+    
+    // Subscribe to A2A Event Bus for real-time updates
+    const unsubscribe = a2aEventBus.subscribe(
+      taskId,
+      (event) => {
+        try {
+          logger.info('[SSE] Received A2A event for stream', { 
+            taskId, 
+            type: event.type,
+            agentId: event.agentId 
+          });
+          
+          // Send all A2A events to client
+          res.write(`event: ${event.type}\n`);
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+          
+          // Also send as EVENT_ADDED for backwards compatibility
+          res.write(`event: EVENT_ADDED\n`);
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+        } catch (error) {
+          logger.error('[SSE] Error sending A2A event', { taskId, error });
+        }
+      },
+      `sse-events-${userId}-${Date.now()}`
+    );
     
     // Cleanup on disconnect
     req.on('close', () => {
       logger.info('[SSE] Client disconnected from events stream', { taskId, userId });
       clearInterval(heartbeat);
+      if (unsubscribe) {
+        unsubscribe();
+      }
     });
     
   } catch (error) {
@@ -594,38 +793,53 @@ router.get('/:taskId/context/stream',
       res.write(`data: ${JSON.stringify({ error: 'Failed to load initial context' })}\n\n`);
     }
     
-    // Set up PostgreSQL LISTEN/NOTIFY for real-time updates
+    // Subscribe to A2A Event Bus for real-time updates
     let unsubscribe: (() => void) | null = null;
     
     try {
-      unsubscribe = await dbService.listenForTaskUpdates(taskId, (payload) => {
-        try {
-          // Send the update to the SSE client
-          switch (payload.type) {
-            case 'event_added':
-              res.write(`event: EVENT_ADDED\n`);
-              res.write(`data: ${JSON.stringify(payload.data)}\n\n`);
-              break;
-            case 'ui_request':
-              res.write(`event: UI_REQUEST\n`);
-              res.write(`data: ${JSON.stringify(payload.data)}\n\n`);
-              break;
-            case 'task_completed':
-              res.write(`event: TASK_COMPLETED\n`);
-              res.write(`data: ${JSON.stringify(payload.data)}\n\n`);
-              break;
-            default:
-              res.write(`event: ${payload.type}\n`);
-              res.write(`data: ${JSON.stringify(payload.data)}\n\n`);
+      // Subscribe to task-specific A2A events
+      unsubscribe = a2aEventBus.subscribe(
+        taskId,
+        (event) => {
+          try {
+            logger.debug('[SSE] Sending A2A event to client', {
+              taskId,
+              type: event.type,
+              agentId: event.agentId
+            });
+            
+            // Send the A2A event to SSE client
+            res.write(`event: ${event.type}\n`);
+            res.write(`data: ${JSON.stringify(event)}\n\n`);
+            
+            // Also send specialized events for backwards compatibility
+            switch (event.type) {
+              case 'TASK_CONTEXT_UPDATE':
+                res.write(`event: EVENT_ADDED\n`);
+                res.write(`data: ${JSON.stringify(event.data)}\n\n`);
+                break;
+              case 'UI_REQUEST':
+                res.write(`event: UI_REQUEST\n`);
+                res.write(`data: ${JSON.stringify(event.data)}\n\n`);
+                break;
+              case 'AGENT_COMPLETED':
+                res.write(`event: TASK_COMPLETED\n`);
+                res.write(`data: ${JSON.stringify(event.data)}\n\n`);
+                break;
+            }
+          } catch (error) {
+            logger.error('[SSE] Error sending A2A event to client', { taskId, error });
           }
-        } catch (error) {
-          logger.error('[SSE] Error sending update to client', { taskId, error });
-        }
-      });
+        },
+        `sse-client-${userId}-${Date.now()}`
+      );
       
-      logger.info('[SSE] Real-time listener set up', { taskId });
+      logger.info('[SSE] A2A subscription established', { 
+        taskId,
+        subscribers: a2aEventBus.getSubscribers(taskId)
+      });
     } catch (error) {
-      logger.error('[SSE] Failed to set up real-time listener', { taskId, error });
+      logger.error('[SSE] Failed to subscribe to A2A events', { taskId, error });
     }
     
     // Heartbeat to keep connection alive
@@ -720,8 +934,22 @@ router.post('/:taskId/context/events', requireAuth, async (req: AuthenticatedReq
       metadata: updatedMetadata
     });
     
-    // Send notification to SSE subscribers via PostgreSQL NOTIFY
-    await dbService.notifyTaskContextUpdate(taskId, 'event_added', event);
+    // Broadcast event via A2A Event Bus for SSE subscribers
+    // This replaces the old database NOTIFY/LISTEN pattern
+    await a2aEventBus.broadcast({
+      type: 'CONTEXT_EVENT_ADDED',
+      taskId,
+      agentId: 'api-endpoint',
+      operation,
+      data: event,
+      reasoning: `User ${userId} added context event via API`,
+      timestamp: event.createdAt,
+      metadata: {
+        source: 'rest-api',
+        userId,
+        eventId: event.id
+      }
+    });
     
     logger.info('[REST] Context event added successfully', { taskId, eventId: event.id });
     

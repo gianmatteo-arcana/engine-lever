@@ -25,6 +25,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';
 import { randomUUID } from 'crypto';
+import { a2aEventBus } from './a2a-event-bus';
 import {
   TaskContext,
   ContextEntry,
@@ -425,13 +426,28 @@ export class TaskService {
       // await orchestrator.executeTask(context.contextId);
 
       // Option 2: Event-based (asynchronous)
-      // Publish to message queue or event bus
+      // Publish to A2A event bus for real-time subscribers
       await this.publishEvent({
         type: 'task.created',
         contextId: context.contextId,
         templateId: context.taskTemplateId,
         tenantId: context.tenantId
       });
+
+      // IMPORTANT: For new task creation, also trigger database broadcast
+      // This is one of the two cases where we still use database broadcasts
+      const dbService = DatabaseService.getInstance();
+      await dbService.notifyTaskContextUpdate(
+        context.contextId,
+        'TASK_CREATED',
+        {
+          contextId: context.contextId,
+          templateId: context.taskTemplateId,
+          tenantId: context.tenantId,
+          createdAt: context.createdAt,
+          status: context.currentState.status
+        }
+      );
 
       logger.info('Orchestration triggered', {
         contextId: context.contextId
@@ -447,15 +463,35 @@ export class TaskService {
   }
 
   /**
-   * Publish event for async processing
+   * Publish event via A2A Event Bus
+   * This is the primary messaging infrastructure for agents
    */
   private async publishEvent(event: any): Promise<void> {
-    // This would integrate with your message queue
-    // For now, just log it
-    logger.info('Event published', event);
-    
-    // In production, this would be:
-    // await messageBus.publish('task.events', event);
+    try {
+      // Broadcast via A2A Event Bus
+      await a2aEventBus.broadcast({
+        type: event.type.toUpperCase().replace('.', '_'), // e.g., 'task.created' -> 'TASK_CREATED'
+        taskId: event.contextId,
+        agentId: 'task-service',
+        operation: event.type,
+        data: {
+          templateId: event.templateId,
+          tenantId: event.tenantId,
+          ...event
+        },
+        reasoning: `Task ${event.contextId} created from template ${event.templateId}`,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          source: 'task-service',
+          trigger: 'task-creation'
+        }
+      });
+      
+      logger.info('Event published to A2A Event Bus', event);
+    } catch (error) {
+      logger.error('Failed to publish event to A2A Event Bus', { event, error });
+      // Don't throw - task creation should succeed even if event publishing fails
+    }
   }
 
   /**

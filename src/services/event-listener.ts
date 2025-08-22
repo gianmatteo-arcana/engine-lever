@@ -18,6 +18,7 @@ import { logger } from '../utils/logger';
 import { UnifiedEventBus } from './event-bus/UnifiedEventBus';
 import { Task } from '../types/a2a-types';
 import { v4 as uuidv4 } from 'uuid';
+import { a2aEventBus } from './a2a-event-bus';
 
 export interface SystemEvent {
   eventType: string;
@@ -295,6 +296,39 @@ export class EventListener {
 
     try {
       const taskId = uuidv4(); // Generate proper UUID
+      
+      // Broadcast new user event via A2A Event Bus
+      // This is one of the two cases where we trigger database broadcasts
+      await a2aEventBus.broadcast({
+        type: 'USER_REGISTERED',
+        taskId: 'global', // Global event, not task-specific
+        agentId: 'event-listener',
+        operation: 'user_registration',
+        data: {
+          userId: event.userId,
+          email: event.email,
+          firstName: event.firstName,
+          lastName: event.lastName,
+          contextId: event.contextId
+        },
+        reasoning: `New user ${event.email} registered, triggering onboarding`,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          source: 'auth-event',
+          trigger: 'user-registration'
+        }
+      });
+      
+      // Also trigger database broadcast for new user (one of two allowed cases)
+      await this.dbService.notifyTaskContextUpdate(
+        'global',
+        'USER_REGISTERED',
+        {
+          userId: event.userId,
+          email: event.email,
+          timestamp: new Date().toISOString()
+        }
+      );
       
       // First create a task in the tasks table
       const dbService = this.dbService.getServiceClient();
