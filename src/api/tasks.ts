@@ -798,6 +798,7 @@ router.get('/:taskId/context/stream',
     
     try {
       // Subscribe to task-specific A2A events
+      // Note: We pass skipHistory=true because the client fetches historical events separately via REST API
       unsubscribe = a2aEventBus.subscribe(
         taskId,
         (event) => {
@@ -831,7 +832,8 @@ router.get('/:taskId/context/stream',
             logger.error('[SSE] Error sending A2A event to client', { taskId, error });
           }
         },
-        `sse-client-${userId}-${Date.now()}`
+        `sse-client-${userId}-${Date.now()}`,
+        true // skipHistory = true, to avoid sending duplicate events that client fetches from DB
       );
       
       logger.info('[SSE] A2A subscription established', { 
