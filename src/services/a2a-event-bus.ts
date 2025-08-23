@@ -86,8 +86,12 @@ export class A2AEventBus extends EventEmitter {
     // Also emit to global channel for monitoring
     this.emit('global:event', event);
 
-    // Persist to database (but don't use DB for broadcasting)
-    await this.persistEvent(event);
+    // Only persist events that aren't already persisted by agents
+    // TASK_CONTEXT_UPDATE events are already persisted by BaseAgent.recordContextEntry
+    // We don't want to duplicate them in the database
+    if (type !== 'TASK_CONTEXT_UPDATE') {
+      await this.persistEvent(event);
+    }
 
     // Track metrics
     this.emit('metrics:event', {
