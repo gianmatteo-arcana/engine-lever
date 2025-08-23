@@ -444,12 +444,31 @@ export class OrchestratorAgent extends BaseAgent {
         userInteractions: (executionPlan as any).user_interactions
       });
       
-      // 2. Record plan in context for traceability
-      await this.recordContextEntry(context, {
-        operation: 'execution_plan_created',
-        data: { plan: executionPlan },
-        reasoning: 'Generated execution plan from task template'
-      });
+      // 2. Record plan in context using the new structured format
+      // Extract subtasks from the execution plan for consistent structure
+      const subtasks: any[] = [];
+      if ((executionPlan as any).reasoning?.subtask_decomposition) {
+        subtasks.push(...(executionPlan as any).reasoning.subtask_decomposition);
+      }
+      
+      await this.recordOrchestratorEvent(
+        context,
+        'execution_plan_created',
+        {
+          plan: {
+            subtasks: subtasks.map((subtask: any, index: number) => ({
+              name: subtask.subtask || `Subtask ${index + 1}`,
+              assigned_agent: subtask.assigned_agent,
+              required_capabilities: subtask.required_capabilities || [],
+              dependencies: [], // Will be populated if phases define dependencies
+              rationale: subtask.rationale || ''
+            })),
+            coordination_strategy: (executionPlan as any).reasoning?.coordination_strategy || 'Sequential execution',
+            task_analysis: (executionPlan as any).reasoning?.task_analysis || 'Task analysis from orchestration'
+          }
+        },
+        'Generated execution plan from task orchestration'
+      );
       
       // 3. Execute plan phases
       let allPhasesCompleted = true;
