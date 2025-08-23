@@ -93,20 +93,32 @@ export class AgentExecutor {
       };
       
       // Let the agent record its own execution event
+      // CRITICAL: Use PAUSED when agent needs input, not COMPLETED
       if (request.taskContext) {
+        const eventType = agentResponse.status === 'needs_input' 
+          ? 'AGENT_EXECUTION_PAUSED'  // Agent is paused waiting for user input
+          : 'AGENT_EXECUTION_COMPLETED'; // Agent finished successfully
+          
         await agent.recordExecutionEvent(request.taskContext, {
-          type: 'AGENT_EXECUTION_COMPLETED',
+          type: eventType,
           agentId,
           requestId: request.requestId,
           status: agentResponse.status,
+          // CRITICAL: Include UIRequests in the event so frontend can detect them
+          uiRequests: agentResponse.uiRequests,
           timestamp: new Date().toISOString()
         });
       }
       
-      logger.info('✅ Agent Executor: Agent completed execution', {
+      const logMessage = agentResponse.status === 'needs_input'
+        ? '⏸️ Agent Executor: Agent paused - needs user input'
+        : '✅ Agent Executor: Agent completed execution';
+        
+      logger.info(logMessage, {
         agentId,
         requestId: request.requestId,
-        status: agentResponse.status
+        status: agentResponse.status,
+        hasUIRequests: agentResponse.uiRequests && agentResponse.uiRequests.length > 0
       });
       
       return agentResponse;
