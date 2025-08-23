@@ -37,6 +37,11 @@ import {
   TaskStatus
 } from '../types/engine-types';
 import { TASK_STATUS } from '../constants/task-status';
+import { 
+  OrchestratorOperation,
+  OrchestratorEventData 
+} from '../types/orchestrator-schemas';
+import { validateOrchestratorPayload } from '../validation/orchestrator-validation';
 
 /**
  * JSON Schema templates for consistent LLM responses
@@ -229,6 +234,49 @@ export class OrchestratorAgent extends BaseAgent {
   }
 
   /**
+   * Record orchestrator events with schema validation
+   * This ensures all orchestrator events follow the defined structure
+   */
+  private async recordOrchestratorEvent<T extends OrchestratorOperation>(
+    context: TaskContext,
+    operation: T,
+    data: OrchestratorEventData<T>,
+    reasoning: string
+  ): Promise<void> {
+    try {
+      // Validate the data against the schema
+      const validatedData = validateOrchestratorPayload(operation, data);
+      
+      // Record the validated event
+      await this.recordContextEntry(context, {
+        operation,
+        data: validatedData,
+        reasoning
+      });
+      
+      logger.info(`✅ Recorded orchestrator event: ${operation}`, {
+        contextId: context.contextId,
+        operation,
+        dataKeys: Object.keys(validatedData)
+      });
+    } catch (validationError) {
+      // If validation fails, record with a warning but don't duplicate
+      logger.warn(`⚠️ Validation failed for orchestrator event: ${operation}`, {
+        contextId: context.contextId,
+        operation,
+        error: validationError instanceof Error ? validationError.message : 'Unknown error'
+      });
+      
+      // Record once with the original data and a validation warning
+      await this.recordContextEntry(context, {
+        operation,
+        data: { ...data, validation_warning: true },
+        reasoning: `${reasoning} [VALIDATION WARNING: ${validationError instanceof Error ? validationError.message : 'Schema validation failed'}]`
+      });
+    }
+  }
+
+  /**
    * Lazy initialize services to avoid startup crashes
    */
   private getConfigManager(): ConfigurationManager {
@@ -398,12 +446,8 @@ export class OrchestratorAgent extends BaseAgent {
         userInteractions: (executionPlan as any).user_interactions
       });
       
-      // 2. Record plan in context for traceability
-      await this.recordContextEntry(context, {
-        operation: 'execution_plan_created',
-        data: { plan: executionPlan },
-        reasoning: 'Generated execution plan from task template'
-      });
+      // NOTE: createExecutionPlan() already records the 'execution_plan_created' event
+      // We don't need to record it again here to avoid duplicates
       
       // 3. Execute plan phases
       let allPhasesCompleted = true;
@@ -420,18 +464,8 @@ export class OrchestratorAgent extends BaseAgent {
         
         const phaseResult = await this.executePhase(context, phase);
         
-        // 4. Record phase completion
-        await this.recordContextEntry(context, {
-          operation: 'phase_completed',
-          data: { 
-            phaseId: (phase as any).id || phase.name,
-            result: phaseResult,
-            duration: phaseResult.duration,
-            phaseNumber: phaseIndex,
-            totalPhases: executionPlan.phases.length
-          },
-          reasoning: `Completed phase ${phaseIndex}/${executionPlan.phases.length}: ${phase.name}`
-        });
+        // 4. Phase completion is tracked through subtask delegations
+        // No need for separate phase_completed event to avoid duplicates
         
         // 5. Handle UI requests with progressive disclosure
         if (phaseResult.uiRequests && phaseResult.uiRequests.length > 0) {
@@ -919,17 +953,28 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       } as any;
     }
     
-    // Store the complete execution plan including reasoning for audit trail
-    await this.recordContextEntry(context, {
-      operation: 'execution_plan_reasoning_recorded',
-      data: { 
-        reasoning: (plan as any).reasoning,
-        phaseCount: plan.phases.length,
-        totalSubtasks: plan.phases.reduce((total: number, phase: any) => 
-          total + (phase.subtasks?.length || 0), 0)
+    // Store the execution plan with structured schema
+    // Transform the reasoning.subtask_decomposition into our cleaner structure
+    const subtasks = (plan as any).reasoning?.subtask_decomposition || [];
+    
+    await this.recordOrchestratorEvent(
+      context,
+      'execution_plan_created',
+      {
+        plan: {
+          subtasks: subtasks.map((subtask: any, index: number) => ({
+            name: subtask.subtask || `Subtask ${index + 1}`,
+            assigned_agent: subtask.assigned_agent,
+            required_capabilities: subtask.required_capabilities || [],
+            dependencies: [], // Will be populated if phases define dependencies
+            rationale: subtask.rationale || ''
+          })),
+          coordination_strategy: (plan as any).reasoning?.coordination_strategy || 'Sequential execution',
+          task_analysis: (plan as any).reasoning?.task_analysis || 'Task analysis from LLM'
+        }
       },
-      reasoning: 'Detailed orchestrator reasoning and subtask decomposition recorded for traceability'
-    });
+      'Created execution plan with detailed subtask decomposition'
+    );
     
     // Validate and optimize plan before execution
     return this.optimizePlan(plan, context);
@@ -1210,21 +1255,21 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
 (context.currentState as any)?.user_id
     );
     
+    // Record that we're delegating this subtask (structured event)
+    await this.recordOrchestratorEvent(
+      context,
+      'subtask_delegated',
+      {
+        agent_id: subtask.agent,
+        subtask_name: subtask.description,
+        instructions: subtask.specific_instruction || 'Execute subtask as defined',
+        subtask_index: 0 // We don't have the index here, using 0 as placeholder
+      },
+      `Delegating subtask "${subtask.description}" to ${subtask.agent}`
+    );
+    
     // Execute the real agent with the request
     const agentResponse = await (agentInstance as any).executeInternal(request);
-    
-    // Record the subtask execution for audit trail
-    await this.recordContextEntry(context, {
-      operation: 'subtask_executed',
-      data: {
-        subtask: subtask.description,
-        agent: subtask.agent,
-        instruction: subtask.specific_instruction,
-        response: agentResponse.data,
-        success: agentResponse.status === 'completed'
-      },
-      reasoning: `Subtask "${subtask.description}" executed by ${subtask.agent} with specific instruction`
-    });
     
     return {
       subtaskId: subtask.description,

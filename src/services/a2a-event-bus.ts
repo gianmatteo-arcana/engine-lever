@@ -2,19 +2,19 @@
  * A2A (Agent-to-Agent) Event Bus
  * 
  * Pure messaging infrastructure for agent communication and SSE streaming.
- * This replaces the hybrid database/broadcast approach with a dedicated
- * in-memory event bus that SSE endpoints can subscribe to.
+ * This is a dedicated in-memory event bus that SSE endpoints can subscribe to.
  * 
  * ARCHITECTURE:
- * - Agents broadcast events via A2A protocol
+ * - Agents persist their own events to the database
+ * - Agents broadcast events via A2A protocol for real-time updates
  * - SSE endpoints subscribe to task-specific channels
- * - Events are also persisted to database (but DB doesn't trigger broadcasts)
- * - Only new user/task creation triggers database broadcasts
+ * - A2A Event Bus handles ONLY broadcasting, never persistence
+ * 
+ * This separation ensures no duplicate events and clear responsibilities.
  */
 
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
-import { DatabaseService } from './database';
 
 export interface A2AEvent {
   type: string;
@@ -65,6 +65,9 @@ export class A2AEventBus extends EventEmitter {
   /**
    * Broadcast an event to all subscribers of a task
    * This is the main method agents use to communicate
+   * 
+   * NOTE: This method ONLY broadcasts. Persistence is handled by the agents
+   * that create the events, ensuring single responsibility and no duplicates.
    */
   public async broadcast(event: A2AEvent): Promise<void> {
     const { taskId, type, agentId } = event;
@@ -85,9 +88,6 @@ export class A2AEventBus extends EventEmitter {
 
     // Also emit to global channel for monitoring
     this.emit('global:event', event);
-
-    // Persist to database (but don't use DB for broadcasting)
-    await this.persistEvent(event);
 
     // Track metrics
     this.emit('metrics:event', {
@@ -181,59 +181,6 @@ export class A2AEventBus extends EventEmitter {
    */
   public getSubscribers(taskId: string): number {
     return this.subscriptions.get(taskId)?.size || 0;
-  }
-
-  /**
-   * Persist event to database (without triggering broadcasts)
-   */
-  private async persistEvent(event: A2AEvent): Promise<void> {
-    try {
-      const dbService = DatabaseService.getInstance();
-      
-      // Map A2A event to database format
-      const dbEvent = {
-        context_id: event.taskId, // Use taskId as context_id for now
-        task_id: event.taskId,
-        actor_type: event.agentId ? 'agent' : 'system',
-        actor_id: event.agentId || 'a2a-bus',
-        operation: event.operation || event.type,
-        data: event.data || {},
-        reasoning: event.reasoning || `A2A Event: ${event.type}`,
-        trigger: {
-          source: 'a2a',
-          type: event.type,
-          timestamp: event.timestamp
-        }
-      };
-
-      // Use service client to bypass RLS
-      const serviceClient = await dbService.getServiceClient();
-      
-      const { error } = await serviceClient
-        .from('task_context_events')
-        .insert(dbEvent);
-
-      if (error) {
-        // Log but don't throw - persistence failure shouldn't break broadcasting
-        logger.error('Failed to persist A2A event to database', {
-          taskId: event.taskId,
-          type: event.type,
-          error
-        });
-      } else {
-        logger.debug('✅ A2A event persisted to database', {
-          taskId: event.taskId,
-          type: event.type
-        });
-      }
-    } catch (error) {
-      // Log but don't throw - persistence is secondary to broadcasting
-      logger.error('Error persisting A2A event', {
-        taskId: event.taskId,
-        type: event.type,
-        error
-      });
-    }
   }
 
   /**
