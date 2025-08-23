@@ -1358,38 +1358,23 @@ Respond with a JSON array of field definitions.
     response: BaseAgentResponse,
     context: { contextId: string; taskId: string; task: any }
   ): Promise<void> {
-    // Check multiple possible locations for UIRequest based on actual response structure
+    // Primary: Check for explicit UIRequest in contextUpdate.data.uiRequest
     let uiRequest = response.contextUpdate?.data?.uiRequest;
     
-    // If not found in contextUpdate, check if agent has status "needs_input" 
-    // and try to extract UIRequest information from other response fields
+    // Robust fallback: Handle agents that return needs_input without explicit UIRequest
     if (!uiRequest && response.status === 'needs_input') {
-      // Log that we detected needs_input but no explicit UIRequest
-      logger.info('🔍 Agent returned needs_input status but no explicit UIRequest object', {
+      logger.info('🔍 Agent returned needs_input, creating UIRequest from agent context', {
         agentId: this.specializedTemplate.agent.id,
         taskId: context.taskId,
-        hasContextUpdate: !!response.contextUpdate,
-        contextUpdateKeys: response.contextUpdate ? Object.keys(response.contextUpdate) : []
+        agentRole: this.specializedTemplate.agent.role
       });
       
-      // For now, let's create a default UIRequest when agent says needs_input
-      // TODO: Update agent configs to include proper UIRequest objects
-      uiRequest = {
-        templateType: 'form',
-        title: 'User Input Required',
-        priority: 'medium',
-        instructions: response.contextUpdate?.reasoning || 'Please provide the required information to continue.',
-        fields: this.generateDefaultFieldsFromResponse(response),
-        semanticData: {
-          category: 'agent_request',
-          source: 'needs_input_fallback',
-          agentRole: this.specializedTemplate.agent.role
-        }
-      };
+      // Create contextually appropriate UIRequest based on agent role and response
+      uiRequest = this.createUIRequestFromAgentContext(response);
     }
     
     if (!uiRequest) {
-      return; // No UIRequest detected, nothing to do
+      return; // No UIRequest needed
     }
 
     logger.info('🔍 UIRequest detected in agent response, handling automatically', {
@@ -1484,52 +1469,117 @@ Respond with a JSON array of field definitions.
   }
 
   /**
-   * Generate default form fields when agent returns needs_input but no explicit UIRequest
-   * This is a fallback to ensure UIRequest detection works with existing agent responses
+   * Create contextually appropriate UIRequest when agent returns needs_input
+   * This robust fallback works with actual agent response patterns
    */
-  private generateDefaultFieldsFromResponse(response: BaseAgentResponse): any[] {
-    const fields: any[] = [];
+  private createUIRequestFromAgentContext(response: BaseAgentResponse): any {
+    const agentRole = this.specializedTemplate.agent.role;
+    const agentId = this.specializedTemplate.agent.id;
     
-    // Check if response has field information in contextUpdate.data
-    if (response.contextUpdate?.data && typeof response.contextUpdate.data === 'object') {
+    // Extract fields from response data if available
+    let fields: any[] = [];
+    if (response.contextUpdate?.data) {
       const data = response.contextUpdate.data as any;
-      
-      // Look for required_fields array (as seen in profile_collection_agent)
       if (Array.isArray(data.required_fields)) {
-        data.required_fields.forEach((fieldName: string) => {
-          fields.push(this.createFieldFromName(fieldName));
-        });
+        fields = data.required_fields.map((fieldName: string) => 
+          this.createFieldFromName(fieldName)
+        );
       }
     }
     
-    // If no specific fields found, create common business fields for onboarding
-    if (fields.length === 0) {
-      fields.push(
+    // Agent-specific UIRequest configuration
+    const agentUIRequestMap: Record<string, any> = {
+      'profile_collection_specialist': {
+        templateType: 'form',
+        title: 'Business Profile Information',
+        priority: 'high',
+        instructions: 'Let\'s start with the basics about your business.',
+        defaultFields: [
+          {
+            name: 'business_name',
+            type: 'text',
+            required: true,
+            label: 'Business Name',
+            placeholder: 'Enter your legal business name'
+          },
+          {
+            name: 'contact_email',
+            type: 'email',
+            required: true,
+            label: 'Contact Email',
+            placeholder: 'Enter your email address'
+          },
+          {
+            name: 'entity_type',
+            type: 'select',
+            required: true,
+            label: 'Entity Type',
+            options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+          }
+        ]
+      },
+      'data_collection_specialist': {
+        templateType: 'form',
+        title: 'Business Information Required',
+        priority: 'high',
+        instructions: 'We couldn\'t find your business in public records. Please provide the following information:',
+        defaultFields: [
+          {
+            name: 'legalBusinessName',
+            type: 'text',
+            required: true,
+            label: 'Legal Business Name',
+            placeholder: 'Exact name as registered with state'
+          },
+          {
+            name: 'entityType',
+            type: 'select',
+            required: true,
+            label: 'Entity Type',
+            options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+          },
+          {
+            name: 'formationState',
+            type: 'select',
+            required: true,
+            label: 'State of Formation',
+            options: ['California', 'Delaware', 'Nevada', 'Texas', 'Other'],
+            defaultValue: 'California'
+          }
+        ]
+      }
+    };
+    
+    // Get agent-specific configuration or fallback to generic
+    const agentConfig = agentUIRequestMap[agentRole] || {
+      templateType: 'form',
+      title: 'Information Required',
+      priority: 'medium',
+      instructions: response.contextUpdate?.reasoning || 'Please provide the required information.',
+      defaultFields: [
         {
-          name: 'business_name',
+          name: 'user_input',
           type: 'text',
           required: true,
-          label: 'Business Name',
-          placeholder: 'Enter your business name'
-        },
-        {
-          name: 'contact_email',
-          type: 'email',
-          required: true,
-          label: 'Contact Email',
-          placeholder: 'Enter your email address'
-        },
-        {
-          name: 'entity_type',
-          type: 'select',
-          required: true,
-          label: 'Entity Type',
-          options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+          label: 'Required Information',
+          placeholder: 'Please provide the requested information'
         }
-      );
-    }
+      ]
+    };
     
-    return fields;
+    return {
+      templateType: agentConfig.templateType,
+      title: agentConfig.title,
+      priority: agentConfig.priority,
+      instructions: agentConfig.instructions,
+      fields: fields.length > 0 ? fields : agentConfig.defaultFields,
+      semanticData: {
+        category: 'agent_request',
+        source: 'contextual_generation',
+        agentRole: agentRole,
+        agentId: agentId
+      }
+    };
   }
 
   /**
