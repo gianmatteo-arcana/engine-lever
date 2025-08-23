@@ -140,61 +140,54 @@ agent_template:
       
       STATUS VALUES:
       - "completed": Task finished successfully, no further action needed
-      - "needs_input": Agent requires user input to continue (use with requestUserInput() method)
+      - "needs_input": Agent requires user input to continue
       - "delegated": Passed to another agent
       - "error": Failed with error (include error details in reasoning)
       
-      IMPORTANT: When returning "needs_input" status, ALSO call requestUserInput() method to create the UIRequest event
+      WHEN YOU NEED USER INPUT:
+      Simply include a "uiRequest" object in your contextUpdate.data when you need user input.
+      The system will automatically detect and handle UIRequest creation.
       
-    # UIRequest Creation Instructions (NEW EVENT-BASED ARCHITECTURE)
-    ui_request_instructions: |
-      When you need user input, you must do BOTH:
+    # UIRequest Data Structure (PROGRAMMATICALLY DETECTED)
+    ui_request_data_structure: |
+      When you need user input, include a "uiRequest" object in contextUpdate.data:
       
-      1. Call the requestUserInput() method provided by BaseAgent to create the UIRequest event
-      2. Return status "needs_input" to signal the agent state
-      3. The UIRequest event will be automatically surfaced in TaskContext.pendingUserInteractions
-      
-      Example usage in agent code:
-      ```typescript
-      // Step 1: Create the UIRequest event
-      const requestId = await this.requestUserInput(taskContext, {
-        templateType: 'form',
-        title: 'Business Information Required',
-        priority: 'high',
-        instructions: 'We need some additional business details to continue',
-        fields: [
-          {
-            name: 'businessName',
-            type: 'text',
-            required: true,
-            label: 'Business Name',
-            placeholder: 'Enter your business name'
-          },
-          {
-            name: 'entityType', 
-            type: 'select',
-            required: true,
-            label: 'Entity Type',
-            options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
-          }
-        ],
-        semanticData: {
-          category: 'business_profile',
-          source: 'agent_collection'
-        }
-      });
-
-      // Step 2: Return "needs_input" status to signal agent state
       return {
         status: 'needs_input',
         contextUpdate: {
-          operation: 'user_input_requested',
-          data: { uiRequestId: requestId },
-          reasoning: 'Created UIRequest for missing business information',
+          operation: 'business_info_required',
+          data: {
+            uiRequest: {
+              templateType: 'form',
+              title: 'Business Information Required',
+              priority: 'high',
+              instructions: 'We need some additional business details to continue',
+              fields: [
+                {
+                  name: 'businessName',
+                  type: 'text',
+                  required: true,
+                  label: 'Business Name',
+                  placeholder: 'Enter your business name'
+                },
+                {
+                  name: 'entityType',
+                  type: 'select', 
+                  required: true,
+                  label: 'Entity Type',
+                  options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+                }
+              ],
+              semanticData: {
+                category: 'business_profile',
+                source: 'agent_reasoning'
+              }
+            }
+          },
+          reasoning: 'Need business information to continue processing',
           confidence: 0.9
         }
       };
-      ```
       
       VALID TEMPLATE TYPES:
       - "form": Interactive form with multiple fields

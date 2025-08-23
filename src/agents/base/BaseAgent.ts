@@ -832,6 +832,10 @@ Remember: You are an autonomous agent following the universal principles while a
       // Execute core agent reasoning (🧠 THE INTELLIGENCE HAPPENS HERE)
       const response = await this.executeInternal(agentRequest);
       
+      // 🔍 PROGRAMMATIC UIREQUEST DETECTION
+      // Check if agent response contains a UIRequest in the data and handle it automatically
+      await this.handleUIRequestDetection(response, { contextId, taskId, task });
+      
       // Publish response as events
       await this.publishResponseEvents(response, taskId, eventBus);
       
@@ -1338,6 +1342,117 @@ Respond with a JSON array of field definitions.
         artifacts: response.uiRequests
       };
       await eventBus.publish(artifactUpdate);
+    }
+  }
+
+  /**
+   * 🔍 PROGRAMMATIC UIREQUEST DETECTION
+   * 
+   * Automatically detects UIRequest objects in agent response data and creates
+   * UI_REQUEST_CREATED events without requiring LLM to call specific methods.
+   * 
+   * This eliminates the dependency on LLM remembering to call requestUserInput()
+   * and makes the system more reliable by handling UIRequest creation programmatically.
+   */
+  private async handleUIRequestDetection(
+    response: BaseAgentResponse,
+    context: { contextId: string; taskId: string; task: any }
+  ): Promise<void> {
+    // Check if response contains UIRequest in contextUpdate.data
+    const uiRequest = response.contextUpdate?.data?.uiRequest;
+    
+    if (!uiRequest) {
+      return; // No UIRequest detected, nothing to do
+    }
+
+    logger.info('🔍 UIRequest detected in agent response, handling automatically', {
+      agentId: this.specializedTemplate.agent.id,
+      taskId: context.taskId,
+      templateType: uiRequest.templateType,
+      title: uiRequest.title
+    });
+
+    try {
+      // Generate unique request ID
+      const requestId = require('crypto').randomUUID();
+      
+      // Create standardized UIRequest structure
+      const standardizedUIRequest = {
+        requestId,
+        templateType: uiRequest.templateType || 'form',
+        priority: uiRequest.priority || 'medium',
+        semanticData: {
+          title: uiRequest.title || 'User Input Required',
+          instructions: uiRequest.instructions || 'Please provide the required information.',
+          fields: uiRequest.fields || [],
+          ...uiRequest.semanticData
+        },
+        createdBy: this.specializedTemplate.agent.id,
+        createdAt: new Date().toISOString()
+      };
+
+      // Create UI_REQUEST_CREATED event
+      const contextEntry: ContextEntry = {
+        entryId: require('crypto').randomUUID(),
+        timestamp: new Date().toISOString(),
+        sequenceNumber: 0, // Will be set by recordContextEntry
+        actor: {
+          type: 'agent',
+          id: this.specializedTemplate.agent.id,
+          version: this.specializedTemplate.agent.version || '1.0.0'
+        },
+        operation: 'UI_REQUEST_CREATED',
+        data: {
+          uiRequest: standardizedUIRequest
+        },
+        reasoning: `Programmatically detected UIRequest from agent ${this.specializedTemplate.agent.id}: ${uiRequest.title}`,
+        confidence: 0.9,
+        trigger: {
+          type: 'user_request',
+          source: 'agent_automatic_ui_detection',
+          details: {
+            templateType: uiRequest.templateType || 'form',
+            title: uiRequest.title || 'User Input Required',
+            timestamp: new Date().toISOString()
+          }
+        }
+      };
+
+      // Record the context entry using the new event-based approach
+      const taskContext: TaskContext = {
+        contextId: context.contextId,
+        taskTemplateId: context.task?.templateId || 'unknown',
+        tenantId: context.task?.tenantId || 'unknown',
+        createdAt: new Date().toISOString(),
+        currentState: {
+          status: 'in_progress',
+          phase: 'data_collection',
+          completeness: 50,
+          data: {}
+        },
+        history: []
+      };
+      
+      await this.recordContextEntry(taskContext, contextEntry);
+      
+      logger.info('✅ UIRequest event created programmatically', {
+        agentId: this.specializedTemplate.agent.id,
+        requestId,
+        taskId: context.taskId
+      });
+
+      // Add the requestId to the original response data for reference
+      if (response.contextUpdate?.data) {
+        response.contextUpdate.data.uiRequestId = requestId;
+      }
+
+    } catch (error) {
+      logger.error('❌ Failed to handle UIRequest detection', {
+        agentId: this.specializedTemplate.agent.id,
+        taskId: context.taskId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't throw - this shouldn't break agent execution
     }
   }
   
