@@ -1358,8 +1358,35 @@ Respond with a JSON array of field definitions.
     response: BaseAgentResponse,
     context: { contextId: string; taskId: string; task: any }
   ): Promise<void> {
-    // Check if response contains UIRequest in contextUpdate.data
-    const uiRequest = response.contextUpdate?.data?.uiRequest;
+    // Check multiple possible locations for UIRequest based on actual response structure
+    let uiRequest = response.contextUpdate?.data?.uiRequest;
+    
+    // If not found in contextUpdate, check if agent has status "needs_input" 
+    // and try to extract UIRequest information from other response fields
+    if (!uiRequest && response.status === 'needs_input') {
+      // Log that we detected needs_input but no explicit UIRequest
+      logger.info('🔍 Agent returned needs_input status but no explicit UIRequest object', {
+        agentId: this.specializedTemplate.agent.id,
+        taskId: context.taskId,
+        hasContextUpdate: !!response.contextUpdate,
+        contextUpdateKeys: response.contextUpdate ? Object.keys(response.contextUpdate) : []
+      });
+      
+      // For now, let's create a default UIRequest when agent says needs_input
+      // TODO: Update agent configs to include proper UIRequest objects
+      uiRequest = {
+        templateType: 'form',
+        title: 'User Input Required',
+        priority: 'medium',
+        instructions: response.contextUpdate?.reasoning || 'Please provide the required information to continue.',
+        fields: this.generateDefaultFieldsFromResponse(response),
+        semanticData: {
+          category: 'agent_request',
+          source: 'needs_input_fallback',
+          agentRole: this.specializedTemplate.agent.role
+        }
+      };
+    }
     
     if (!uiRequest) {
       return; // No UIRequest detected, nothing to do
@@ -1454,6 +1481,99 @@ Respond with a JSON array of field definitions.
       });
       // Don't throw - this shouldn't break agent execution
     }
+  }
+
+  /**
+   * Generate default form fields when agent returns needs_input but no explicit UIRequest
+   * This is a fallback to ensure UIRequest detection works with existing agent responses
+   */
+  private generateDefaultFieldsFromResponse(response: BaseAgentResponse): any[] {
+    const fields: any[] = [];
+    
+    // Check if response has field information in contextUpdate.data
+    if (response.contextUpdate?.data && typeof response.contextUpdate.data === 'object') {
+      const data = response.contextUpdate.data as any;
+      
+      // Look for required_fields array (as seen in profile_collection_agent)
+      if (Array.isArray(data.required_fields)) {
+        data.required_fields.forEach((fieldName: string) => {
+          fields.push(this.createFieldFromName(fieldName));
+        });
+      }
+    }
+    
+    // If no specific fields found, create common business fields for onboarding
+    if (fields.length === 0) {
+      fields.push(
+        {
+          name: 'business_name',
+          type: 'text',
+          required: true,
+          label: 'Business Name',
+          placeholder: 'Enter your business name'
+        },
+        {
+          name: 'contact_email',
+          type: 'email',
+          required: true,
+          label: 'Contact Email',
+          placeholder: 'Enter your email address'
+        },
+        {
+          name: 'entity_type',
+          type: 'select',
+          required: true,
+          label: 'Entity Type',
+          options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+        }
+      );
+    }
+    
+    return fields;
+  }
+
+  /**
+   * Create a form field object from a field name
+   */
+  private createFieldFromName(fieldName: string): any {
+    const fieldMappings: Record<string, any> = {
+      business_name: {
+        name: 'business_name',
+        type: 'text',
+        required: true,
+        label: 'Business Name',
+        placeholder: 'Enter your legal business name'
+      },
+      contact_email: {
+        name: 'contact_email',
+        type: 'email',
+        required: true,
+        label: 'Contact Email',
+        placeholder: 'Enter your email address'
+      },
+      entity_type: {
+        name: 'entity_type',
+        type: 'select',
+        required: true,
+        label: 'Entity Type',
+        options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+      },
+      formation_state: {
+        name: 'formation_state',
+        type: 'select',
+        required: false,
+        label: 'State of Formation',
+        options: ['California', 'Delaware', 'Nevada', 'Texas', 'Other']
+      }
+    };
+    
+    return fieldMappings[fieldName] || {
+      name: fieldName,
+      type: 'text',
+      required: true,
+      label: fieldName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      placeholder: `Enter ${fieldName.replace(/_/g, ' ')}`
+    };
   }
   
   /**
