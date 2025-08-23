@@ -4,6 +4,19 @@
  * Handles execution of agents through dependency injection
  * Provides a clean interface between OrchestratorAgent and DefaultAgent
  * without tight coupling
+ * 
+ * SEPARATION OF CONCERNS:
+ * - This service ORCHESTRATES agent execution only
+ * - It does NOT persist events (agents persist their own events)
+ * - It calls agent.recordExecutionEvent() to let agents record their own events
+ * - This maintains clean boundaries: each component owns its own data
+ * 
+ * Event persistence flow:
+ * 1. AgentExecutor calls agent.recordExecutionEvent()
+ * 2. Agent uses its inherited recordContextEntry() to persist
+ * 3. recordContextEntry() handles both DB persistence and A2A broadcasting
+ * 
+ * See docs/EVENT_PERSISTENCE_ARCHITECTURE.md for full details
  */
 
 import { logger } from '../utils/logger';

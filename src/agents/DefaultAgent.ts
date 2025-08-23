@@ -103,8 +103,17 @@ export class DefaultAgent extends BaseAgent {
   
   /**
    * Record an execution event (AGENT_EXECUTION_STARTED, COMPLETED, FAILED)
-   * This allows the agent to persist its own execution events following
-   * the separation of concerns principle
+   * 
+   * SEPARATION OF CONCERNS:
+   * - Agents are responsible for persisting their OWN events
+   * - This method uses the inherited recordContextEntry() from BaseAgent
+   * - recordContextEntry() handles BOTH persistence to DB and broadcasting via A2A
+   * - External services (like AgentExecutor) should call this method, not persist directly
+   * 
+   * This ensures:
+   * - No duplicate events in the database
+   * - Clear ownership of events
+   * - Consistent event recording pattern across all agents
    * 
    * @param context - The task context
    * @param event - The execution event to record
