@@ -1268,8 +1268,9 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       `Delegating subtask "${subtask.description}" to ${subtask.agent}`
     );
     
-    // Execute the real agent with the request
-    const agentResponse = await (agentInstance as any).executeInternal(request);
+    // Execute the real agent using the AgentExecutor service (dependency injection)
+    const { AgentExecutor } = await import('../services/agent-executor');
+    const agentResponse = await AgentExecutor.execute(agentInstance, request);
     
     return {
       subtaskId: subtask.description,

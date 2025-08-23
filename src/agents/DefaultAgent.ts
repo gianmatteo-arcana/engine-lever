@@ -96,7 +96,7 @@ export class DefaultAgent extends BaseAgent {
   /**
    * Get the agent ID from configuration
    */
-  private getAgentId(): string {
+  public getAgentId(): string {
     return (this as any).specializedTemplate?.agent?.id || 'unknown_agent';
   }
 }
