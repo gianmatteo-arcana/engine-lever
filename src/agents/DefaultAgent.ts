@@ -10,6 +10,7 @@
 
 import { BaseAgent } from './base/BaseAgent';
 import { logger } from '../utils/logger';
+import { TaskContext } from '../types/engine-types';
 
 export class DefaultAgent extends BaseAgent {
   // Everything is handled by BaseAgent through YAML configuration
@@ -98,5 +99,37 @@ export class DefaultAgent extends BaseAgent {
    */
   public getAgentId(): string {
     return (this as any).specializedTemplate?.agent?.id || 'unknown_agent';
+  }
+  
+  /**
+   * Record an execution event (AGENT_EXECUTION_STARTED, COMPLETED, FAILED)
+   * This allows the agent to persist its own execution events following
+   * the separation of concerns principle
+   * 
+   * @param context - The task context
+   * @param event - The execution event to record
+   */
+  public async recordExecutionEvent(context: TaskContext, event: any): Promise<void> {
+    const agentId = this.getAgentId();
+    
+    logger.debug(`Agent recording execution event`, { 
+      agentId, 
+      eventType: event.type,
+      taskId: context.contextId 
+    });
+    
+    // Use the protected recordContextEntry method from BaseAgent
+    await this.recordContextEntry(context, {
+      operation: event.type,
+      data: event,
+      reasoning: event.reasoning || `Agent ${agentId} execution: ${event.type}`,
+      confidence: event.status === 'completed' ? 0.9 : 0.7,
+      trigger: {
+        type: 'system_event',  // Agent execution is a system event
+        source: 'agent-executor',
+        details: { requestId: event.requestId },
+        requestId: event.requestId
+      }
+    });
   }
 }

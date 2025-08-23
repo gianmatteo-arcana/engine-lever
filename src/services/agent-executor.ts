@@ -7,10 +7,9 @@
  */
 
 import { logger } from '../utils/logger';
-import { AgentRequest, AgentResponse, TaskContext } from '../types/engine-types';
+import { AgentRequest, AgentResponse } from '../types/engine-types';
 import { BaseAgentRequest, BaseAgentResponse } from '../types/base-agent-types';
 import { DefaultAgent } from '../agents/DefaultAgent';
-import { a2aEventBus } from './a2a-event-bus';
 
 export class AgentExecutor {
   /**
@@ -31,9 +30,9 @@ export class AgentExecutor {
       taskId: request.taskContext?.contextId
     });
     
-    // Broadcast agent starting event
+    // Have the agent record its own execution start event (separation of concerns)
     if (request.taskContext) {
-      await this.broadcastAgentEvent(request.taskContext, {
+      await agent.recordExecutionEvent(request.taskContext, {
         type: 'AGENT_EXECUTION_STARTED',
         agentId,
         requestId: request.requestId,
@@ -74,9 +73,9 @@ export class AgentExecutor {
         } : undefined
       };
       
-      // Broadcast agent completion event
+      // Have the agent record its own execution completion event (separation of concerns)
       if (request.taskContext) {
-        await this.broadcastAgentEvent(request.taskContext, {
+        await agent.recordExecutionEvent(request.taskContext, {
           type: 'AGENT_EXECUTION_COMPLETED',
           agentId,
           requestId: request.requestId,
@@ -102,9 +101,9 @@ export class AgentExecutor {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       
-      // Broadcast agent failure event
+      // Have the agent record its own execution failure event (separation of concerns)
       if (request.taskContext) {
-        await this.broadcastAgentEvent(request.taskContext, {
+        await agent.recordExecutionEvent(request.taskContext, {
           type: 'AGENT_EXECUTION_FAILED',
           agentId,
           requestId: request.requestId,
@@ -114,34 +113,6 @@ export class AgentExecutor {
       }
       
       throw error;
-    }
-  }
-  
-  /**
-   * Broadcast an agent event through the A2A event bus
-   * 
-   * @param context - The task context
-   * @param event - The event to broadcast
-   */
-  private static async broadcastAgentEvent(context: TaskContext, event: any): Promise<void> {
-    try {
-      // Use the agent's recordContextEntry if available
-      if (context && context.contextId) {
-        await a2aEventBus.broadcast({
-          type: 'TASK_CONTEXT_UPDATE',
-          taskId: context.contextId,
-          agentId: event.agentId,
-          operation: event.type,
-          data: event,
-          timestamp: event.timestamp || new Date().toISOString()
-        });
-      }
-    } catch (error) {
-      logger.error('Failed to broadcast agent event', {
-        eventType: event.type,
-        agentId: event.agentId,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
     }
   }
 }
