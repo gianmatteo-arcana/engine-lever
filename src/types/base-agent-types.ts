@@ -50,6 +50,8 @@ export interface BaseAgentTemplate {
     read_pattern: string;
     write_pattern: string;
     context_entry_schema: string;
+    agent_response_schema?: string;
+    user_input_protocol?: string;
   };
   error_handling: {
     classification: {

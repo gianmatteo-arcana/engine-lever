@@ -165,8 +165,11 @@ export class TaskService {
           data: request.initialData || {}
         },
         
-        // Immutable event history
+        // Immutable event history (empty for new tasks)
         history: [],
+        
+        // No pending user interactions for new tasks (empty history)
+        pendingUserInteractions: undefined,
         
         // Include task definition and description for orchestrator
         metadata: {
@@ -505,22 +508,28 @@ export class TaskService {
    * Map database record to TaskContext
    */
   private mapToTaskContext(data: any, history: any[]): TaskContext {
+    const mappedHistory = history.map(h => ({
+      entryId: h.entry_id,
+      timestamp: h.timestamp,
+      sequenceNumber: h.sequence_number,
+      actor: h.actor,
+      operation: h.operation,
+      data: h.data,
+      reasoning: h.reasoning,
+      trigger: h.trigger
+    }));
+
+    // Compute pendingUserInteractions from event history
+    const pendingUserInteractions = StateComputer.computePendingUserInteractions(mappedHistory);
+
     return {
       contextId: data.context_id,
       taskTemplateId: data.task_template_id,
       tenantId: data.tenant_id,
       createdAt: data.created_at,
       currentState: data.current_state,
-      history: history.map(h => ({
-        entryId: h.entry_id,
-        timestamp: h.timestamp,
-        sequenceNumber: h.sequence_number,
-        actor: h.actor,
-        operation: h.operation,
-        data: h.data,
-        reasoning: h.reasoning,
-        trigger: h.trigger
-      })),
+      history: mappedHistory,
+      pendingUserInteractions: pendingUserInteractions.length > 0 ? pendingUserInteractions : undefined,
       templateSnapshot: data.template_snapshot
     };
   }

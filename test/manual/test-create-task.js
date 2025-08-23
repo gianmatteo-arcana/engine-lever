@@ -9,7 +9,8 @@ async function createTestTask() {
   
   return new Promise((resolve, reject) => {
     const data = JSON.stringify({
-      template_type: 'us_general_business_onboarding',
+      task_type: 'onboarding',
+      template_id: 'onboarding',
       metadata: {
         user_intent: 'Testing agent delegation',
         test_run: true,
@@ -25,7 +26,7 @@ async function createTestTask() {
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': data.length,
-        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXItMTIzIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJpYXQiOjE3NTU4MzA4MTMsImV4cCI6MTc1NTgzNDQxM30.scUhGtzAH7aYuVBpQg7Pzh-6SPp9fT4HqU8iTo9FTvI'
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4ZThlYTdiZC1iN2ZiLTRlNzctOGUzNC1hYTU1MWZlMjY5MzQiLCJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImlhdCI6MTc1NTkyNTYwMCwiZXhwIjoxNzU1OTI5MjAwfQ.BdWfhoBV9L7Y3HKdvwKGaop_NBt5fRZSrNjJRm_sjig'
       }
     };
     

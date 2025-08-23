@@ -182,55 +182,71 @@ examples:
       parameters:
         businessName: "Small Business Inc"
     
-    response:
-      status: "needs_input"
-      contextUpdate:
-        operation: "partial_data_found"
-        data:
-          search_results: []
-          attempted_sources: ["ca_sos", "federal_ein"]
-          missing_data: ["entityType", "formationDate", "jurisdiction"]
-        reasoning: "No matches found in public databases for 'Small Business Inc'. Name may be DBA or entity not in California. Need direct user input."
-        confidence: 0.8
-      uiRequests: [
-        {
-          templateType: "BusinessInfoForm",
-          semanticData: {
-            purpose: "Complete business entity identification",
-            fields: [
-              {
-                id: "legalBusinessName",
-                label: "Legal Business Name",
-                type: "text",
-                required: true,
-                help: "Exact name as registered with state"
-              },
-              {
-                id: "entityType",
-                label: "Entity Type",
-                type: "select",
-                required: true,
-                options: [
-                  {"value": "LLC", "label": "Limited Liability Company (LLC)"},
-                  {"value": "Corporation", "label": "Corporation"},
-                  {"value": "Partnership", "label": "Partnership"}
-                ]
-              },
-              {
-                id: "formationState",
-                label: "State of Formation",
-                type: "select",
-                required: true,
-                default: "California"
+    instructions: |
+      MANDATORY REQUIREMENT: When you need user input, you MUST include BOTH:
+      1. status: 'needs_input' 
+      2. uiRequest object in contextUpdate.data.uiRequest
+      
+      This is a strict requirement - the system will reject responses that have 
+      status='needs_input' without a corresponding uiRequest object.
+      
+      ```typescript
+      // REQUIRED FORMAT - Both status AND uiRequest must be present:
+      return {
+        status: 'needs_input',
+        contextUpdate: {
+          operation: 'business_info_required',
+          data: {
+            search_results: [],
+            attempted_sources: ["ca_sos", "federal_ein"], 
+            missing_data: ["entityType", "formationDate", "jurisdiction"],
+            uiRequest: {
+              templateType: 'form',
+              title: 'Business Information Required',
+              priority: 'high',
+              instructions: 'We couldn\'t find your business in public records. Please provide the following information:',
+              fields: [
+                {
+                  name: 'legalBusinessName',
+                  type: 'text',
+                  required: true,
+                  label: 'Legal Business Name',
+                  placeholder: 'Exact name as registered with state'
+                },
+                {
+                  name: 'entityType',
+                  type: 'select',
+                  required: true,
+                  label: 'Entity Type',
+                  options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+                },
+                {
+                  name: 'formationState',
+                  type: 'select',
+                  required: true,
+                  label: 'State of Formation',
+                  options: ['Alabama', 'Alaska', 'Arizona', 'California', 'Colorado', 'Connecticut', 'Delaware'],
+                  defaultValue: 'California'
+                }
+              ],
+              semanticData: {
+                purpose: 'Complete business entity identification',
+                category: 'business_profile',
+                fallbackReason: 'public_records_search_failed'
               }
-            ],
-            defaults: {"formationState": "California"},
-            help: "We couldn't find your business in public records"
-          }
+            }
+          },
+          reasoning: 'No matches found in public databases. Need direct user input for business information.',
+          confidence: 0.8
         }
-      ]
-      confidence: 0.8
-      fallback_strategy: "Collect entity information through progressive disclosure form"
+      };
+      ```
+      
+      The system will automatically:
+      1. Detect the uiRequest object in your response data
+      2. Create a UI_REQUEST_CREATED event
+      3. Surface the request in TaskContext.pendingUserInteractions
+      4. Add a uiRequestId to your response data for reference
 
 # Fallback patterns for graceful degradation
 fallback_patterns:

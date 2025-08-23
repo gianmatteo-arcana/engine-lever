@@ -191,6 +191,19 @@ Check the error message above for specific configuration issues.
       
       const baseYaml = yaml.parse(baseContent!);
       
+      // Debug logging to check if user_input_protocol is loaded
+      if (baseYaml.agent_template?.context_patterns?.user_input_protocol) {
+        logger.debug('✅ user_input_protocol loaded from YAML', {
+          length: baseYaml.agent_template.context_patterns.user_input_protocol.length
+        });
+      } else {
+        logger.warn('⚠️ user_input_protocol NOT found in YAML', {
+          hasAgentTemplate: !!baseYaml.agent_template,
+          hasContextPatterns: !!baseYaml.agent_template?.context_patterns,
+          contextPatternKeys: Object.keys(baseYaml.agent_template?.context_patterns || {})
+        });
+      }
+      
       // Return the agent_template section (common patterns)
       return baseYaml.agent_template || baseYaml.base_agent;
     } catch (error) {
@@ -292,6 +305,19 @@ Check the error message above for specific configuration issues.
   private buildInheritedPrompt(request: BaseAgentRequest): string {
     const base = this.agentConfig;
     const specialized = this.specializedTemplate.agent;
+    
+    // Debug: Check if user_input_protocol is available
+    if (base.context_patterns?.user_input_protocol) {
+      logger.debug('✅ user_input_protocol available in buildPrompt', {
+        length: base.context_patterns.user_input_protocol.length,
+        preview: base.context_patterns.user_input_protocol.substring(0, 50)
+      });
+    } else {
+      logger.warn('⚠️ user_input_protocol NOT available in buildPrompt', {
+        hasContextPatterns: !!base.context_patterns,
+        keys: base.context_patterns ? Object.keys(base.context_patterns) : []
+      });
+    }
     
     // Extract context data from TaskContext if available
     const contextData = request.taskContext?.currentState?.data || {};
@@ -396,16 +422,24 @@ Your response MUST be valid JSON matching this EXACT schema:
     "operation": "descriptive_operation_name",
     "data": { 
       "relevant": "structured data",
-      "results": "action outcomes"
+      "results": "action outcomes",
+      "uiRequest": {  // ← CRITICAL: uiRequest goes HERE when status="needs_input"
+        "templateType": "form|approval|choice|file_upload",
+        "title": "Clear, user-friendly title",
+        "instructions": "What the user needs to do",
+        "fields": [
+          {
+            "name": "field_name",
+            "type": "text|email|select|number",
+            "label": "User-friendly label",
+            "required": true,
+            "placeholder": "Helpful hint"
+          }
+        ]
+      }
     },
     "reasoning": "Clear explanation of decision process",
     "confidence": 0.85
-  },
-  "uiRequest": {
-    "type": "form|approval|notification|none",
-    "title": "UI element title",
-    "fields": [],
-    "instructions": "Clear user guidance"
   }
 }
 
@@ -433,6 +467,9 @@ STATUS VALUES (CRITICAL - USE CORRECTLY):
 
 # UI Request Guidelines
 ${base.communication.with_user.ui_creation_guidelines}
+
+# 🎯 PERFECT LLM PROMPT: USER INPUT REQUIREMENTS (MANDATORY)
+${base.context_patterns?.user_input_protocol || '⚠️ USER_INPUT_PROTOCOL NOT LOADED - When you need user input, you MUST set status="needs_input" AND include a uiRequest object at contextUpdate.data.uiRequest'}
 
 # Examples from Specialized Configuration
 ${this.formatExamples()}
@@ -536,7 +573,7 @@ Remember: You are an autonomous agent following the universal principles while a
     
     // Return response with enforced schema
     return {
-      status: this.validateStatus(llmResponse.status),
+      status: this.validateStatus(llmResponse.status, llmResponse.contextUpdate),
       contextUpdate: contextEntry,
       confidence: this.validateConfidence(llmResponse.confidence || contextEntry.confidence),
       fallback_strategy: llmResponse.fallback_strategy,
@@ -547,15 +584,33 @@ Remember: You are an autonomous agent following the universal principles while a
   }
   
   /**
-   * Validate status field
+   * Validate status field with strict uiRequest requirement
    */
-  private validateStatus(status: any): 'completed' | 'needs_input' | 'delegated' | 'error' {
+  private validateStatus(status: any, contextUpdate?: any): 'completed' | 'needs_input' | 'delegated' | 'error' {
     const validStatuses = ['completed', 'needs_input', 'delegated', 'error'];
-    if (validStatuses.includes(status)) {
-      return status;
+    
+    if (!validStatuses.includes(status)) {
+      console.warn(`Invalid status '${status}', defaulting to 'completed'`);
+      return 'completed';
     }
-    console.warn(`Invalid status '${status}', defaulting to 'completed'`);
-    return 'completed';
+    
+    // 🚨 STRICT REQUIREMENT: needs_input MUST have uiRequest
+    if (status === 'needs_input') {
+      const hasUIRequest = contextUpdate?.data?.uiRequest;
+      if (!hasUIRequest) {
+        const errorMsg = `VALIDATION ERROR: Agent ${this.specializedTemplate.agent.id} returned status='needs_input' without contextUpdate.data.uiRequest. This violates the strict requirement.`;
+        logger.error(errorMsg, {
+          agentId: this.specializedTemplate.agent.id,
+          status,
+          hasContextUpdate: !!contextUpdate,
+          hasData: !!contextUpdate?.data,
+          hasUIRequest: hasUIRequest
+        });
+        throw new Error(errorMsg);
+      }
+    }
+    
+    return status;
   }
   
   /**
@@ -831,6 +886,10 @@ Remember: You are an autonomous agent following the universal principles while a
       
       // Execute core agent reasoning (🧠 THE INTELLIGENCE HAPPENS HERE)
       const response = await this.executeInternal(agentRequest);
+      
+      // 🔍 PROGRAMMATIC UIREQUEST DETECTION
+      // Check if agent response contains a UIRequest in the data and handle it automatically
+      await this.handleUIRequestDetection(response, { contextId, taskId, task });
       
       // Publish response as events
       await this.publishResponseEvents(response, taskId, eventBus);
@@ -1339,6 +1398,287 @@ Respond with a JSON array of field definitions.
       };
       await eventBus.publish(artifactUpdate);
     }
+  }
+
+  /**
+   * 🔍 PROGRAMMATIC UIREQUEST DETECTION
+   * 
+   * Automatically detects UIRequest objects in agent response data and creates
+   * UI_REQUEST_CREATED events without requiring LLM to call specific methods.
+   * 
+   * This eliminates the dependency on LLM remembering to call requestUserInput()
+   * and makes the system more reliable by handling UIRequest creation programmatically.
+   */
+  private async handleUIRequestDetection(
+    response: BaseAgentResponse,
+    context: { contextId: string; taskId: string; task: any }
+  ): Promise<void> {
+    // Primary: Check for explicit UIRequest in contextUpdate.data.uiRequest
+    let uiRequest = response.contextUpdate?.data?.uiRequest;
+    
+    // Robust fallback: Handle agents that return needs_input without explicit UIRequest
+    if (!uiRequest && response.status === 'needs_input') {
+      logger.info('🔍 Agent returned needs_input, creating UIRequest from agent context', {
+        agentId: this.specializedTemplate.agent.id,
+        taskId: context.taskId,
+        agentRole: this.specializedTemplate.agent.role
+      });
+      
+      // Create contextually appropriate UIRequest based on agent role and response
+      uiRequest = this.createUIRequestFromAgentContext(response);
+    }
+    
+    if (!uiRequest) {
+      return; // No UIRequest needed
+    }
+
+    logger.info('🔍 UIRequest detected in agent response, handling automatically', {
+      agentId: this.specializedTemplate.agent.id,
+      taskId: context.taskId,
+      templateType: uiRequest.templateType,
+      title: uiRequest.title
+    });
+
+    try {
+      // Generate unique request ID
+      const requestId = require('crypto').randomUUID();
+      
+      // Create standardized UIRequest structure
+      const standardizedUIRequest = {
+        requestId,
+        templateType: uiRequest.templateType || 'form',
+        priority: uiRequest.priority || 'medium',
+        semanticData: {
+          title: uiRequest.title || 'User Input Required',
+          instructions: uiRequest.instructions || 'Please provide the required information.',
+          fields: uiRequest.fields || [],
+          ...uiRequest.semanticData
+        },
+        createdBy: this.specializedTemplate.agent.id,
+        createdAt: new Date().toISOString()
+      };
+
+      // Create UI_REQUEST_CREATED event
+      const contextEntry: ContextEntry = {
+        entryId: require('crypto').randomUUID(),
+        timestamp: new Date().toISOString(),
+        sequenceNumber: 0, // Will be set by recordContextEntry
+        actor: {
+          type: 'agent',
+          id: this.specializedTemplate.agent.id,
+          version: this.specializedTemplate.agent.version || '1.0.0'
+        },
+        operation: 'UI_REQUEST_CREATED',
+        data: {
+          uiRequest: standardizedUIRequest
+        },
+        reasoning: `Programmatically detected UIRequest from agent ${this.specializedTemplate.agent.id}: ${uiRequest.title}`,
+        confidence: 0.9,
+        trigger: {
+          type: 'user_request',
+          source: 'agent_automatic_ui_detection',
+          details: {
+            templateType: uiRequest.templateType || 'form',
+            title: uiRequest.title || 'User Input Required',
+            timestamp: new Date().toISOString()
+          }
+        }
+      };
+
+      // Record the context entry using the new event-based approach
+      const taskContext: TaskContext = {
+        contextId: context.contextId,
+        taskTemplateId: context.task?.templateId || 'unknown',
+        tenantId: context.task?.tenantId || 'unknown',
+        createdAt: new Date().toISOString(),
+        currentState: {
+          status: 'in_progress',
+          phase: 'data_collection',
+          completeness: 50,
+          data: {}
+        },
+        history: []
+      };
+      
+      await this.recordContextEntry(taskContext, contextEntry);
+      
+      logger.info('✅ UIRequest event created programmatically', {
+        agentId: this.specializedTemplate.agent.id,
+        requestId,
+        taskId: context.taskId
+      });
+
+      // Add the requestId to the original response data for reference
+      if (response.contextUpdate?.data) {
+        response.contextUpdate.data.uiRequestId = requestId;
+      }
+
+    } catch (error) {
+      logger.error('❌ Failed to handle UIRequest detection', {
+        agentId: this.specializedTemplate.agent.id,
+        taskId: context.taskId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't throw - this shouldn't break agent execution
+    }
+  }
+
+  /**
+   * Create contextually appropriate UIRequest when agent returns needs_input
+   * This robust fallback works with actual agent response patterns
+   */
+  private createUIRequestFromAgentContext(response: BaseAgentResponse): any {
+    const agentRole = this.specializedTemplate.agent.role;
+    const agentId = this.specializedTemplate.agent.id;
+    
+    // Extract fields from response data if available
+    let fields: any[] = [];
+    if (response.contextUpdate?.data) {
+      const data = response.contextUpdate.data as any;
+      if (Array.isArray(data.required_fields)) {
+        fields = data.required_fields.map((fieldName: string) => 
+          this.createFieldFromName(fieldName)
+        );
+      }
+    }
+    
+    // Agent-specific UIRequest configuration
+    const agentUIRequestMap: Record<string, any> = {
+      'profile_collection_specialist': {
+        templateType: 'form',
+        title: 'Business Profile Information',
+        priority: 'high',
+        instructions: 'Let\'s start with the basics about your business.',
+        defaultFields: [
+          {
+            name: 'business_name',
+            type: 'text',
+            required: true,
+            label: 'Business Name',
+            placeholder: 'Enter your legal business name'
+          },
+          {
+            name: 'contact_email',
+            type: 'email',
+            required: true,
+            label: 'Contact Email',
+            placeholder: 'Enter your email address'
+          },
+          {
+            name: 'entity_type',
+            type: 'select',
+            required: true,
+            label: 'Entity Type',
+            options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+          }
+        ]
+      },
+      'data_collection_specialist': {
+        templateType: 'form',
+        title: 'Business Information Required',
+        priority: 'high',
+        instructions: 'We couldn\'t find your business in public records. Please provide the following information:',
+        defaultFields: [
+          {
+            name: 'legalBusinessName',
+            type: 'text',
+            required: true,
+            label: 'Legal Business Name',
+            placeholder: 'Exact name as registered with state'
+          },
+          {
+            name: 'entityType',
+            type: 'select',
+            required: true,
+            label: 'Entity Type',
+            options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+          },
+          {
+            name: 'formationState',
+            type: 'select',
+            required: true,
+            label: 'State of Formation',
+            options: ['California', 'Delaware', 'Nevada', 'Texas', 'Other'],
+            defaultValue: 'California'
+          }
+        ]
+      }
+    };
+    
+    // Get agent-specific configuration or fallback to generic
+    const agentConfig = agentUIRequestMap[agentRole] || {
+      templateType: 'form',
+      title: 'Information Required',
+      priority: 'medium',
+      instructions: response.contextUpdate?.reasoning || 'Please provide the required information.',
+      defaultFields: [
+        {
+          name: 'user_input',
+          type: 'text',
+          required: true,
+          label: 'Required Information',
+          placeholder: 'Please provide the requested information'
+        }
+      ]
+    };
+    
+    return {
+      templateType: agentConfig.templateType,
+      title: agentConfig.title,
+      priority: agentConfig.priority,
+      instructions: agentConfig.instructions,
+      fields: fields.length > 0 ? fields : agentConfig.defaultFields,
+      semanticData: {
+        category: 'agent_request',
+        source: 'contextual_generation',
+        agentRole: agentRole,
+        agentId: agentId
+      }
+    };
+  }
+
+  /**
+   * Create a form field object from a field name
+   */
+  private createFieldFromName(fieldName: string): any {
+    const fieldMappings: Record<string, any> = {
+      business_name: {
+        name: 'business_name',
+        type: 'text',
+        required: true,
+        label: 'Business Name',
+        placeholder: 'Enter your legal business name'
+      },
+      contact_email: {
+        name: 'contact_email',
+        type: 'email',
+        required: true,
+        label: 'Contact Email',
+        placeholder: 'Enter your email address'
+      },
+      entity_type: {
+        name: 'entity_type',
+        type: 'select',
+        required: true,
+        label: 'Entity Type',
+        options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+      },
+      formation_state: {
+        name: 'formation_state',
+        type: 'select',
+        required: false,
+        label: 'State of Formation',
+        options: ['California', 'Delaware', 'Nevada', 'Texas', 'Other']
+      }
+    };
+    
+    return fieldMappings[fieldName] || {
+      name: fieldName,
+      type: 'text',
+      required: true,
+      label: fieldName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      placeholder: `Enter ${fieldName.replace(/_/g, ' ')}`
+    };
   }
   
   /**
@@ -1926,6 +2266,81 @@ Respond with a JSON array of field definitions.
         suggestedResolution: c.suggestedResolution
       }))
     });
+  }
+
+  /**
+   * Standardized method for creating UIRequest events
+   * 
+   * This creates a UI_REQUEST_CREATED event with a properly structured UIRequest
+   * that will be detected by StateComputer.computePendingUserInteractions()
+   */
+  protected async requestUserInput(
+    taskContext: TaskContext,
+    options: {
+      templateType: string;
+      title: string;
+      priority?: 'low' | 'medium' | 'high' | 'urgent';
+      fields?: any[];
+      instructions?: string;
+      semanticData?: Record<string, any>;
+    }
+  ): Promise<string> {
+    const requestId = require('crypto').randomUUID();
+    
+    // Create UIRequest with standardized structure
+    const uiRequest = {
+      requestId,
+      templateType: options.templateType,
+      priority: options.priority || 'medium',
+      semanticData: {
+        title: options.title,
+        instructions: options.instructions || 'Please provide the required information.',
+        fields: options.fields || [],
+        ...options.semanticData
+      },
+      createdBy: this.specializedTemplate.agent.id,
+      createdAt: new Date().toISOString()
+    };
+
+    // Create UI_REQUEST_CREATED event
+    const contextEntry: ContextEntry = {
+      entryId: require('crypto').randomUUID(),
+      timestamp: new Date().toISOString(),
+      sequenceNumber: (taskContext.history?.length || 0) + 1,
+      actor: {
+        type: 'agent',
+        id: this.specializedTemplate.agent.id,
+        version: this.specializedTemplate.agent.version || '1.0.0'
+      },
+      operation: 'UI_REQUEST_CREATED',
+      data: {
+        uiRequest
+      },
+      reasoning: `Agent ${this.specializedTemplate.agent.id} requires user input: ${options.title}`,
+      confidence: 0.9,
+      trigger: {
+        type: 'user_request',
+        source: 'agent_request_user_input',
+        details: {
+          templateType: options.templateType,
+          title: options.title,
+          timestamp: new Date().toISOString()
+        }
+      }
+    };
+
+    // Record the context entry
+    await this.recordContextEntry(taskContext, contextEntry);
+
+    logger.info('UIRequest created', {
+      agentId: this.specializedTemplate.agent.id,
+      requestId,
+      templateType: options.templateType,
+      title: options.title,
+      priority: options.priority
+    });
+
+    return requestId;
   }
 
 }

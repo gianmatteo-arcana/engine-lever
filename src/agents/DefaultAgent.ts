@@ -130,7 +130,11 @@ export class DefaultAgent extends BaseAgent {
     // Use the protected recordContextEntry method from BaseAgent
     await this.recordContextEntry(context, {
       operation: event.type,
-      data: event,
+      data: {
+        ...event,
+        system_event: true,  // Flag for easy filtering
+        event_category: 'agent_execution'
+      },
       reasoning: event.reasoning || `Agent ${agentId} execution: ${event.type}`,
       confidence: event.status === 'completed' ? 0.9 : 0.7,
       trigger: {

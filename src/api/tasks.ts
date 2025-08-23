@@ -1087,25 +1087,53 @@ router.get('/:taskId/status', requireAuth, async (req: AuthenticatedRequest, res
  */
 router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const { task_type: taskType, title, description, metadata, template_id: templateId } = req.body;
+    const { 
+      task_type: taskType, 
+      title, 
+      description, 
+      metadata, 
+      template_id: templateId 
+    } = req.body;
     const userToken = req.userToken!;
     const userId = req.userId!;
     
-    logger.info('Creating universal task', { taskType, userId, templateId });
+    // Default to 'general' if not provided
+    const effectiveTaskType = taskType || 'general';
+    const effectiveTemplateId = templateId || taskType || 'general';
+    
+    logger.info('Creating universal task', { 
+      taskType: effectiveTaskType, 
+      userId, 
+      templateId: effectiveTemplateId 
+    });
+    
+    // Generate proper title based on task type
+    const taskTitle = title || (() => {
+      // Map task types to user-friendly names
+      const taskNames: Record<string, string> = {
+        'onboarding': 'Onboarding',
+        'compliance': 'Compliance Check',
+        'general': 'General',
+        'registration': 'Business Registration',
+        'licensing': 'Licensing'
+      };
+      const displayName = taskNames[effectiveTaskType] || 'General';
+      return `${displayName} Task - ${new Date().toISOString()}`;
+    })();
     
     // Use TaskService to create task - this will load the template properly
     const taskService = TaskService.getInstance();
     const taskContext = await taskService.create({
-      templateId: templateId || taskType,
+      templateId: effectiveTemplateId,
       tenantId: userId,
       userToken,
       initialData: {
         ...(metadata || {}),
         taskId: undefined, // Will be generated
         userId,
-        title: title || `${taskType} Task - ${new Date().toISOString()}`,
+        title: taskTitle,
         description: description || `Created via universal API`,
-        taskType: taskType,
+        taskType: effectiveTaskType,
         source: metadata?.source || 'api',
         createdAt: new Date().toISOString()
       }
