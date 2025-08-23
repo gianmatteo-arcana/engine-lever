@@ -37,6 +37,11 @@ import {
   TaskStatus
 } from '../types/engine-types';
 import { TASK_STATUS } from '../constants/task-status';
+import { 
+  OrchestratorOperation,
+  OrchestratorEventData 
+} from '../types/orchestrator-schemas';
+import { validateOrchestratorPayload } from '../validation/orchestrator-validation';
 
 /**
  * JSON Schema templates for consistent LLM responses
@@ -226,6 +231,47 @@ export class OrchestratorAgent extends BaseAgent {
       OrchestratorAgent.instance = new OrchestratorAgent();
     }
     return OrchestratorAgent.instance;
+  }
+
+  /**
+   * Record orchestrator events with schema validation
+   * This ensures all orchestrator events follow the defined structure
+   */
+  private async recordOrchestratorEvent<T extends OrchestratorOperation>(
+    context: TaskContext,
+    operation: T,
+    data: OrchestratorEventData<T>,
+    reasoning: string
+  ): Promise<void> {
+    try {
+      // Validate the data against the schema
+      const validatedData = validateOrchestratorPayload(operation, data);
+      
+      // Record the validated event
+      await this.recordContextEntry(context, {
+        operation,
+        data: validatedData,
+        reasoning
+      });
+      
+      logger.info(`✅ Recorded orchestrator event: ${operation}`, {
+        contextId: context.contextId,
+        operation,
+        dataKeys: Object.keys(validatedData)
+      });
+    } catch (error) {
+      logger.error(`❌ Failed to record orchestrator event: ${operation}`, {
+        contextId: context.contextId,
+        operation,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Still record the event even if validation fails (with a warning)
+      await this.recordContextEntry(context, {
+        operation,
+        data: { ...data, validation_failed: true },
+        reasoning: `${reasoning} [VALIDATION WARNING: ${error instanceof Error ? error.message : 'Schema validation failed'}]`
+      });
+    }
   }
 
   /**
@@ -919,17 +965,28 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       } as any;
     }
     
-    // Store the complete execution plan including reasoning for audit trail
-    await this.recordContextEntry(context, {
-      operation: 'execution_plan_reasoning_recorded',
-      data: { 
-        reasoning: (plan as any).reasoning,
-        phaseCount: plan.phases.length,
-        totalSubtasks: plan.phases.reduce((total: number, phase: any) => 
-          total + (phase.subtasks?.length || 0), 0)
+    // Store the execution plan with structured schema
+    // Transform the reasoning.subtask_decomposition into our cleaner structure
+    const subtasks = (plan as any).reasoning?.subtask_decomposition || [];
+    
+    await this.recordOrchestratorEvent(
+      context,
+      'execution_plan_created',
+      {
+        plan: {
+          subtasks: subtasks.map((subtask: any, index: number) => ({
+            name: subtask.subtask || `Subtask ${index + 1}`,
+            assigned_agent: subtask.assigned_agent,
+            required_capabilities: subtask.required_capabilities || [],
+            dependencies: [], // Will be populated if phases define dependencies
+            rationale: subtask.rationale || ''
+          })),
+          coordination_strategy: (plan as any).reasoning?.coordination_strategy || 'Sequential execution',
+          task_analysis: (plan as any).reasoning?.task_analysis || 'Task analysis from LLM'
+        }
       },
-      reasoning: 'Detailed orchestrator reasoning and subtask decomposition recorded for traceability'
-    });
+      'Created execution plan with detailed subtask decomposition'
+    );
     
     // Validate and optimize plan before execution
     return this.optimizePlan(plan, context);
