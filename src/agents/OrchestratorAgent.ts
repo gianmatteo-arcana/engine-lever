@@ -1021,7 +1021,8 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
         const subtaskResults = await Promise.allSettled(subtaskPromises);
         
         // Process results and collect UI requests
-        subtaskResults.forEach((result: any, index: number) => {
+        for (let index = 0; index < subtaskResults.length; index++) {
+          const result = subtaskResults[index];
           if (result.status === 'fulfilled') {
             results.push(result.value);
             if (result.value.uiRequests) {
@@ -1033,8 +1034,22 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
               subtask: subtasks[index].description,
               error: result.reason
             });
+            
+            // CRITICAL: Apply fallback for failed subtask and add to results
+            // Without this, failed subtasks are ignored and phases incorrectly marked as completed
+            const fallbackResult = await this.handleSubtaskFailure(
+              context, 
+              subtasks[index], 
+              result.reason
+            );
+            results.push(fallbackResult);
+            
+            // Collect UI requests from fallback
+            if (fallbackResult.uiRequests) {
+              uiRequests.push(...fallbackResult.uiRequests);
+            }
           }
-        });
+        }
       } else {
         // Execute subtasks sequentially, passing data between them
         let phaseData = {};
@@ -1110,6 +1125,17 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     // 2. Else if ANY subtask failed -> phase status = 'failed'
     // 3. Else all completed -> phase status = 'completed'
     // This ensures we NEVER mark a phase as complete when user input is needed
+    
+    // DEBUG: Log what statuses we actually have in results
+    logger.debug('🔍 Phase status determination', {
+      contextId: context.contextId,
+      phaseName: phase.name,
+      resultStatuses: results.map((r: any) => ({ 
+        subtask: r.subtaskId || 'unknown',
+        status: r.status 
+      }))
+    });
+    
     const needsInput = results.some((r: any) => r.status === 'needs_input');
     const hasFailed = results.some((r: any) => r.status === 'failed' || r.status === 'error');
     const phaseStatus = needsInput ? 'needs_input' : (hasFailed ? 'failed' : 'completed');
@@ -1316,6 +1342,45 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       reasoning: `Subtask "${subtask.description}" failed, applying fallback strategy`
     });
     
+    // Create an error report UIRequest
+    // This should rarely happen if agents are properly configured
+    // The real fix is to ensure agents always return proper UIRequests
+    const errorUIRequest = {
+      requestId: `error_${Date.now()}`,
+      templateType: 'error_notification' as any,
+      semanticData: {
+        title: `Agent Error: ${subtask.agent}`,
+        description: `The ${subtask.agent} encountered an error and needs configuration improvement.`,
+        instruction: `Error: ${error instanceof Error ? error.message : String(error)}`,
+        expectedOutput: subtask.expected_output,
+        debugInfo: {
+          subtask: subtask.description,
+          agent: subtask.agent,
+          error: error instanceof Error ? error.message : String(error)
+        }
+      },
+      context: {
+        isError: true,
+        originalSubtask: subtask.description,
+        agent: subtask.agent,
+        agentInstruction: subtask.specific_instruction,
+        expectedAgentOutput: subtask.expected_output
+      }
+    };
+    
+    // CRITICAL: Record UI_REQUEST_CREATED event so StateComputer can detect it
+    await this.recordContextEntry(context, {
+      operation: 'UI_REQUEST_CREATED',
+      data: {
+        uiRequest: errorUIRequest,
+        source: 'orchestrator_error',
+        subtask: subtask.description,
+        agent: subtask.agent,
+        isError: true
+      },
+      reasoning: `Agent ${subtask.agent} failed validation - needs proper UIRequest implementation`
+    });
+    
     // Return a fallback result that allows the process to continue
     return {
       subtaskId: subtask.description,
@@ -1326,21 +1391,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
         fallback: true,
         manual_completion_required: true
       },
-      uiRequests: [{
-        requestId: `fallback_${Date.now()}`,
-        templateType: 'smart_text_input' as any,
-        semanticData: {
-          title: `Manual Input Required: ${subtask.description}`,
-          description: `We encountered an issue with automated processing. Please provide the required information manually.`,
-          instruction: subtask.specific_instruction,
-          expectedOutput: subtask.expected_output
-        },
-        context: {
-          fallback: true,
-          originalSubtask: subtask.description,
-          agent: subtask.agent
-        }
-      }],
+      uiRequests: [errorUIRequest],
       reasoning: `Subtask failed, requesting manual user input as fallback`
     };
   }

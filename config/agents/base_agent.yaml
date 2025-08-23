@@ -144,73 +144,119 @@ agent_template:
       - "delegated": Passed to another agent
       - "error": Failed with error (include error details in reasoning)
       
-      WHEN YOU NEED USER INPUT:
-      Simply include a "uiRequest" object in your contextUpdate.data when you need user input.
-      The system will automatically detect and handle UIRequest creation.
+      🚨 STRICT REQUIREMENT FOR needs_input STATUS:
+      When status = "needs_input", you MUST include a uiRequest object in contextUpdate.data.uiRequest
       
-    # UIRequest Data Structure (PROGRAMMATICALLY DETECTED)
-    ui_request_data_structure: |
-      When you need user input, include a "uiRequest" object in contextUpdate.data:
+      VIOLATION: status="needs_input" without uiRequest = SYSTEM REJECTION
+      CORRECT: status="needs_input" + contextUpdate.data.uiRequest = ACCEPTED
       
-      return {
-        status: 'needs_input',
-        contextUpdate: {
-          operation: 'business_info_required',
-          data: {
-            uiRequest: {
-              templateType: 'form',
-              title: 'Business Information Required',
-              priority: 'high',
-              instructions: 'We need some additional business details to continue',
-              fields: [
+    # 🎯 PERFECT LLM PROMPT: USER INPUT REQUIREMENTS
+    user_input_protocol: |
+      ═══════════════════════════════════════════════════════════════════
+      🚨 CRITICAL: WHEN YOU NEED USER INPUT - MANDATORY DUAL REQUIREMENT 🚨
+      ═══════════════════════════════════════════════════════════════════
+      
+      STRICT RULE: If you need ANY information from the user, you MUST:
+      
+      1️⃣ Set status: "needs_input" (EXACTLY this string)
+      2️⃣ Include uiRequest object at contextUpdate.data.uiRequest (EXACT path)
+      
+      ⛔ VIOLATIONS THAT WILL CAUSE IMMEDIATE REJECTION:
+      - status: "needs_input" WITHOUT contextUpdate.data.uiRequest ❌
+      - Putting uiRequest anywhere else (like contextUpdate.uiRequest) ❌  
+      - Missing required fields in uiRequest (title, instructions, fields) ❌
+      - Invalid JSON (unescaped quotes, newlines in strings) ❌
+      
+      ✅ THE ONLY CORRECT WAY:
+      
+      PERFECT EXAMPLE:
+      {
+        "status": "needs_input",
+        "contextUpdate": {
+          "operation": "business_info_collection",
+          "data": {
+            "search_attempts": ["ca_sos_database", "federal_ein_lookup"],
+            "found_matches": 0,
+            "uiRequest": {
+              "templateType": "form",
+              "title": "Business Information Required",
+              "priority": "high",
+              "instructions": "We couldn't locate your business in public records. Please provide these details to continue:",
+              "fields": [
                 {
-                  name: 'businessName',
-                  type: 'text',
-                  required: true,
-                  label: 'Business Name',
-                  placeholder: 'Enter your business name'
+                  "name": "legalBusinessName",
+                  "type": "text",
+                  "required": true,
+                  "label": "Legal Business Name",
+                  "placeholder": "Exact name as registered with state"
                 },
                 {
-                  name: 'entityType',
-                  type: 'select', 
-                  required: true,
-                  label: 'Entity Type',
-                  options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+                  "name": "entityType", 
+                  "type": "select",
+                  "required": true,
+                  "label": "Business Entity Type",
+                  "options": ["LLC", "Corporation", "Partnership", "Sole Proprietorship", "Other"]
+                },
+                {
+                  "name": "businessAddress",
+                  "type": "text",
+                  "required": true,
+                  "label": "Business Address",
+                  "placeholder": "Street address where business is located"
                 }
               ],
-              semanticData: {
-                category: 'business_profile',
-                source: 'agent_reasoning'
+              "semanticData": {
+                "purpose": "Complete business entity identification for SOI filing",
+                "category": "business_profile",
+                "urgency": "blocks_task_completion"
               }
             }
           },
-          reasoning: 'Need business information to continue processing',
-          confidence: 0.9
+          "reasoning": "Automated search through CA SOS and federal databases returned no matches. Manual input required to proceed with Statement of Information preparation.",
+          "confidence": 0.95
         }
-      };
+      }
       
-      VALID TEMPLATE TYPES:
-      - "form": Interactive form with multiple fields
-      - "approval": Yes/no confirmation dialog
-      - "notification": Information display with acknowledgment
-      - "file_upload": File upload interface
+      📋 FIELD REFERENCE:
+      templateType: "form" | "approval" | "choice" | "file_upload"
+      priority: "low" | "medium" | "high" | "critical" 
+      field.type: "text" | "email" | "tel" | "url" | "select" | "textarea" | "number"
       
-      VALID PRIORITIES:
-      - "low": Can be deferred
-      - "medium": Normal priority (default)
-      - "high": Should be addressed soon
-      - "urgent": Blocks critical functionality
+      💡 SMART FORM DESIGN:
+      - Group related fields logically
+      - Use clear, business-friendly labels
+      - Provide helpful placeholders
+      - Set appropriate required flags
+      - Include validation hints in placeholder
+      - Order fields by importance/workflow
       
-      FIELD TYPES for forms:
-      - "text": Single-line text input
-      - "textarea": Multi-line text input  
-      - "select": Dropdown selection
-      - "radio": Single choice from options
-      - "checkbox": Multiple selections
-      - "date": Date picker
-      - "email": Email validation
-      - "phone": Phone number input
-      - "currency": Money amount input
+      🎯 CONTEXT AWARENESS:
+      Your form should reflect:
+      - What you were trying to accomplish
+      - What data you already found/didn't find
+      - Why you need specific information
+      - How this fits into the larger task
+      
+      ⚡ JSON FORMATTING RULES (PREVENT REJECTION):
+      - NEVER put raw newlines in string values - use \\n instead
+      - ALWAYS escape quotes inside strings with \\
+      - NEVER use single quotes for JSON strings - only double quotes
+      - KEEP all JSON on proper structure - no trailing commas
+      
+      EXAMPLES OF VIOLATIONS:
+      ❌ "instruction": "Enter your business
+      name" (newline breaks JSON)
+      ✅ "instruction": "Enter your business\\nname" (escaped newline)
+      
+      ❌ "title": "User's Information" (apostrophe can break some parsers)  
+      ✅ "title": "User Information" (avoid apostrophes when possible)
+      ✅ "title": "User\\'s Information" (or escape if necessary)
+      
+      ⚡ VALIDATION ENFORCEMENT:
+      System will REJECT any response that:
+      1. Has status="needs_input" without contextUpdate.data.uiRequest
+      2. Contains invalid JSON that cannot be parsed
+      3. Missing required uiRequest fields (title, instructions, fields)
   
   # Error handling patterns
   error_patterns:

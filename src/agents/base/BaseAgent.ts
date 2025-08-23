@@ -191,6 +191,19 @@ Check the error message above for specific configuration issues.
       
       const baseYaml = yaml.parse(baseContent!);
       
+      // Debug logging to check if user_input_protocol is loaded
+      if (baseYaml.agent_template?.context_patterns?.user_input_protocol) {
+        logger.debug('✅ user_input_protocol loaded from YAML', {
+          length: baseYaml.agent_template.context_patterns.user_input_protocol.length
+        });
+      } else {
+        logger.warn('⚠️ user_input_protocol NOT found in YAML', {
+          hasAgentTemplate: !!baseYaml.agent_template,
+          hasContextPatterns: !!baseYaml.agent_template?.context_patterns,
+          contextPatternKeys: Object.keys(baseYaml.agent_template?.context_patterns || {})
+        });
+      }
+      
       // Return the agent_template section (common patterns)
       return baseYaml.agent_template || baseYaml.base_agent;
     } catch (error) {
@@ -292,6 +305,19 @@ Check the error message above for specific configuration issues.
   private buildInheritedPrompt(request: BaseAgentRequest): string {
     const base = this.agentConfig;
     const specialized = this.specializedTemplate.agent;
+    
+    // Debug: Check if user_input_protocol is available
+    if (base.context_patterns?.user_input_protocol) {
+      logger.debug('✅ user_input_protocol available in buildPrompt', {
+        length: base.context_patterns.user_input_protocol.length,
+        preview: base.context_patterns.user_input_protocol.substring(0, 50)
+      });
+    } else {
+      logger.warn('⚠️ user_input_protocol NOT available in buildPrompt', {
+        hasContextPatterns: !!base.context_patterns,
+        keys: base.context_patterns ? Object.keys(base.context_patterns) : []
+      });
+    }
     
     // Extract context data from TaskContext if available
     const contextData = request.taskContext?.currentState?.data || {};
@@ -396,16 +422,24 @@ Your response MUST be valid JSON matching this EXACT schema:
     "operation": "descriptive_operation_name",
     "data": { 
       "relevant": "structured data",
-      "results": "action outcomes"
+      "results": "action outcomes",
+      "uiRequest": {  // ← CRITICAL: uiRequest goes HERE when status="needs_input"
+        "templateType": "form|approval|choice|file_upload",
+        "title": "Clear, user-friendly title",
+        "instructions": "What the user needs to do",
+        "fields": [
+          {
+            "name": "field_name",
+            "type": "text|email|select|number",
+            "label": "User-friendly label",
+            "required": true,
+            "placeholder": "Helpful hint"
+          }
+        ]
+      }
     },
     "reasoning": "Clear explanation of decision process",
     "confidence": 0.85
-  },
-  "uiRequest": {
-    "type": "form|approval|notification|none",
-    "title": "UI element title",
-    "fields": [],
-    "instructions": "Clear user guidance"
   }
 }
 
@@ -433,6 +467,9 @@ STATUS VALUES (CRITICAL - USE CORRECTLY):
 
 # UI Request Guidelines
 ${base.communication.with_user.ui_creation_guidelines}
+
+# 🎯 PERFECT LLM PROMPT: USER INPUT REQUIREMENTS (MANDATORY)
+${base.context_patterns?.user_input_protocol || '⚠️ USER_INPUT_PROTOCOL NOT LOADED - When you need user input, you MUST set status="needs_input" AND include a uiRequest object at contextUpdate.data.uiRequest'}
 
 # Examples from Specialized Configuration
 ${this.formatExamples()}
@@ -536,7 +573,7 @@ Remember: You are an autonomous agent following the universal principles while a
     
     // Return response with enforced schema
     return {
-      status: this.validateStatus(llmResponse.status),
+      status: this.validateStatus(llmResponse.status, llmResponse.contextUpdate),
       contextUpdate: contextEntry,
       confidence: this.validateConfidence(llmResponse.confidence || contextEntry.confidence),
       fallback_strategy: llmResponse.fallback_strategy,
@@ -547,15 +584,33 @@ Remember: You are an autonomous agent following the universal principles while a
   }
   
   /**
-   * Validate status field
+   * Validate status field with strict uiRequest requirement
    */
-  private validateStatus(status: any): 'completed' | 'needs_input' | 'delegated' | 'error' {
+  private validateStatus(status: any, contextUpdate?: any): 'completed' | 'needs_input' | 'delegated' | 'error' {
     const validStatuses = ['completed', 'needs_input', 'delegated', 'error'];
-    if (validStatuses.includes(status)) {
-      return status;
+    
+    if (!validStatuses.includes(status)) {
+      console.warn(`Invalid status '${status}', defaulting to 'completed'`);
+      return 'completed';
     }
-    console.warn(`Invalid status '${status}', defaulting to 'completed'`);
-    return 'completed';
+    
+    // 🚨 STRICT REQUIREMENT: needs_input MUST have uiRequest
+    if (status === 'needs_input') {
+      const hasUIRequest = contextUpdate?.data?.uiRequest;
+      if (!hasUIRequest) {
+        const errorMsg = `VALIDATION ERROR: Agent ${this.specializedTemplate.agent.id} returned status='needs_input' without contextUpdate.data.uiRequest. This violates the strict requirement.`;
+        logger.error(errorMsg, {
+          agentId: this.specializedTemplate.agent.id,
+          status,
+          hasContextUpdate: !!contextUpdate,
+          hasData: !!contextUpdate?.data,
+          hasUIRequest: hasUIRequest
+        });
+        throw new Error(errorMsg);
+      }
+    }
+    
+    return status;
   }
   
   /**

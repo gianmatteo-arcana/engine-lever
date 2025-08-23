@@ -43,13 +43,13 @@ export class AgentExecutor {
       taskId: request.taskContext?.contextId
     });
     
-    // Have the agent record its own execution start event (separation of concerns)
+    // Let the agent record its own execution event
     if (request.taskContext) {
       await agent.recordExecutionEvent(request.taskContext, {
         type: 'AGENT_EXECUTION_STARTED',
         agentId,
         requestId: request.requestId,
-        instruction: request.instruction,
+        instruction: request.instruction?.substring(0, 100),
         timestamp: new Date().toISOString()
       });
     }
@@ -74,11 +74,17 @@ export class AgentExecutor {
       const baseResponse: BaseAgentResponse = await agent.executeInternal(baseRequest);
       
       // Convert BaseAgentResponse to AgentResponse
+      // Extract UIRequest from contextUpdate.data.uiRequest if present
+      const uiRequests = [];
+      if (baseResponse.contextUpdate?.data?.uiRequest) {
+        uiRequests.push(baseResponse.contextUpdate.data.uiRequest);
+      }
+      
       const agentResponse: AgentResponse = {
         status: baseResponse.status || 'completed',
         data: baseResponse.contextUpdate?.data || {},
         reasoning: baseResponse.contextUpdate?.reasoning,
-        uiRequests: baseResponse.uiRequests || [],
+        uiRequests: uiRequests,
         error: baseResponse.error ? {
           code: baseResponse.error.type,
           message: baseResponse.error.message,
@@ -86,15 +92,13 @@ export class AgentExecutor {
         } : undefined
       };
       
-      // Have the agent record its own execution completion event (separation of concerns)
+      // Let the agent record its own execution event
       if (request.taskContext) {
         await agent.recordExecutionEvent(request.taskContext, {
           type: 'AGENT_EXECUTION_COMPLETED',
           agentId,
           requestId: request.requestId,
           status: agentResponse.status,
-          result: baseResponse.contextUpdate?.data,
-          reasoning: baseResponse.contextUpdate?.reasoning,
           timestamp: new Date().toISOString()
         });
       }
@@ -114,7 +118,7 @@ export class AgentExecutor {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       
-      // Have the agent record its own execution failure event (separation of concerns)
+      // Let the agent record its own execution event
       if (request.taskContext) {
         await agent.recordExecutionEvent(request.taskContext, {
           type: 'AGENT_EXECUTION_FAILED',
@@ -128,4 +132,5 @@ export class AgentExecutor {
       throw error;
     }
   }
+
 }

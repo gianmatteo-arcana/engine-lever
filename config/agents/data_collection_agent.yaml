@@ -183,11 +183,15 @@ examples:
         businessName: "Small Business Inc"
     
     instructions: |
-      When you cannot find business information in public records, simply include the UIRequest 
-      in your response data. The system will automatically detect and handle UIRequest creation.
+      MANDATORY REQUIREMENT: When you need user input, you MUST include BOTH:
+      1. status: 'needs_input' 
+      2. uiRequest object in contextUpdate.data.uiRequest
+      
+      This is a strict requirement - the system will reject responses that have 
+      status='needs_input' without a corresponding uiRequest object.
       
       ```typescript
-      // When you need user input, include uiRequest object in your response data:
+      // REQUIRED FORMAT - Both status AND uiRequest must be present:
       return {
         status: 'needs_input',
         contextUpdate: {
