@@ -140,22 +140,23 @@ agent_template:
       
       STATUS VALUES:
       - "completed": Task finished successfully, no further action needed
-      - "needs_input": DEPRECATED - Use requestUserInput() method instead
+      - "needs_input": Agent requires user input to continue (use with requestUserInput() method)
       - "delegated": Passed to another agent
       - "error": Failed with error (include error details in reasoning)
       
-      IMPORTANT: For user input requests, use the requestUserInput() method instead of returning "needs_input" status
+      IMPORTANT: When returning "needs_input" status, ALSO call requestUserInput() method to create the UIRequest event
       
     # UIRequest Creation Instructions (NEW EVENT-BASED ARCHITECTURE)
     ui_request_instructions: |
-      When you need user input, DO NOT return "needs_input" status. Instead:
+      When you need user input, you must do BOTH:
       
-      1. Use the requestUserInput() method provided by BaseAgent
-      2. This creates a UI_REQUEST_CREATED event with proper structure
-      3. The event will be automatically surfaced in TaskContext.pendingUserInteractions
+      1. Call the requestUserInput() method provided by BaseAgent to create the UIRequest event
+      2. Return status "needs_input" to signal the agent state
+      3. The UIRequest event will be automatically surfaced in TaskContext.pendingUserInteractions
       
       Example usage in agent code:
       ```typescript
+      // Step 1: Create the UIRequest event
       const requestId = await this.requestUserInput(taskContext, {
         templateType: 'form',
         title: 'Business Information Required',
@@ -182,6 +183,17 @@ agent_template:
           source: 'agent_collection'
         }
       });
+
+      // Step 2: Return "needs_input" status to signal agent state
+      return {
+        status: 'needs_input',
+        contextUpdate: {
+          operation: 'user_input_requested',
+          data: { uiRequestId: requestId },
+          reasoning: 'Created UIRequest for missing business information',
+          confidence: 0.9
+        }
+      };
       ```
       
       VALID TEMPLATE TYPES:

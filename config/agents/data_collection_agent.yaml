@@ -236,7 +236,17 @@ examples:
       });
       ```
       
-      Then return status "completed" with context update documenting the UI request creation.
+      Then return status "needs_input" with context update documenting the UI request creation:
+      
+      return {
+        status: 'needs_input',
+        contextUpdate: {
+          operation: 'user_input_requested',
+          data: { uiRequestId: requestId },
+          reasoning: 'Created UIRequest for missing business information',
+          confidence: 0.8
+        }
+      };
 
 # Fallback patterns for graceful degradation
 fallback_patterns:
