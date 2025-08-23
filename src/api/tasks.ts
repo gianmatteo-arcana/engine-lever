@@ -465,6 +465,7 @@ router.get('/:taskId/events',
           }
         };
         
+        // Skip history since client fetches it separately via REST API
         const unsubscribe = a2aEventBus.subscribe(
           taskId, 
           (event) => {
@@ -486,7 +487,8 @@ router.get('/:taskId/events',
               logger.error('[SSE] Error sending A2A event', { taskId, error });
             }
           },
-          `sse-user-auth-${userId}-${Date.now()}`
+          `sse-user-auth-${userId}-${Date.now()}`,
+          true // skipHistory - client fetches history separately
         );
         
         // Heartbeat and cleanup
@@ -621,7 +623,8 @@ router.get('/:taskId/events',
           logger.error('[SSE] Error sending A2A event', { taskId, error });
         }
       },
-      `sse-events-${userId}-${Date.now()}`
+      `sse-events-${userId}-${Date.now()}`,
+      true // skipHistory - client fetches history separately
     );
     
     // Cleanup on disconnect
