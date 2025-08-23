@@ -135,20 +135,77 @@ agent_template:
           },
           "reasoning": "Clear explanation of decision process",
           "confidence": 0.85
-        },
-        "uiRequest": {
-          "type": "form|approval|notification|none",
-          "title": "UI element title",
-          "fields": [],
-          "instructions": "Clear user guidance"
         }
       }
       
       STATUS VALUES:
-      - "completed": Task finished successfully
-      - "needs_input": Requires user input to proceed  
+      - "completed": Task finished successfully, no further action needed
+      - "needs_input": DEPRECATED - Use requestUserInput() method instead
       - "delegated": Passed to another agent
       - "error": Failed with error (include error details in reasoning)
+      
+      IMPORTANT: For user input requests, use the requestUserInput() method instead of returning "needs_input" status
+      
+    # UIRequest Creation Instructions (NEW EVENT-BASED ARCHITECTURE)
+    ui_request_instructions: |
+      When you need user input, DO NOT return "needs_input" status. Instead:
+      
+      1. Use the requestUserInput() method provided by BaseAgent
+      2. This creates a UI_REQUEST_CREATED event with proper structure
+      3. The event will be automatically surfaced in TaskContext.pendingUserInteractions
+      
+      Example usage in agent code:
+      ```typescript
+      const requestId = await this.requestUserInput(taskContext, {
+        templateType: 'form',
+        title: 'Business Information Required',
+        priority: 'high',
+        instructions: 'We need some additional business details to continue',
+        fields: [
+          {
+            name: 'businessName',
+            type: 'text',
+            required: true,
+            label: 'Business Name',
+            placeholder: 'Enter your business name'
+          },
+          {
+            name: 'entityType', 
+            type: 'select',
+            required: true,
+            label: 'Entity Type',
+            options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+          }
+        ],
+        semanticData: {
+          category: 'business_profile',
+          source: 'agent_collection'
+        }
+      });
+      ```
+      
+      VALID TEMPLATE TYPES:
+      - "form": Interactive form with multiple fields
+      - "approval": Yes/no confirmation dialog
+      - "notification": Information display with acknowledgment
+      - "file_upload": File upload interface
+      
+      VALID PRIORITIES:
+      - "low": Can be deferred
+      - "medium": Normal priority (default)
+      - "high": Should be addressed soon
+      - "urgent": Blocks critical functionality
+      
+      FIELD TYPES for forms:
+      - "text": Single-line text input
+      - "textarea": Multi-line text input  
+      - "select": Dropdown selection
+      - "radio": Single choice from options
+      - "checkbox": Multiple selections
+      - "date": Date picker
+      - "email": Email validation
+      - "phone": Phone number input
+      - "currency": Money amount input
   
   # Error handling patterns
   error_patterns:

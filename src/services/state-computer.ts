@@ -11,7 +11,7 @@
  * CRITICAL: This is THE KEY to the event sourcing architecture
  */
 
-import { /* TaskContext, */ ContextEntry } from '../types/engine-types';
+import { /* TaskContext, */ ContextEntry, UIRequestSummary } from '../types/engine-types';
 
 /**
  * Computed state structure - PRD Lines 130-135
@@ -449,6 +449,48 @@ export class StateComputer {
     });
     
     return diff;
+  }
+
+  /**
+   * Compute pending user interactions from event history
+   * Returns UIRequests that have been created but not yet responded to
+   * 
+   * This method scans for UI_REQUEST_CREATED events and checks if they have
+   * corresponding user response events.
+   */
+  static computePendingUserInteractions(history: ContextEntry[]): UIRequestSummary[] {
+    const uiRequestEvents = history.filter(event => 
+      event.operation === 'UI_REQUEST_CREATED'
+    );
+
+    const pendingRequests: UIRequestSummary[] = [];
+
+    for (const event of uiRequestEvents) {
+      const uiRequest = event.data?.uiRequest;
+      if (!uiRequest) continue;
+
+      // Check if there's a response to this UIRequest
+      const hasResponse = history.some(responseEvent => 
+        responseEvent.data?.respondingTo === uiRequest.requestId ||
+        responseEvent.data?.requestId === uiRequest.requestId
+      );
+
+      if (!hasResponse) {
+        // This UIRequest is still pending
+        pendingRequests.push({
+          requestId: uiRequest.requestId,
+          agentId: event.actor?.id || 'unknown',
+          templateType: uiRequest.templateType || 'unknown',
+          title: uiRequest.semanticData?.title || 'User Input Required',
+          priority: uiRequest.priority || 'medium',
+          createdAt: event.timestamp,
+          status: 'pending',
+          eventId: event.entryId || 'unknown'
+        });
+      }
+    }
+
+    return pendingRequests;
   }
 }
 

@@ -21,6 +21,10 @@ export interface TaskContext {
   createdAt: string; // ISO 8601
   currentState: TaskState;
   history: ContextEntry[];
+  
+  // Computed UIRequest status - null/empty when nothing is needed from user
+  pendingUserInteractions?: UIRequestSummary[];
+  
   templateSnapshot?: TaskTemplateSnapshot; // Optional - agents should use task data only
   metadata?: Record<string, any>;
 }
@@ -208,6 +212,21 @@ export interface UIRequest {
   actions?: FluidUIAction[];
   layoutHints?: LayoutHints;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
+}
+
+/**
+ * Summary of UIRequest for computed TaskContext state
+ * This represents the current status of a UIRequest without full event data
+ */
+export interface UIRequestSummary {
+  requestId: string;
+  agentId: string;
+  templateType: string;
+  title: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  createdAt: string;
+  status: 'pending' | 'responded';
+  eventId: string; // Reference to the UI_REQUEST_CREATED event
 }
 
 /**

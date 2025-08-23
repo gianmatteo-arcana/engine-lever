@@ -182,55 +182,61 @@ examples:
       parameters:
         businessName: "Small Business Inc"
     
-    response:
-      status: "needs_input"
-      contextUpdate:
-        operation: "partial_data_found"
-        data:
-          search_results: []
-          attempted_sources: ["ca_sos", "federal_ein"]
+    instructions: |
+      When you cannot find business information in public records, use the requestUserInput() method:
+      
+      ```typescript
+      // Record partial data found
+      await this.recordContextEntry(taskContext, {
+        operation: "partial_data_found",
+        data: {
+          search_results: [],
+          attempted_sources: ["ca_sos", "federal_ein"],
           missing_data: ["entityType", "formationDate", "jurisdiction"]
-        reasoning: "No matches found in public databases for 'Small Business Inc'. Name may be DBA or entity not in California. Need direct user input."
+        },
+        reasoning: "No matches found in public databases for 'Small Business Inc'. Name may be DBA or entity not in California. Need direct user input.",
         confidence: 0.8
-      uiRequests: [
-        {
-          templateType: "BusinessInfoForm",
-          semanticData: {
-            purpose: "Complete business entity identification",
-            fields: [
-              {
-                id: "legalBusinessName",
-                label: "Legal Business Name",
-                type: "text",
-                required: true,
-                help: "Exact name as registered with state"
-              },
-              {
-                id: "entityType",
-                label: "Entity Type",
-                type: "select",
-                required: true,
-                options: [
-                  {"value": "LLC", "label": "Limited Liability Company (LLC)"},
-                  {"value": "Corporation", "label": "Corporation"},
-                  {"value": "Partnership", "label": "Partnership"}
-                ]
-              },
-              {
-                id: "formationState",
-                label: "State of Formation",
-                type: "select",
-                required: true,
-                default: "California"
-              }
-            ],
-            defaults: {"formationState": "California"},
-            help: "We couldn't find your business in public records"
+      });
+      
+      // Create UI request for missing information
+      const requestId = await this.requestUserInput(taskContext, {
+        templateType: 'form',
+        title: 'Business Information Required',
+        priority: 'high',
+        instructions: 'We couldn\'t find your business in public records. Please provide the following information:',
+        fields: [
+          {
+            name: 'legalBusinessName',
+            type: 'text',
+            required: true,
+            label: 'Legal Business Name',
+            placeholder: 'Exact name as registered with state'
+          },
+          {
+            name: 'entityType',
+            type: 'select',
+            required: true,
+            label: 'Entity Type',
+            options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+          },
+          {
+            name: 'formationState',
+            type: 'select',
+            required: true,
+            label: 'State of Formation',
+            options: ['Alabama', 'Alaska', 'Arizona', 'California', 'Colorado', 'Connecticut', 'Delaware'],
+            defaultValue: 'California'
           }
+        ],
+        semanticData: {
+          purpose: 'Complete business entity identification',
+          category: 'business_profile',
+          fallbackReason: 'public_records_search_failed'
         }
-      ]
-      confidence: 0.8
-      fallback_strategy: "Collect entity information through progressive disclosure form"
+      });
+      ```
+      
+      Then return status "completed" with context update documenting the UI request creation.
 
 # Fallback patterns for graceful degradation
 fallback_patterns:

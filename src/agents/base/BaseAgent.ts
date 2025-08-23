@@ -1928,4 +1928,79 @@ Respond with a JSON array of field definitions.
     });
   }
 
+  /**
+   * Standardized method for creating UIRequest events
+   * 
+   * This creates a UI_REQUEST_CREATED event with a properly structured UIRequest
+   * that will be detected by StateComputer.computePendingUserInteractions()
+   */
+  protected async requestUserInput(
+    taskContext: TaskContext,
+    options: {
+      templateType: string;
+      title: string;
+      priority?: 'low' | 'medium' | 'high' | 'urgent';
+      fields?: any[];
+      instructions?: string;
+      semanticData?: Record<string, any>;
+    }
+  ): Promise<string> {
+    const requestId = require('crypto').randomUUID();
+    
+    // Create UIRequest with standardized structure
+    const uiRequest = {
+      requestId,
+      templateType: options.templateType,
+      priority: options.priority || 'medium',
+      semanticData: {
+        title: options.title,
+        instructions: options.instructions || 'Please provide the required information.',
+        fields: options.fields || [],
+        ...options.semanticData
+      },
+      createdBy: this.specializedTemplate.agent.id,
+      createdAt: new Date().toISOString()
+    };
+
+    // Create UI_REQUEST_CREATED event
+    const contextEntry: ContextEntry = {
+      entryId: require('crypto').randomUUID(),
+      timestamp: new Date().toISOString(),
+      sequenceNumber: (taskContext.history?.length || 0) + 1,
+      actor: {
+        type: 'agent',
+        id: this.specializedTemplate.agent.id,
+        version: this.specializedTemplate.agent.version || '1.0.0'
+      },
+      operation: 'UI_REQUEST_CREATED',
+      data: {
+        uiRequest
+      },
+      reasoning: `Agent ${this.specializedTemplate.agent.id} requires user input: ${options.title}`,
+      confidence: 0.9,
+      trigger: {
+        type: 'user_request',
+        source: 'agent_request_user_input',
+        details: {
+          templateType: options.templateType,
+          title: options.title,
+          timestamp: new Date().toISOString()
+        }
+      }
+    };
+
+    // Record the context entry
+    await this.recordContextEntry(taskContext, contextEntry);
+
+    logger.info('UIRequest created', {
+      agentId: this.specializedTemplate.agent.id,
+      requestId,
+      templateType: options.templateType,
+      title: options.title,
+      priority: options.priority
+    });
+
+    return requestId;
+  }
+
 }
