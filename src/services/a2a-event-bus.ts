@@ -4,13 +4,21 @@
  * Pure messaging infrastructure for agent communication and SSE streaming.
  * This is a dedicated in-memory event bus that SSE endpoints can subscribe to.
  * 
- * ARCHITECTURE:
- * - Agents persist their own events to the database
- * - Agents broadcast events via A2A protocol for real-time updates
+ * CRITICAL ARCHITECTURAL DECISION (PR #48):
+ * ==========================================
+ * This service does BROADCASTING ONLY - NO PERSISTENCE
+ * 
+ * Separation of Concerns:
+ * - Agents persist their own events to the database via recordContextEntry()
+ * - A2A Event Bus ONLY broadcasts messages for real-time updates
  * - SSE endpoints subscribe to task-specific channels
- * - A2A Event Bus handles ONLY broadcasting, never persistence
+ * - Database is the single source of truth for all events
+ * 
+ * DO NOT add any database persistence logic to this service!
+ * All persistence must happen at the source (the agent creating the event).
  * 
  * This separation ensures no duplicate events and clear responsibilities.
+ * See docs/EVENT_PERSISTENCE_ARCHITECTURE.md for full architectural details.
  */
 
 import { EventEmitter } from 'events';

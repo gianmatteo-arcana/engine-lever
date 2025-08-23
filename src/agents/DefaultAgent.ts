@@ -10,6 +10,7 @@
 
 import { BaseAgent } from './base/BaseAgent';
 import { logger } from '../utils/logger';
+import { TaskContext } from '../types/engine-types';
 
 export class DefaultAgent extends BaseAgent {
   // Everything is handled by BaseAgent through YAML configuration
@@ -96,7 +97,48 @@ export class DefaultAgent extends BaseAgent {
   /**
    * Get the agent ID from configuration
    */
-  private getAgentId(): string {
+  public getAgentId(): string {
     return (this as any).specializedTemplate?.agent?.id || 'unknown_agent';
+  }
+  
+  /**
+   * Record an execution event (AGENT_EXECUTION_STARTED, COMPLETED, FAILED)
+   * 
+   * SEPARATION OF CONCERNS:
+   * - Agents are responsible for persisting their OWN events
+   * - This method uses the inherited recordContextEntry() from BaseAgent
+   * - recordContextEntry() handles BOTH persistence to DB and broadcasting via A2A
+   * - External services (like AgentExecutor) should call this method, not persist directly
+   * 
+   * This ensures:
+   * - No duplicate events in the database
+   * - Clear ownership of events
+   * - Consistent event recording pattern across all agents
+   * 
+   * @param context - The task context
+   * @param event - The execution event to record
+   */
+  public async recordExecutionEvent(context: TaskContext, event: any): Promise<void> {
+    const agentId = this.getAgentId();
+    
+    logger.debug(`Agent recording execution event`, { 
+      agentId, 
+      eventType: event.type,
+      taskId: context.contextId 
+    });
+    
+    // Use the protected recordContextEntry method from BaseAgent
+    await this.recordContextEntry(context, {
+      operation: event.type,
+      data: event,
+      reasoning: event.reasoning || `Agent ${agentId} execution: ${event.type}`,
+      confidence: event.status === 'completed' ? 0.9 : 0.7,
+      trigger: {
+        type: 'system_event',  // Agent execution is a system event
+        source: 'agent-executor',
+        details: { requestId: event.requestId },
+        requestId: event.requestId
+      }
+    });
   }
 }
