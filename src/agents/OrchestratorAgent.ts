@@ -302,10 +302,13 @@ export class OrchestratorAgent extends BaseAgent {
       // Agents can query the history to find the responses they need
       
       // Update the current state to reflect we're resuming
-      // Using proper TASK_STATUS constants as requested in PR review
-      taskContext.currentState.status = TASK_STATUS.IN_PROGRESS;
-      // Phase remains a string as it's dynamically determined by task progress
-      taskContext.currentState.phase = 'execution';
+      // IMPORTANT: Status vs Phase distinction:
+      // - status: The EXECUTION STATE of the task (pending, in_progress, completed, etc.)
+      //   Uses TASK_STATUS enum constants for consistency
+      // - phase: The WORKFLOW STAGE we're in (initialization, discovery, execution, etc.)
+      //   Remains a string as phases are template-specific and describe business process steps
+      taskContext.currentState.status = TASK_STATUS.IN_PROGRESS; // Task execution state
+      taskContext.currentState.phase = 'execution'; // Workflow stage (not a status!)
       
       // Clean up any stale execution plans to allow garbage collection
       // Agents should be ephemeral - created when needed, destroyed when done
@@ -558,6 +561,9 @@ export class OrchestratorAgent extends BaseAgent {
       contextId: context.contextId,
       templateId: context.taskTemplateId,
       tenantId: context.tenantId,
+      currentStatus: context.currentState.status,
+      currentPhase: context.currentState.phase,
+      isResuming: context.currentState.status === TASK_STATUS.IN_PROGRESS,
       hasMetadata: !!context.metadata,
       hasTaskDefinition: !!context.metadata?.taskDefinition,
       taskDefinitionKeys: context.metadata?.taskDefinition ? Object.keys(context.metadata.taskDefinition) : []
@@ -569,17 +575,32 @@ export class OrchestratorAgent extends BaseAgent {
     });
     
     try {
-      logger.info('Starting universal task orchestration', {
+      // CRITICAL FIX: Check if we're resuming or starting fresh
+      const isResuming = context.currentState.status === TASK_STATUS.IN_PROGRESS || 
+                        context.currentState.status === TASK_STATUS.WAITING_FOR_INPUT;
+      
+      logger.info(isResuming ? 'Resuming task orchestration' : 'Starting universal task orchestration', {
         contextId: context.contextId,
         templateId: context.taskTemplateId,
         tenantId: context.tenantId,
+        currentPhase: context.currentState.phase,
+        historyLength: context.history.length,
         timestamp: new Date().toISOString()
       });
       
-      // 1. Create execution plan from template
-      logger.info('📝 Creating execution plan...');
-      const executionPlan = await this.createExecutionPlan(context);
-      this.activeExecutions.set(context.contextId, executionPlan);
+      // 1. Get or create execution plan
+      let executionPlan = this.activeExecutions.get(context.contextId);
+      
+      if (!executionPlan) {
+        logger.info('📝 Creating execution plan...');
+        executionPlan = await this.createExecutionPlan(context);
+        this.activeExecutions.set(context.contextId, executionPlan);
+      } else {
+        logger.info('📋 Using existing execution plan', {
+          contextId: context.contextId,
+          phases: executionPlan.phases.length
+        });
+      }
       
       logger.info('✅ Execution plan created', {
         contextId: context.contextId,
@@ -591,17 +612,50 @@ export class OrchestratorAgent extends BaseAgent {
       // NOTE: createExecutionPlan() already records the 'execution_plan_created' event
       // We don't need to record it again here to avoid duplicates
       
-      // 3. Execute plan phases
-      let allPhasesCompleted = true;
-      let phaseIndex = 0;
+      // 3. Determine where to start/resume execution
+      let startPhaseIndex = 0;
       
-      for (const phase of executionPlan.phases) {
-        phaseIndex++;
-        logger.info(`📌 Executing phase ${phaseIndex}/${executionPlan.phases.length}: ${phase.name}`, {
+      // If resuming, find the last completed phase from history
+      if (isResuming) {
+        // Look through history for subtask_delegated events to find completed phases
+        const completedPhases = new Set<string>();
+        
+        for (const entry of context.history) {
+          if (entry.operation === 'subtask_delegated' && entry.data?.subtask_name) {
+            // Find which phase this subtask belongs to
+            for (let i = 0; i < executionPlan.phases.length; i++) {
+              const phase = executionPlan.phases[i];
+              const subtasks = (phase as any).subtasks || [];
+              if (subtasks.some((st: any) => st.description === entry.data.subtask_name)) {
+                completedPhases.add(phase.name);
+                startPhaseIndex = Math.max(startPhaseIndex, i + 1);
+              }
+            }
+          }
+        }
+        
+        logger.info('📊 Resume analysis complete', {
+          contextId: context.contextId,
+          completedPhases: Array.from(completedPhases),
+          startingFromPhase: startPhaseIndex + 1,
+          totalPhases: executionPlan.phases.length
+        });
+      }
+      
+      // 4. Execute plan phases (starting from the correct index)
+      let allPhasesCompleted = true;
+      let phaseIndex = startPhaseIndex;
+      
+      for (let i = startPhaseIndex; i < executionPlan.phases.length; i++) {
+        const phase = executionPlan.phases[i];
+        phaseIndex = i + 1;
+        
+        logger.info(`📌 ${isResuming && i === startPhaseIndex ? 'Resuming' : 'Executing'} phase ${phaseIndex}/${executionPlan.phases.length}: ${phase.name}`, {
           contextId: context.contextId,
           phaseName: phase.name,
           phaseNumber: phaseIndex,
-          totalPhases: executionPlan.phases.length
+          totalPhases: executionPlan.phases.length,
+          isResuming: isResuming && i === startPhaseIndex
         });
         
         const phaseResult = await this.executePhase(context, phase);
@@ -682,7 +736,8 @@ export class OrchestratorAgent extends BaseAgent {
             contextId: context.contextId,
             phasesExecuted: phaseIndex,
             totalPhases: executionPlan.phases.length,
-            status: currentStatus
+            status: currentStatus,
+            resumedFromPhase: startPhaseIndex + 1
           });
           // Don't record as incomplete when waiting for input - this is expected behavior
         } else if (currentStatus === TASK_STATUS.FAILED) {
@@ -733,7 +788,9 @@ export class OrchestratorAgent extends BaseAgent {
         status: finalStatus,
         duration,
         phasesCompleted: phaseIndex,
-        totalPhases: executionPlan.phases.length
+        totalPhases: executionPlan.phases.length,
+        wasResumed: isResuming,
+        resumedFromPhase: isResuming ? startPhaseIndex + 1 : 1
       });
       
     } catch (error) {
