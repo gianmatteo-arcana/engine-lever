@@ -569,33 +569,90 @@ export class OrchestratorAgent extends BaseAgent {
     });
     
     try {
-      // Check if we're resuming based on AGENT STATE (execution plan exists)
-      // not TASK STATE. Agent state determines if we have work in progress.
-      const hasActiveExecution = this.activeExecutions.has(context.contextId);
-      const isResuming = hasActiveExecution;
+      // Determine if we're resuming based on PERSISTENT HISTORY
+      // Check if we have any execution history that indicates work was started
+      const hasExecutionHistory = context.history.some(entry => 
+        entry.operation === 'execution_plan_created' || 
+        entry.operation === 'subtask_delegated' ||
+        entry.operation === 'phase_started'
+      );
+      
+      // We're resuming if:
+      // 1. We have execution history (work was started)
+      // 2. Task is not in a terminal state
+      const isResuming = hasExecutionHistory && 
+                        context.currentState.status !== TASK_STATUS.COMPLETED &&
+                        context.currentState.status !== TASK_STATUS.FAILED &&
+                        context.currentState.status !== TASK_STATUS.CANCELLED;
       
       logger.info(isResuming ? 'Resuming task orchestration' : 'Starting universal task orchestration', {
         contextId: context.contextId,
         templateId: context.taskTemplateId,
         tenantId: context.tenantId,
-        hasActiveExecution,
+        hasExecutionHistory,
         taskStatus: context.currentState.status,
         historyLength: context.history.length,
         timestamp: new Date().toISOString()
       });
       
       // 1. Get or create execution plan
+      // Check memory cache first (optimization)
       let executionPlan = this.activeExecutions.get(context.contextId);
       
       if (!executionPlan) {
-        logger.info('📝 Creating execution plan...');
-        executionPlan = await this.createExecutionPlan(context);
-        this.activeExecutions.set(context.contextId, executionPlan);
+        // Try to retrieve from database (stored in task metadata)
+        if (isResuming && context.metadata?.executionPlan) {
+          logger.info('📋 Retrieving execution plan from database', {
+            contextId: context.contextId
+          });
+          executionPlan = context.metadata.executionPlan;
+        } else if (isResuming) {
+          // Fallback: Look for the execution plan in history
+          const planEvent = context.history.find(entry => 
+            entry.operation === 'execution_plan_created'
+          );
+          
+          if (planEvent && planEvent.data?.plan) {
+            logger.info('📋 Reconstructing execution plan from history', {
+              contextId: context.contextId
+            });
+            executionPlan = planEvent.data.plan;
+            
+            // Store it in the database for future resumptions
+            if (executionPlan) {
+              await this.storeExecutionPlan(context.contextId, executionPlan);
+            }
+          } else {
+            // Last resort: create new plan
+            logger.warn('⚠️ Could not find execution plan, creating new one', {
+              contextId: context.contextId
+            });
+            executionPlan = await this.createExecutionPlan(context);
+            await this.storeExecutionPlan(context.contextId, executionPlan);
+          }
+        } else {
+          // Fresh start - create new execution plan
+          logger.info('📝 Creating execution plan...');
+          executionPlan = await this.createExecutionPlan(context);
+          
+          // Store in database for crash recovery
+          await this.storeExecutionPlan(context.contextId, executionPlan);
+        }
+        
+        // Cache in memory for this session (performance optimization)
+        if (executionPlan) {
+          this.activeExecutions.set(context.contextId, executionPlan);
+        }
       } else {
-        logger.info('📋 Using existing execution plan', {
+        logger.info('📋 Using cached execution plan', {
           contextId: context.contextId,
           phases: executionPlan.phases.length
         });
+      }
+      
+      // Ensure we have an execution plan at this point
+      if (!executionPlan) {
+        throw new Error('Failed to create or retrieve execution plan');
       }
       
       logger.info('✅ Execution plan created', {
@@ -2965,6 +3022,39 @@ Respond with JSON only:
     }
     
     return missingFields;
+  }
+  
+  /**
+   * Store execution plan in database for crash recovery
+   * The execution plan is stored in the task's metadata so it can be
+   * retrieved after a server restart, ensuring true stateless resumption
+   */
+  private async storeExecutionPlan(taskId: string, executionPlan: ExecutionPlan): Promise<void> {
+    try {
+      logger.info('💾 Storing execution plan in database', {
+        taskId,
+        phases: executionPlan.phases.length
+      });
+      
+      // Use the task service to update metadata
+      const taskService = TaskService.getInstance();
+      const metadata = {
+        executionPlan: executionPlan
+      };
+      
+      // Store the execution plan in task metadata
+      await taskService.updateTaskMetadata(taskId, metadata);
+      
+      logger.info('✅ Execution plan stored in database', { taskId });
+      
+    } catch (error) {
+      logger.error('Error storing execution plan', {
+        taskId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't throw - continue execution even if storage fails
+      // The plan can still be reconstructed from history if needed
+    }
   }
   
 }

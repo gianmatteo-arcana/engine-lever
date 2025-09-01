@@ -31,7 +31,6 @@ describe('Real-world Agent UIRequest Generation', () => {
     createdAt: new Date().toISOString(),
     currentState: {
       status: 'pending',
-      phase: 'initialization',
       completeness: 0,
       data: {
         taskId: taskId,

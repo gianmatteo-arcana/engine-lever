@@ -19,7 +19,6 @@ export interface InspectionReport {
   timestamp: string;
   summary: {
     status: string;
-    phase: string;
     completeness: number;
     totalEvents: number;
     activeAgents: string[];
@@ -149,7 +148,6 @@ export class TaskInspector {
 
     return {
       status: context.currentState.status,
-      phase: 'unknown', // Phase removed from TaskState, would need to compute from history
       completeness: context.currentState.completeness,
       totalEvents: context.history.length,
       activeAgents,

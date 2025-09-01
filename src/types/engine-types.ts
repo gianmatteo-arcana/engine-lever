@@ -408,6 +408,25 @@ export interface AgentInstance {
 }
 
 // ============================================================================
+// AGENT CONTEXT TYPES
+// ============================================================================
+
+/**
+ * Agent-specific context stored in TaskContext metadata
+ * Each agent can maintain its own state and findings within a task
+ */
+export interface AgentContext {
+  state: Record<string, any>;
+  requirements: string[];
+  findings: Array<{
+    type: string;
+    data: any;
+    timestamp: string;
+  }>;
+  nextActions: string[];
+}
+
+// ============================================================================
 // ORCHESTRATION TYPES
 // ============================================================================
 

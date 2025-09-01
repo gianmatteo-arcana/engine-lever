@@ -228,7 +228,6 @@ task_template:
         createdAt: new Date().toISOString(),
         currentState: {
           status: 'pending',
-          phase: 'initialization',
           completeness: 0,
           data: {}
         },
@@ -266,7 +265,6 @@ task_template:
       // Create a new TaskState from ComputedState
       const taskState: TaskState = {
         status: newState.status as TaskState['status'],
-        phase: newState.phase,
         completeness: newState.completeness,
         data: newState.data
       };
@@ -299,7 +297,6 @@ task_template:
       // Create final TaskState
       const finalTaskState: TaskState = {
         status: finalComputedState.status as TaskState['status'],
-        phase: finalComputedState.phase,
         completeness: finalComputedState.completeness,
         data: finalComputedState.data
       };
