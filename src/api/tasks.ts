@@ -276,9 +276,13 @@ router.post('/:contextId/ui-response', requireAuth, async (req: AuthenticatedReq
       }
     });
     
-    // TODO: Notify orchestrator to resume task processing
-    // This would trigger the orchestrator to check for pending agents
-    // and continue task execution with the new user input
+    // The orchestrator will listen for the UI_RESPONSE_SUBMITTED event
+    // and resume task processing with the new user input
+    logger.info('UI response event broadcast for orchestrator', {
+      taskId: contextId,
+      requestId: input.requestId,
+      operation: 'UI_RESPONSE_SUBMITTED'
+    });
     
     res.json({
       success: true,

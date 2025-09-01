@@ -23,6 +23,7 @@ import { ConfigurationManager } from '../services/configuration-manager';
 import { DatabaseService } from '../services/database';
 import { StateComputer } from '../services/state-computer';
 import { TaskService } from '../services/task-service';
+import { A2AEventBus } from '../services/a2a-event-bus';
 import { logger } from '../utils/logger';
 import {
   TaskContext,
@@ -193,6 +194,9 @@ export class OrchestratorAgent extends BaseAgent {
       // Agent registry is now initialized asynchronously when needed
       // since YAML files are the ONLY source of truth
       
+      // Set up event listeners for UI responses
+      this.setupEventListeners();
+      
       logger.info('🎉 OrchestratorAgent constructor completed successfully!');
     } catch (error) {
       console.error('ERROR: OrchestratorAgent constructor failed:', error);
@@ -201,6 +205,87 @@ export class OrchestratorAgent extends BaseAgent {
         stack: error instanceof Error ? error.stack : undefined
       });
       throw error;
+    }
+  }
+  
+  /**
+   * Set up event listeners for orchestrator
+   * Listens for UI_RESPONSE_SUBMITTED events to resume task processing
+   */
+  private setupEventListeners(): void {
+    try {
+      logger.info('🎧 Setting up orchestrator event listeners...');
+      
+      // Get the A2A event bus instance
+      const a2aEventBus = A2AEventBus.getInstance();
+      
+      // Subscribe to the global channel for UI response events
+      // We use global channel because we want to hear about ALL UI responses
+      a2aEventBus.on('global:event', async (event: any) => {
+        // Only process UI_RESPONSE_SUBMITTED events
+        if (event.operation === 'UI_RESPONSE_SUBMITTED' || 
+            event.type === 'UI_RESPONSE_SUBMITTED') {
+          await this.handleUIResponseEvent(event);
+        }
+      });
+      
+      logger.info('✅ Orchestrator event listeners configured');
+    } catch (error) {
+      logger.error('Failed to set up event listeners', error);
+      // Don't throw - orchestrator can still work without event listeners
+    }
+  }
+  
+  /**
+   * Handle UI_RESPONSE_SUBMITTED events
+   * Resume task orchestration with the new user input
+   */
+  private async handleUIResponseEvent(event: any): Promise<void> {
+    const taskId = event.taskId;
+    const requestId = event.data?.requestId;
+    
+    logger.info('📥 Orchestrator received UI_RESPONSE_SUBMITTED event', {
+      taskId,
+      requestId,
+      operation: event.operation
+    });
+    
+    try {
+      // Get the task context with all accumulated data
+      const taskService = TaskService.getInstance();
+      const taskContext = await taskService.getTask(taskId);
+      
+      if (!taskContext) {
+        logger.warn('Task context not found for UI response', { taskId });
+        return;
+      }
+      
+      logger.info('🔄 Resuming task orchestration after UI response', {
+        taskId,
+        currentStatus: taskContext.currentState.status,
+        currentPhase: taskContext.currentState.phase,
+        historyLength: taskContext.history.length
+      });
+      
+      // Resume orchestration with the updated context
+      // The orchestrateTask method will:
+      // 1. Check the current state and context
+      // 2. Identify which agents need to work next
+      // 3. Continue the collaborative cycle with the new user input
+      await this.orchestrateTask(taskContext);
+      
+      logger.info('✅ Task orchestration resumed successfully', {
+        taskId,
+        newStatus: taskContext.currentState.status
+      });
+      
+    } catch (error) {
+      logger.error('Failed to resume task orchestration after UI response', {
+        taskId,
+        requestId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't throw - we don't want to crash the orchestrator
     }
   }
   
