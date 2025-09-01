@@ -600,43 +600,73 @@ export class OrchestratorAgent extends BaseAgent {
       let executionPlan = this.activeExecutions.get(context.contextId);
       
       if (!executionPlan) {
-        // Try to retrieve from database (stored in task metadata)
-        if (isResuming && context.metadata?.executionPlan) {
-          logger.info('📋 Retrieving execution plan from database', {
-            contextId: context.contextId
-          });
-          executionPlan = context.metadata.executionPlan;
-        } else if (isResuming) {
-          // Fallback: Look for the execution plan in history
+        // Try to retrieve from event history (single source of truth)
+        if (isResuming) {
+          // Look for the execution plan in history - this is our single source of truth
           const planEvent = context.history.find(entry => 
             entry.operation === 'execution_plan_created'
           );
           
           if (planEvent && planEvent.data?.plan) {
             logger.info('📋 Reconstructing execution plan from history', {
-              contextId: context.contextId
+              contextId: context.contextId,
+              hasPhases: !!(planEvent.data.plan as any).phases,
+              hasSubtasks: !!(planEvent.data.plan as any).subtasks
             });
-            executionPlan = planEvent.data.plan;
             
-            // Store it in the database for future resumptions
-            if (executionPlan) {
-              await this.storeExecutionPlan(context.contextId, executionPlan);
+            const storedPlan = planEvent.data.plan as any;
+            
+            // Handle different plan formats robustly
+            if (storedPlan.phases && Array.isArray(storedPlan.phases)) {
+              // Modern format with phases - use as-is
+              executionPlan = storedPlan as ExecutionPlan;
+            } else if (storedPlan.subtasks && Array.isArray(storedPlan.subtasks)) {
+              // Legacy format with just subtasks - convert to phases
+              logger.warn('⚠️ Legacy execution plan format detected, converting to phases', {
+                contextId: context.contextId
+              });
+              executionPlan = {
+                phases: [{
+                  name: 'Task Execution',
+                  subtasks: storedPlan.subtasks.map((st: any) => ({
+                    description: st.name || st.subtask || 'Subtask',
+                    agent: st.assigned_agent || 'DefaultAgent',
+                    specific_instruction: st.instructions || '',
+                    input_data: {},
+                    expected_output: st.expected_output || 'Task completed'
+                  }))
+                }],
+                reasoning: {
+                  task_analysis: storedPlan.task_analysis || 'Legacy plan reconstruction',
+                  subtask_decomposition: storedPlan.subtasks || [],
+                  coordination_strategy: storedPlan.coordination_strategy || 'Sequential'
+                }
+              } as any as ExecutionPlan;
+            } else {
+              // Unknown format - create minimal plan
+              logger.error('❌ Unknown execution plan format in history', {
+                contextId: context.contextId,
+                planKeys: Object.keys(storedPlan)
+              });
+              throw new Error('Cannot reconstruct execution plan from history - unknown format');
             }
+            
+            // The execution plan is already stored in the event history
+            // No need for parallel storage
           } else {
             // Last resort: create new plan
             logger.warn('⚠️ Could not find execution plan, creating new one', {
               contextId: context.contextId
             });
             executionPlan = await this.createExecutionPlan(context);
-            await this.storeExecutionPlan(context.contextId, executionPlan);
+            // The execution plan is stored in event history by createExecutionPlan()
           }
         } else {
           // Fresh start - create new execution plan
           logger.info('📝 Creating execution plan...');
           executionPlan = await this.createExecutionPlan(context);
           
-          // Store in database for crash recovery
-          await this.storeExecutionPlan(context.contextId, executionPlan);
+          // The execution plan is stored in event history by createExecutionPlan()
         }
         
         // Cache in memory for this session (performance optimization)
@@ -646,7 +676,7 @@ export class OrchestratorAgent extends BaseAgent {
       } else {
         logger.info('📋 Using cached execution plan', {
           contextId: context.contextId,
-          phases: executionPlan.phases.length
+          phases: executionPlan?.phases?.length || 0
         });
       }
       
@@ -655,9 +685,9 @@ export class OrchestratorAgent extends BaseAgent {
         throw new Error('Failed to create or retrieve execution plan');
       }
       
-      logger.info('✅ Execution plan created', {
+      logger.info('✅ Execution plan ready', {
         contextId: context.contextId,
-        phases: executionPlan.phases.length,
+        phases: executionPlan.phases?.length || 0,
         estimatedDuration: (executionPlan as any).estimated_duration,
         userInteractions: (executionPlan as any).user_interactions
       });
@@ -673,11 +703,13 @@ export class OrchestratorAgent extends BaseAgent {
         // Look through history for subtask_delegated events to find completed phases
         const completedPhases = new Set<string>();
         
+        const phases = executionPlan.phases || [];
+        
         for (const entry of context.history) {
           if (entry.operation === 'subtask_delegated' && entry.data?.subtask_name) {
             // Find which phase this subtask belongs to
-            for (let i = 0; i < executionPlan.phases.length; i++) {
-              const phase = executionPlan.phases[i];
+            for (let i = 0; i < phases.length; i++) {
+              const phase = phases[i];
               const subtasks = (phase as any).subtasks || [];
               if (subtasks.some((st: any) => st.description === entry.data.subtask_name)) {
                 completedPhases.add(phase.name);
@@ -691,23 +723,24 @@ export class OrchestratorAgent extends BaseAgent {
           contextId: context.contextId,
           completedPhases: Array.from(completedPhases),
           startingFromPhase: startPhaseIndex + 1,
-          totalPhases: executionPlan.phases.length
+          totalPhases: phases.length
         });
       }
       
       // 4. Execute plan phases (starting from the correct index)
       let allPhasesCompleted = true;
       let phaseIndex = startPhaseIndex;
+      const phases = executionPlan.phases || [];
       
-      for (let i = startPhaseIndex; i < executionPlan.phases.length; i++) {
-        const phase = executionPlan.phases[i];
+      for (let i = startPhaseIndex; i < phases.length; i++) {
+        const phase = phases[i];
         phaseIndex = i + 1;
         
-        logger.info(`📌 ${isResuming && i === startPhaseIndex ? 'Resuming' : 'Executing'} phase ${phaseIndex}/${executionPlan.phases.length}: ${phase.name}`, {
+        logger.info(`📌 ${isResuming && i === startPhaseIndex ? 'Resuming' : 'Executing'} phase ${phaseIndex}/${phases.length}: ${phase.name}`, {
           contextId: context.contextId,
           phaseName: phase.name,
           phaseNumber: phaseIndex,
-          totalPhases: executionPlan.phases.length,
+          totalPhases: phases.length,
           isResuming: isResuming && i === startPhaseIndex
         });
         
@@ -768,7 +801,7 @@ export class OrchestratorAgent extends BaseAgent {
         logger.info('✅ All phases completed successfully, marking task as complete', {
           contextId: context.contextId,
           phasesExecuted: phaseIndex,
-          totalPhases: executionPlan.phases.length
+          totalPhases: phases.length
         });
         await this.completeTaskContext(context);
       } else {
@@ -788,7 +821,7 @@ export class OrchestratorAgent extends BaseAgent {
           logger.info('⏸️ Task execution paused - waiting for user input', {
             contextId: context.contextId,
             phasesExecuted: phaseIndex,
-            totalPhases: executionPlan.phases.length,
+            totalPhases: phases.length,
             status: currentStatus,
             resumedFromPhase: startPhaseIndex + 1
           });
@@ -798,14 +831,14 @@ export class OrchestratorAgent extends BaseAgent {
           logger.error('❌ Task execution failed', {
             contextId: context.contextId,
             phasesExecuted: phaseIndex,
-            totalPhases: executionPlan.phases.length,
+            totalPhases: phases.length,
             status: currentStatus
           });
           await this.recordContextEntry(context, {
             operation: `task_${TASK_STATUS.FAILED}`,
             data: {
               phasesCompleted: phaseIndex,
-              totalPhases: executionPlan.phases.length,
+              totalPhases: phases.length,
               status: currentStatus,
               reason: 'Phase execution failed'
             },
@@ -816,14 +849,14 @@ export class OrchestratorAgent extends BaseAgent {
           logger.warn('⚠️ Task execution incomplete - unexpected state', {
             contextId: context.contextId,
             phasesExecuted: phaseIndex,
-            totalPhases: executionPlan.phases.length,
+            totalPhases: phases.length,
             status: currentStatus
           });
           await this.recordContextEntry(context, {
             operation: 'task_incomplete', // Keep as-is since there's no TASK_STATUS.INCOMPLETE
             data: {
               phasesCompleted: phaseIndex,
-              totalPhases: executionPlan.phases.length,
+              totalPhases: phases.length,
               status: currentStatus,
               reason: 'Unexpected execution state'
             },
@@ -1205,25 +1238,13 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       } as any;
     }
     
-    // Store the execution plan with structured schema
-    // Transform the reasoning.subtask_decomposition into our cleaner structure
-    const subtasks = (plan as any).reasoning?.subtask_decomposition || [];
-    
+    // Store the COMPLETE execution plan for proper resumption
+    // This ensures we can recover the full plan structure after restarts
     await this.recordOrchestratorEvent(
       context,
       'execution_plan_created',
       {
-        plan: {
-          subtasks: subtasks.map((subtask: any, index: number) => ({
-            name: subtask.subtask || `Subtask ${index + 1}`,
-            assigned_agent: subtask.assigned_agent,
-            required_capabilities: subtask.required_capabilities || [],
-            dependencies: [], // Will be populated if phases define dependencies
-            rationale: subtask.rationale || ''
-          })),
-          coordination_strategy: (plan as any).reasoning?.coordination_strategy || 'Sequential execution',
-          task_analysis: (plan as any).reasoning?.task_analysis || 'Task analysis from LLM'
-        }
+        plan: plan as any  // Store the entire ExecutionPlan object (validation may warn but data is preserved)
       },
       'Created execution plan with detailed subtask decomposition'
     );
@@ -3024,37 +3045,5 @@ Respond with JSON only:
     return missingFields;
   }
   
-  /**
-   * Store execution plan in database for crash recovery
-   * The execution plan is stored in the task's metadata so it can be
-   * retrieved after a server restart, ensuring true stateless resumption
-   */
-  private async storeExecutionPlan(taskId: string, executionPlan: ExecutionPlan): Promise<void> {
-    try {
-      logger.info('💾 Storing execution plan in database', {
-        taskId,
-        phases: executionPlan.phases.length
-      });
-      
-      // Use the task service to update metadata
-      const taskService = TaskService.getInstance();
-      const metadata = {
-        executionPlan: executionPlan
-      };
-      
-      // Store the execution plan in task metadata
-      await taskService.updateTaskMetadata(taskId, metadata);
-      
-      logger.info('✅ Execution plan stored in database', { taskId });
-      
-    } catch (error) {
-      logger.error('Error storing execution plan', {
-        taskId,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      // Don't throw - continue execution even if storage fails
-      // The plan can still be reconstructed from history if needed
-    }
-  }
   
 }

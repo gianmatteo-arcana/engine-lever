@@ -508,61 +508,6 @@ export class TaskService {
     }
   }
 
-  /**
-   * Update task metadata in database
-   * Used for storing execution plans and other runtime data
-   */
-  async updateTaskMetadata(taskId: string, metadata: Record<string, any>): Promise<void> {
-    try {
-      const client = this.dbService.getServiceClient();
-      
-      // Update metadata using JSONB merge
-      const { error } = await client
-        .from('tasks')
-        .update({
-          metadata: client.rpc('jsonb_merge', {
-            target: client.from('tasks').select('metadata').eq('id', taskId).single(),
-            source: metadata
-          })
-        })
-        .eq('id', taskId);
-      
-      if (error) {
-        // Fallback to simpler update
-        const { data: currentTask } = await client
-          .from('tasks')
-          .select('metadata')
-          .eq('id', taskId)
-          .single();
-        
-        const updatedMetadata = {
-          ...(currentTask?.metadata || {}),
-          ...metadata
-        };
-        
-        const { error: updateError } = await client
-          .from('tasks')
-          .update({ metadata: updatedMetadata })
-          .eq('id', taskId);
-        
-        if (updateError) {
-          throw updateError;
-        }
-      }
-      
-      logger.info('Task metadata updated', {
-        taskId,
-        metadataKeys: Object.keys(metadata)
-      });
-      
-    } catch (error) {
-      logger.error('Error updating task metadata', {
-        taskId,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      throw error;
-    }
-  }
   
   /**
    * Trigger orchestration for the task
