@@ -16,7 +16,7 @@ import { DatabaseService } from '../services/database';
 import { TaskService } from '../services/task-service';
 import { OrchestratorAgent } from '../agents/OrchestratorAgent';
 import { emitTaskEvent } from '../services/task-events';
-import { a2aEventBus } from '../services/a2a-event-bus';
+import { a2aEventBus, A2AEventBus } from '../services/a2a-event-bus';
 // import { validateJWT } from '../utils/jwt-validator'; - Not needed, using middleware
 
 const router = Router();
@@ -201,6 +201,8 @@ router.post('/create', requireAuth, async (req: AuthenticatedRequest, res) => {
 router.post('/:contextId/ui-response', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { contextId } = req.params;
+    const userId = req.userId!;
+    const userEmail = req.userEmail!;
     const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
     
     const input = UIResponseSchema.parse(req.body);
@@ -208,17 +210,82 @@ router.post('/:contextId/ui-response', requireAuth, async (req: AuthenticatedReq
     logger.info('Processing UI response', {
       contextId,
       requestId: input.requestId,
-      action: input.action
+      action: input.action,
+      userId
     });
     
-    // TODO: Process UI response through orchestrator
-    // This would update the TaskContext and potentially trigger next phase
+    // Get database service and A2A event bus
+    const dbService = DatabaseService.getInstance();
+    const a2aEventBus = A2AEventBus.getInstance();
+    
+    // Verify user owns this task
+    const task = await dbService.getTask(userId, contextId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found or unauthorized' });
+    }
+    
+    // Create the context event for UI response
+    const eventData = {
+      contextId,
+      actorType: 'user',
+      actorId: userEmail || userId,
+      operation: 'UI_RESPONSE_SUBMITTED',
+      data: {
+        requestId: input.requestId,
+        response: input.response,
+        action: input.action || 'submit',
+        timestamp: new Date().toISOString()
+      },
+      reasoning: `User submitted response to UI request ${input.requestId}`,
+      trigger: {
+        type: 'user_action',
+        source: 'ui_form',
+        requestId: input.requestId
+      }
+    };
+    
+    // Persist the event to database
+    const persistedEvent = await dbService.createTaskContextEvent(
+      userId,
+      contextId,
+      eventData
+    );
+    
+    logger.info('UI response event persisted', {
+      eventId: persistedEvent.id,
+      taskId: contextId,
+      requestId: input.requestId
+    });
+    
+    // Broadcast the event for real-time updates
+    await a2aEventBus.broadcast({
+      type: 'TASK_CONTEXT_UPDATE',
+      taskId: contextId,
+      agentId: 'user',
+      operation: 'UI_RESPONSE_SUBMITTED',
+      data: {
+        ...eventData.data,
+        eventId: persistedEvent.id
+      },
+      reasoning: eventData.reasoning,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        userId,
+        userEmail,
+        requestId: input.requestId
+      }
+    });
+    
+    // TODO: Notify orchestrator to resume task processing
+    // This would trigger the orchestrator to check for pending agents
+    // and continue task execution with the new user input
     
     res.json({
       success: true,
       contextId,
       requestId: input.requestId,
-      message: 'UI response processed'
+      eventId: persistedEvent.id,
+      message: 'UI response processed and recorded'
     });
     
   } catch (error) {
