@@ -251,14 +251,52 @@ export class OrchestratorAgent extends BaseAgent {
     });
     
     try {
-      // Get the task context with all accumulated data
+      // Use TaskService to get raw task data
       const taskService = TaskService.getInstance();
-      const taskContext = await taskService.getTask(taskId);
+      const taskContext = await taskService.getTaskContextById(taskId);
       
       if (!taskContext) {
         logger.warn('Task context not found for UI response', { taskId });
         return;
       }
+      
+      // Orchestrator interprets the events to understand task state
+      // Check if there are pending UI requests by looking at recent events
+      const recentEvents = taskContext.history.slice(-10);
+      let hasPendingUIRequest = false;
+      
+      for (const historyEntry of recentEvents.reverse()) {
+        // This is orchestrator's domain knowledge - it knows about agent operations
+        if (historyEntry.operation === 'AGENT_EXECUTION_PAUSED' && 
+            historyEntry.data?.uiRequests) {
+          // Check if this was already responded to
+          const responseExists = taskContext.history.find(e => 
+            e.operation === 'UI_RESPONSE_SUBMITTED' && 
+            e.timestamp > historyEntry.timestamp &&
+            e.data?.requestId === historyEntry.data?.requestId
+          );
+          
+          if (!responseExists) {
+            hasPendingUIRequest = true;
+            break;
+          }
+        }
+      }
+      
+      // The UI response event we just received resolves the pending request
+      if (hasPendingUIRequest) {
+        logger.info('UI request has been resolved by user response', { taskId });
+      }
+      
+      // Add the UI response data to the context for agents to use
+      taskContext.metadata = {
+        ...taskContext.metadata,
+        lastUIResponse: event.data
+      };
+      
+      // Update the current state to reflect we're resuming
+      taskContext.currentState.status = 'in_progress' as any;
+      taskContext.currentState.phase = 'execution';
       
       logger.info('🔄 Resuming task orchestration after UI response', {
         taskId,
