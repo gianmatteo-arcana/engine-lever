@@ -24,6 +24,7 @@ import { DatabaseService } from '../services/database';
 import { StateComputer } from '../services/state-computer';
 import { TaskService } from '../services/task-service';
 import { A2AEventBus } from '../services/a2a-event-bus';
+import { TASK_STATUS } from '../constants/task-status';
 import { logger } from '../utils/logger';
 import {
   TaskContext,
@@ -37,7 +38,6 @@ import {
   OrchestratorResponse,
   TaskStatus
 } from '../types/engine-types';
-import { TASK_STATUS } from '../constants/task-status';
 import { 
   OrchestratorOperation,
   OrchestratorEventData 
@@ -239,6 +239,15 @@ export class OrchestratorAgent extends BaseAgent {
   /**
    * Handle UI_RESPONSE_SUBMITTED events
    * Resume task orchestration with the new user input
+   * 
+   * AGENT LIFECYCLE & MEMORY MANAGEMENT:
+   * - Agents are EPHEMERAL - created when needed, destroyed after work
+   * - When blocked: Agent saves state to DB and is garbage collected
+   * - When resuming: Fresh agent created with full context from DB
+   * - This ensures no memory leaks and allows horizontal scaling
+   * 
+   * The only persistent agent is the OrchestratorAgent (singleton)
+   * All other agents are stateless workers that exist only during execution
    */
   private async handleUIResponseEvent(event: any): Promise<void> {
     const taskId = event.taskId;
@@ -288,15 +297,25 @@ export class OrchestratorAgent extends BaseAgent {
         logger.info('UI request has been resolved by user response', { taskId });
       }
       
-      // Add the UI response data to the context for agents to use
-      taskContext.metadata = {
-        ...taskContext.metadata,
-        lastUIResponse: event.data
-      };
+      // Don't modify metadata with lastUIResponse - this doesn't handle multiple cycles
+      // The complete event history already contains all UI responses
+      // Agents can query the history to find the responses they need
       
       // Update the current state to reflect we're resuming
-      taskContext.currentState.status = 'in_progress' as any;
+      // Using proper TASK_STATUS constants as requested in PR review
+      taskContext.currentState.status = TASK_STATUS.IN_PROGRESS;
+      // Phase remains a string as it's dynamically determined by task progress
       taskContext.currentState.phase = 'execution';
+      
+      // Clean up any stale execution plans to allow garbage collection
+      // Agents should be ephemeral - created when needed, destroyed when done
+      if (this.activeExecutions.has(taskId)) {
+        logger.info('Cleaning up stale execution plan for task resumption', {
+          taskId,
+          hadActiveExecution: true
+        });
+        this.activeExecutions.delete(taskId);
+      }
       
       logger.info('🔄 Resuming task orchestration after UI response', {
         taskId,
