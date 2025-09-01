@@ -10,7 +10,7 @@
 
 import { BaseAgent } from './base/BaseAgent';
 import { logger } from '../utils/logger';
-import { TaskContext } from '../types/engine-types';
+import { TaskContext } from '../types/task-engine.types';
 
 export class DefaultAgent extends BaseAgent {
   // Everything is handled by BaseAgent through YAML configuration

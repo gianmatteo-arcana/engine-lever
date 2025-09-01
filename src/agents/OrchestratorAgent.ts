@@ -39,12 +39,13 @@ import {
   OrchestratorRequest,
   OrchestratorResponse,
   TaskStatus
-} from '../types/engine-types';
+} from '../types/task-engine.types';
 import { 
   OrchestratorOperation,
   OrchestratorEventData 
 } from '../types/orchestrator-schemas';
 import { validateOrchestratorPayload } from '../validation/orchestrator-validation';
+import { ORCHESTRATOR_OPS } from '../constants/orchestrator-operations';
 
 /**
  * JSON Schema templates for consistent LLM responses
@@ -225,8 +226,8 @@ export class OrchestratorAgent extends BaseAgent {
       // We use global channel because we want to hear about ALL UI responses
       a2aEventBus.on('global:event', async (event: any) => {
         // Only process UI_RESPONSE_SUBMITTED events
-        if (event.operation === 'UI_RESPONSE_SUBMITTED' || 
-            event.type === 'UI_RESPONSE_SUBMITTED') {
+        if (event.operation === ORCHESTRATOR_OPS.UI_RESPONSE_SUBMITTED || 
+            event.type === ORCHESTRATOR_OPS.UI_RESPONSE_SUBMITTED) {
           await this.handleUIResponseEvent(event);
         }
       });
@@ -278,11 +279,11 @@ export class OrchestratorAgent extends BaseAgent {
       
       for (const historyEntry of recentEvents.reverse()) {
         // This is orchestrator's domain knowledge - it knows about agent operations
-        if (historyEntry.operation === 'AGENT_EXECUTION_PAUSED' && 
+        if (historyEntry.operation === ORCHESTRATOR_OPS.AGENT_EXECUTION_PAUSED && 
             historyEntry.data?.uiRequests) {
           // Check if this was already responded to
           const responseExists = taskContext.history.find(e => 
-            e.operation === 'UI_RESPONSE_SUBMITTED' && 
+            e.operation === ORCHESTRATOR_OPS.UI_RESPONSE_SUBMITTED && 
             e.timestamp > historyEntry.timestamp &&
             e.data?.requestId === historyEntry.data?.requestId
           );
@@ -572,9 +573,9 @@ export class OrchestratorAgent extends BaseAgent {
       // Determine if we're resuming based on PERSISTENT HISTORY
       // Check if we have any execution history that indicates work was started
       const hasExecutionHistory = context.history.some(entry => 
-        entry.operation === 'execution_plan_created' || 
-        entry.operation === 'subtask_delegated' ||
-        entry.operation === 'phase_started'
+        entry.operation === ORCHESTRATOR_OPS.EXECUTION_PLAN_CREATED || 
+        entry.operation === ORCHESTRATOR_OPS.SUBTASK_DELEGATED ||
+        entry.operation === ORCHESTRATOR_OPS.PHASE_STARTED
       );
       
       // We're resuming if:
@@ -604,7 +605,7 @@ export class OrchestratorAgent extends BaseAgent {
         if (isResuming) {
           // Look for the execution plan in history - this is our single source of truth
           const planEvent = context.history.find(entry => 
-            entry.operation === 'execution_plan_created'
+            entry.operation === ORCHESTRATOR_OPS.EXECUTION_PLAN_CREATED
           );
           
           if (planEvent && planEvent.data?.plan) {
@@ -692,7 +693,7 @@ export class OrchestratorAgent extends BaseAgent {
         userInteractions: (executionPlan as any).user_interactions
       });
       
-      // NOTE: createExecutionPlan() already records the 'execution_plan_created' event
+      // NOTE: createExecutionPlan() already records the EXECUTION_PLAN_CREATED event
       // We don't need to record it again here to avoid duplicates
       
       // 3. Determine where to start/resume execution
@@ -706,7 +707,7 @@ export class OrchestratorAgent extends BaseAgent {
         const phases = executionPlan.phases || [];
         
         for (const entry of context.history) {
-          if (entry.operation === 'subtask_delegated' && entry.data?.subtask_name) {
+          if (entry.operation === ORCHESTRATOR_OPS.SUBTASK_DELEGATED && entry.data?.subtask_name) {
             // Find which phase this subtask belongs to
             for (let i = 0; i < phases.length; i++) {
               const phase = phases[i];
@@ -1242,7 +1243,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     // This ensures we can recover the full plan structure after restarts
     await this.recordOrchestratorEvent(
       context,
-      'execution_plan_created',
+      ORCHESTRATOR_OPS.EXECUTION_PLAN_CREATED,
       {
         plan: plan as any  // Store the entire ExecutionPlan object (validation may warn but data is preserved)
       },
@@ -1577,7 +1578,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     // Record that we're delegating this subtask (structured event)
     await this.recordOrchestratorEvent(
       context,
-      'subtask_delegated',
+      ORCHESTRATOR_OPS.SUBTASK_DELEGATED,
       {
         agent_id: subtask.agent,
         subtask_name: subtask.description,

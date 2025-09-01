@@ -5,7 +5,7 @@
  * Provides assertion helpers, mocks, and testing utilities
  */
 
-import { TaskContext, ContextEntry, TaskState } from '../types/engine-types';
+import { TaskContext, ContextEntry, TaskState } from '../types/task-engine.types';
 
 /**
  * Custom Jest matchers for engine-specific assertions

@@ -10,7 +10,7 @@ import { StateComputer } from '../services/state-computer';
 import { 
   TaskContext, 
   ContextEntry 
-} from '../types/engine-types';
+} from '../types/task-engine.types';
 import { DatabaseService } from '../services/database';
 import { logger } from '../utils/logger';
 

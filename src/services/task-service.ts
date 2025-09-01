@@ -18,7 +18,7 @@
 
 import { DatabaseService } from './database';
 import { StateComputer } from './state-computer';
-import { TaskStatus } from '../types/engine-types';
+import { TaskStatus } from '../types/task-engine.types';
 import { TASK_STATUS } from '../constants/task-status';
 import { logger } from '../utils/logger';
 import * as fs from 'fs';
@@ -36,7 +36,7 @@ import {
   TaskListApiResponse,
   TaskCreateApiResponse,
   validateCreateTaskRequest
-} from '../types/engine-types';
+} from '../types/task-engine.types';
 
 export interface CreateTaskRequest {
   templateId: string;

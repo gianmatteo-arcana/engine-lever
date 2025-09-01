@@ -20,7 +20,7 @@
  */
 
 import { logger } from '../utils/logger';
-import { AgentRequest, AgentResponse } from '../types/engine-types';
+import { AgentRequest, AgentResponse } from '../types/task-engine.types';
 import { BaseAgentRequest, BaseAgentResponse } from '../types/base-agent-types';
 import { DefaultAgent } from '../agents/DefaultAgent';
 

@@ -11,7 +11,7 @@
  * CRITICAL: This is THE KEY to the event sourcing architecture
  */
 
-import { /* TaskContext, */ ContextEntry, UIRequestSummary } from '../types/engine-types';
+import { /* TaskContext, */ ContextEntry, UIRequestSummary } from '../types/task-engine.types';
 
 /**
  * Computed state structure - PRD Lines 130-135

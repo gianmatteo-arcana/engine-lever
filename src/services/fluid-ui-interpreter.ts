@@ -16,7 +16,7 @@ import {
   UITemplateType,
   ValidationRule,
   LayoutHints
-} from '../types/engine-types';
+} from '../types/task-engine.types';
 
 /**
  * Template registry mapping

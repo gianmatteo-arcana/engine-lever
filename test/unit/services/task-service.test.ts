@@ -15,7 +15,7 @@ import {
   TaskTemplate,
   ContextEntry,
   TaskState
-} from '../../../src/types/engine-types';
+} from '../../../src/types/task-engine.types';
 
 // Mock dependencies
 jest.mock('../../../src/services/database', () => ({

@@ -19,7 +19,7 @@ import {
   BusinessEntity,
   UserProfile,
   ComplianceRequirement
-} from '../../../src/types/engine-types';
+} from '../../../src/types/task-engine.types';
 
 describe('Type Safety Tests', () => {
   describe('TaskContext Type Safety', () => {

@@ -14,7 +14,7 @@ import { TaskService } from '../../src/services/task-service';
 import { DatabaseService } from '../../src/services/database';
 import { DIContainer, initializeAgents } from '../../src/services/dependency-injection';
 import { logger } from '../../src/utils/logger';
-import { TaskContext } from '../../src/types/engine-types';
+import { TaskContext } from '../../src/types/task-engine.types';
 
 // Track all LLM calls
 const llmCalls: Array<{

@@ -14,7 +14,7 @@ import {
   UIRequest,
   UITemplateType,
   Actor
-} from '../types/engine-types';
+} from '../types/task-engine.types';
 
 /**
  * Factory for creating TaskContext test data

@@ -76,7 +76,7 @@ import {
   BaseAgentResponse,
   ContextEntry
 } from '../../types/base-agent-types';
-import { TaskContext, OrchestratorRequest, OrchestratorResponse } from '../../types/engine-types';
+import { TaskContext, OrchestratorRequest, OrchestratorResponse } from '../../types/task-engine.types';
 import { DatabaseService } from '../../services/database';
 import { logger } from '../../utils/logger';
 import { a2aEventBus } from '../../services/a2a-event-bus';

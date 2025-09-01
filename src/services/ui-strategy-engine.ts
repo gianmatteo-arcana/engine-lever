@@ -5,7 +5,7 @@
  * based on context, confidence levels, and user progression
  */
 
-import { UIRequest, UITemplateType } from '../types/engine-types';
+import { UIRequest, UITemplateType } from '../types/task-engine.types';
 
 export interface UIStrategyContext {
   userProgress: number;

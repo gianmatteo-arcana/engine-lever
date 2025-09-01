@@ -7,7 +7,7 @@
 import { DatabaseService } from '../../src/services/database';
 import { StateComputer } from '../../src/services/state-computer';
 import { ConfigurationManager } from '../../src/services/configuration-manager';
-import { TaskContext, ContextEntry, TaskState } from '../../src/types/engine-types';
+import { TaskContext, ContextEntry, TaskState } from '../../src/types/task-engine.types';
 import * as path from 'path';
 import * as fs from 'fs';
 

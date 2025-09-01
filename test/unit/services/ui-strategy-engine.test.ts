@@ -3,7 +3,7 @@
  */
 
 import { UIStrategyEngine, UIStrategyContext } from '../../../src/services/ui-strategy-engine';
-import { UIRequest } from '../../../src/types/engine-types';
+import { UIRequest } from '../../../src/types/task-engine.types';
 
 describe('UIStrategyEngine', () => {
   let engine: UIStrategyEngine;
