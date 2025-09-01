@@ -5,7 +5,7 @@
 import dotenv from 'dotenv';
 import { DefaultAgent } from '../../src/agents/DefaultAgent';
 import { AgentExecutor } from '../../src/services/agent-executor';
-import { AgentRequest, TaskContext } from '../../src/types/engine-types';
+import { AgentRequest, TaskContext } from '../../src/types/task-engine.types';
 import { logger } from '../../src/utils/logger';
 
 // Load environment variables from .env file

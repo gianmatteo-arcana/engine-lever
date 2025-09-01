@@ -14,7 +14,7 @@ import {
   UIRequest,
   UITemplateType,
   Actor
-} from '../types/engine-types';
+} from '../types/task-engine.types';
 
 /**
  * Factory for creating TaskContext test data
@@ -29,7 +29,6 @@ export class TaskContextFactory {
       createdAt: new Date().toISOString(),
       currentState: {
         status: 'pending',
-        phase: 'initialization',
         completeness: 0,
         data: {}
       },
@@ -51,7 +50,6 @@ export class TaskContextFactory {
     return this.create({
       currentState: {
         status: 'completed',
-        phase: 'done',
         completeness: 100,
         data: { completedAt: new Date().toISOString() }
       }

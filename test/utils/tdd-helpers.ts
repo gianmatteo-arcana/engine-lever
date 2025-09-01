@@ -5,7 +5,7 @@
  * Provides assertion helpers, mocks, and testing utilities
  */
 
-import { TaskContext, ContextEntry, TaskState } from '../types/engine-types';
+import { TaskContext, ContextEntry, TaskState } from '../types/task-engine.types';
 
 /**
  * Custom Jest matchers for engine-specific assertions
@@ -253,7 +253,6 @@ export class EventSourcingAssertions {
   static assertStateComputable(history: ContextEntry[]): TaskState {
     const state: TaskState = {
       status: 'pending',
-      phase: 'initialization',
       completeness: 0,
       data: {}
     };
@@ -262,10 +261,6 @@ export class EventSourcingAssertions {
       // Apply each entry to compute state
       if (entry.operation === 'status_updated' && entry.data.status) {
         state.status = entry.data.status;
-      }
-      
-      if (entry.operation === 'phase_changed' && entry.data.phase) {
-        state.phase = entry.data.phase;
       }
       
       if (entry.operation === 'progress_updated' && entry.data.completeness !== undefined) {

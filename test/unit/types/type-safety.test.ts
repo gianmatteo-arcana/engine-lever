@@ -19,7 +19,7 @@ import {
   BusinessEntity,
   UserProfile,
   ComplianceRequirement
-} from '../../../src/types/engine-types';
+} from '../../../src/types/task-engine.types';
 
 describe('Type Safety Tests', () => {
   describe('TaskContext Type Safety', () => {
@@ -31,7 +31,6 @@ describe('Type Safety Tests', () => {
         createdAt: new Date().toISOString(),
         currentState: {
           status: 'in_progress',
-          phase: 'data_collection',
           completeness: 50,
           data: {}
         },
@@ -64,8 +63,7 @@ describe('Type Safety Tests', () => {
         currentState: {
           // @ts-expect-error - Testing invalid status value
           status: 'invalid_status',
-          phase: 'data_collection',
-          completeness: 50,
+            completeness: 50,
           data: {}
         },
         history: [],
@@ -280,7 +278,6 @@ describe('Type Safety Tests', () => {
     test('should enforce phase values', () => {
       const validState: TaskState = {
         status: 'in_progress',
-        phase: 'data_collection',
         completeness: 25,
         data: {
           user: {
@@ -289,11 +286,10 @@ describe('Type Safety Tests', () => {
         }
       };
 
-      expect(validState.phase).toBe('data_collection');
+      // Phase removed from TaskState
 
       const invalidPhase: TaskState = {
         status: 'in_progress',
-        phase: 'invalid_phase' as 'data_collection',
         completeness: 50,
         data: {}
       };
@@ -304,7 +300,6 @@ describe('Type Safety Tests', () => {
     test('should enforce completeness range', () => {
       const validCompleteness: TaskState = {
         status: 'in_progress',
-        phase: 'verification',
         completeness: 100,
         data: {}
       };

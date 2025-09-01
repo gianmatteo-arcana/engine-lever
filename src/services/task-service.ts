@@ -18,7 +18,7 @@
 
 import { DatabaseService } from './database';
 import { StateComputer } from './state-computer';
-import { TaskStatus } from '../types/engine-types';
+import { TaskStatus } from '../types/task-engine.types';
 import { TASK_STATUS } from '../constants/task-status';
 import { logger } from '../utils/logger';
 import * as fs from 'fs';
@@ -36,7 +36,7 @@ import {
   TaskListApiResponse,
   TaskCreateApiResponse,
   validateCreateTaskRequest
-} from '../types/engine-types';
+} from '../types/task-engine.types';
 
 export interface CreateTaskRequest {
   templateId: string;
@@ -160,7 +160,6 @@ export class TaskService {
         // Current state computed from history
         currentState: {
           status: TASK_STATUS.PENDING,
-          phase: 'initialization',
           completeness: 0,
           data: request.initialData || {}
         },
@@ -235,7 +234,7 @@ export class TaskService {
   }
 
   /**
-   * Get task by context ID
+   * Get task by context ID (legacy - looks in task_contexts table which may not exist)
    */
   async getTask(contextId: string): Promise<TaskContext | null> {
     try {
@@ -277,6 +276,99 @@ export class TaskService {
   }
 
   /**
+   * Get full TaskContext by task ID
+   * Pure data reconstruction from database - no business logic
+   * Consumers interpret the events according to their domain
+   */
+  async getTaskContextById(taskId: string, userId?: string): Promise<TaskContext | null> {
+    try {
+      logger.info('Reconstructing TaskContext', { taskId, userId });
+      
+      // Use service client for system access
+      const client = this.dbService.getServiceClient();
+      
+      // 1. Fetch the task record from tasks table
+      const { data: taskData, error: taskError } = await client
+        .from('tasks')
+        .select('*')
+        .eq('id', taskId)
+        .single();
+
+      if (taskError || !taskData) {
+        logger.warn('Task not found', { taskId, error: taskError });
+        return null;
+      }
+
+      // 2. Fetch all context events for this task (efficient single query)
+      const { data: events, error: eventsError } = await client
+        .from('task_context_events')
+        .select('*')
+        .eq('task_id', taskId)
+        .order('created_at', { ascending: true });
+
+      if (eventsError) {
+        logger.warn('Could not fetch task events', { taskId, error: eventsError });
+      }
+
+      // 3. Build pure data structure - no interpretation
+      const taskContext: TaskContext = {
+        contextId: taskId,
+        taskTemplateId: taskData.template_id || taskData.type || 'unknown',
+        tenantId: taskData.user_id,
+        createdAt: taskData.created_at,
+        
+        // Current state from task record - no computation
+        currentState: {
+          status: taskData.status || 'pending',
+          completeness: taskData.metadata?.completeness || 0,
+          data: taskData.metadata || {}
+        },
+        
+        // Raw history from events - no interpretation
+        history: (events || []).map((event, index) => ({
+          entryId: event.id,
+          timestamp: event.created_at,
+          sequenceNumber: event.sequence_number || index + 1,
+          actor: {
+            type: event.actor_type || 'unknown',
+            id: event.actor_id || 'unknown',
+            version: '1.0.0'
+          },
+          operation: event.operation || event.event_type || 'unknown',
+          data: event.data || {},
+          reasoning: event.reasoning || '',
+          trigger: event.trigger || {},
+          confidence: event.confidence || 1.0
+        })),
+        
+        // Pure metadata from task record
+        metadata: {
+          ...(taskData.metadata || {}),
+          taskTitle: taskData.title,
+          taskDescription: taskData.description,
+          priority: taskData.priority
+        },
+        
+        // No interpretation of pending interactions - that's orchestrator's job
+        pendingUserInteractions: undefined
+      };
+
+      logger.info('TaskContext reconstructed', {
+        taskId,
+        historyLength: taskContext.history.length,
+        status: taskContext.currentState.status
+      });
+
+      return taskContext;
+
+    } catch (error) {
+      logger.error('Failed to reconstruct TaskContext', { taskId, error });
+      return null;
+    }
+  }
+
+
+  /**
    * Update task state
    * This is called after orchestration or agent actions
    */
@@ -300,8 +392,7 @@ export class TaskService {
 
       logger.info('Task state updated', {
         contextId,
-        newStatus: newState.status,
-        newPhase: newState.phase
+        newStatus: newState.status
       });
 
     } catch (error) {
@@ -354,7 +445,6 @@ export class TaskService {
       const newState = StateComputer.computeState(context.history);
       await this.updateState(context.contextId, {
         status: newState.status as any,
-        phase: newState.phase,
         completeness: newState.completeness,
         data: newState.data
       });
@@ -418,6 +508,7 @@ export class TaskService {
     }
   }
 
+  
   /**
    * Trigger orchestration for the task
    * This publishes an event or calls the orchestrator directly

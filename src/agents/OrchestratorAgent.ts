@@ -23,6 +23,10 @@ import { ConfigurationManager } from '../services/configuration-manager';
 import { DatabaseService } from '../services/database';
 import { StateComputer } from '../services/state-computer';
 import { TaskService } from '../services/task-service';
+import { A2AEventBus } from '../services/a2a-event-bus';
+import { TASK_STATUS } from '../constants/task-status';
+// ExecutionPhase enum is available from '../constants/execution-phases' when needed
+// Currently using ExecutionPhase type from engine-types for compatibility
 import { logger } from '../utils/logger';
 import {
   TaskContext,
@@ -35,13 +39,13 @@ import {
   OrchestratorRequest,
   OrchestratorResponse,
   TaskStatus
-} from '../types/engine-types';
-import { TASK_STATUS } from '../constants/task-status';
+} from '../types/task-engine.types';
 import { 
   OrchestratorOperation,
   OrchestratorEventData 
 } from '../types/orchestrator-schemas';
 import { validateOrchestratorPayload } from '../validation/orchestrator-validation';
+import { ORCHESTRATOR_OPS } from '../constants/orchestrator-operations';
 
 /**
  * JSON Schema templates for consistent LLM responses
@@ -193,6 +197,9 @@ export class OrchestratorAgent extends BaseAgent {
       // Agent registry is now initialized asynchronously when needed
       // since YAML files are the ONLY source of truth
       
+      // Set up event listeners for UI responses
+      this.setupEventListeners();
+      
       logger.info('🎉 OrchestratorAgent constructor completed successfully!');
     } catch (error) {
       console.error('ERROR: OrchestratorAgent constructor failed:', error);
@@ -201,6 +208,141 @@ export class OrchestratorAgent extends BaseAgent {
         stack: error instanceof Error ? error.stack : undefined
       });
       throw error;
+    }
+  }
+  
+  /**
+   * Set up event listeners for orchestrator
+   * Listens for UI_RESPONSE_SUBMITTED events to resume task processing
+   */
+  private setupEventListeners(): void {
+    try {
+      logger.info('🎧 Setting up orchestrator event listeners...');
+      
+      // Get the A2A event bus instance
+      const a2aEventBus = A2AEventBus.getInstance();
+      
+      // Subscribe to the global channel for UI response events
+      // We use global channel because we want to hear about ALL UI responses
+      a2aEventBus.on('global:event', async (event: any) => {
+        // Only process UI_RESPONSE_SUBMITTED events
+        if (event.operation === ORCHESTRATOR_OPS.UI_RESPONSE_SUBMITTED || 
+            event.type === ORCHESTRATOR_OPS.UI_RESPONSE_SUBMITTED) {
+          await this.handleUIResponseEvent(event);
+        }
+      });
+      
+      logger.info('✅ Orchestrator event listeners configured');
+    } catch (error) {
+      logger.error('Failed to set up event listeners', error);
+      // Don't throw - orchestrator can still work without event listeners
+    }
+  }
+  
+  /**
+   * Handle UI_RESPONSE_SUBMITTED events
+   * Resume task orchestration with the new user input
+   * 
+   * AGENT LIFECYCLE & MEMORY MANAGEMENT:
+   * - Agents are EPHEMERAL - created when needed, destroyed after work
+   * - When blocked: Agent saves state to DB and is garbage collected
+   * - When resuming: Fresh agent created with full context from DB
+   * - This ensures no memory leaks and allows horizontal scaling
+   * 
+   * The only persistent agent is the OrchestratorAgent (singleton)
+   * All other agents are stateless workers that exist only during execution
+   */
+  private async handleUIResponseEvent(event: any): Promise<void> {
+    const taskId = event.taskId;
+    const requestId = event.data?.requestId;
+    
+    logger.info('📥 Orchestrator received UI_RESPONSE_SUBMITTED event', {
+      taskId,
+      requestId,
+      operation: event.operation
+    });
+    
+    try {
+      // Use TaskService to get raw task data
+      const taskService = TaskService.getInstance();
+      const taskContext = await taskService.getTaskContextById(taskId);
+      
+      if (!taskContext) {
+        logger.warn('Task context not found for UI response', { taskId });
+        return;
+      }
+      
+      // Orchestrator interprets the events to understand task state
+      // Check if there are pending UI requests by looking at recent events
+      const recentEvents = taskContext.history.slice(-10);
+      let hasPendingUIRequest = false;
+      
+      for (const historyEntry of recentEvents.reverse()) {
+        // This is orchestrator's domain knowledge - it knows about agent operations
+        if (historyEntry.operation === ORCHESTRATOR_OPS.AGENT_EXECUTION_PAUSED && 
+            historyEntry.data?.uiRequests) {
+          // Check if this was already responded to
+          const responseExists = taskContext.history.find(e => 
+            e.operation === ORCHESTRATOR_OPS.UI_RESPONSE_SUBMITTED && 
+            e.timestamp > historyEntry.timestamp &&
+            e.data?.requestId === historyEntry.data?.requestId
+          );
+          
+          if (!responseExists) {
+            hasPendingUIRequest = true;
+            break;
+          }
+        }
+      }
+      
+      // The UI response event we just received resolves the pending request
+      if (hasPendingUIRequest) {
+        logger.info('UI request has been resolved by user response', { taskId });
+      }
+      
+      // Don't modify metadata with lastUIResponse - this doesn't handle multiple cycles
+      // The complete event history already contains all UI responses
+      // Agents can query the history to find the responses they need
+      
+      // Update the current state to reflect we're resuming
+      // Set task status to in_progress (using TASK_STATUS enum)
+      taskContext.currentState.status = TASK_STATUS.IN_PROGRESS;
+      
+      // Clean up any stale execution plans to allow garbage collection
+      // Agents should be ephemeral - created when needed, destroyed when done
+      if (this.activeExecutions.has(taskId)) {
+        logger.info('Cleaning up stale execution plan for task resumption', {
+          taskId,
+          hadActiveExecution: true
+        });
+        this.activeExecutions.delete(taskId);
+      }
+      
+      logger.info('🔄 Resuming task orchestration after UI response', {
+        taskId,
+        currentStatus: taskContext.currentState.status,
+        historyLength: taskContext.history.length
+      });
+      
+      // Resume orchestration with the updated context
+      // The orchestrateTask method will:
+      // 1. Check the current state and context
+      // 2. Identify which agents need to work next
+      // 3. Continue the collaborative cycle with the new user input
+      await this.orchestrateTask(taskContext);
+      
+      logger.info('✅ Task orchestration resumed successfully', {
+        taskId,
+        newStatus: taskContext.currentState.status
+      });
+      
+    } catch (error) {
+      logger.error('Failed to resume task orchestration after UI response', {
+        taskId,
+        requestId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't throw - we don't want to crash the orchestrator
     }
   }
   
@@ -416,6 +558,7 @@ export class OrchestratorAgent extends BaseAgent {
       contextId: context.contextId,
       templateId: context.taskTemplateId,
       tenantId: context.tenantId,
+      currentStatus: context.currentState.status,
       hasMetadata: !!context.metadata,
       hasTaskDefinition: !!context.metadata?.taskDefinition,
       taskDefinitionKeys: context.metadata?.taskDefinition ? Object.keys(context.metadata.taskDefinition) : []
@@ -427,39 +570,179 @@ export class OrchestratorAgent extends BaseAgent {
     });
     
     try {
-      logger.info('Starting universal task orchestration', {
+      // Determine if we're resuming based on PERSISTENT HISTORY
+      // Check if we have any execution history that indicates work was started
+      const hasExecutionHistory = context.history.some(entry => 
+        entry.operation === ORCHESTRATOR_OPS.EXECUTION_PLAN_CREATED || 
+        entry.operation === ORCHESTRATOR_OPS.SUBTASK_DELEGATED ||
+        entry.operation === ORCHESTRATOR_OPS.PHASE_STARTED
+      );
+      
+      // We're resuming if:
+      // 1. We have execution history (work was started)
+      // 2. Task is not in a terminal state
+      const isResuming = hasExecutionHistory && 
+                        context.currentState.status !== TASK_STATUS.COMPLETED &&
+                        context.currentState.status !== TASK_STATUS.FAILED &&
+                        context.currentState.status !== TASK_STATUS.CANCELLED;
+      
+      logger.info(isResuming ? 'Resuming task orchestration' : 'Starting universal task orchestration', {
         contextId: context.contextId,
         templateId: context.taskTemplateId,
         tenantId: context.tenantId,
+        hasExecutionHistory,
+        taskStatus: context.currentState.status,
+        historyLength: context.history.length,
         timestamp: new Date().toISOString()
       });
       
-      // 1. Create execution plan from template
-      logger.info('📝 Creating execution plan...');
-      const executionPlan = await this.createExecutionPlan(context);
-      this.activeExecutions.set(context.contextId, executionPlan);
+      // 1. Get or create execution plan
+      // Check memory cache first (optimization)
+      let executionPlan = this.activeExecutions.get(context.contextId);
       
-      logger.info('✅ Execution plan created', {
+      if (!executionPlan) {
+        // Try to retrieve from event history (single source of truth)
+        if (isResuming) {
+          // Look for the execution plan in history - this is our single source of truth
+          const planEvent = context.history.find(entry => 
+            entry.operation === ORCHESTRATOR_OPS.EXECUTION_PLAN_CREATED
+          );
+          
+          if (planEvent && planEvent.data?.plan) {
+            logger.info('📋 Reconstructing execution plan from history', {
+              contextId: context.contextId,
+              hasPhases: !!(planEvent.data.plan as any).phases,
+              hasSubtasks: !!(planEvent.data.plan as any).subtasks
+            });
+            
+            const storedPlan = planEvent.data.plan as any;
+            
+            // Handle different plan formats robustly
+            if (storedPlan.phases && Array.isArray(storedPlan.phases)) {
+              // Modern format with phases - use as-is
+              executionPlan = storedPlan as ExecutionPlan;
+            } else if (storedPlan.subtasks && Array.isArray(storedPlan.subtasks)) {
+              // Legacy format with just subtasks - convert to phases
+              logger.warn('⚠️ Legacy execution plan format detected, converting to phases', {
+                contextId: context.contextId
+              });
+              executionPlan = {
+                phases: [{
+                  name: 'Task Execution',
+                  subtasks: storedPlan.subtasks.map((st: any) => ({
+                    description: st.name || st.subtask || 'Subtask',
+                    agent: st.assigned_agent || 'DefaultAgent',
+                    specific_instruction: st.instructions || '',
+                    input_data: {},
+                    expected_output: st.expected_output || 'Task completed'
+                  }))
+                }],
+                reasoning: {
+                  task_analysis: storedPlan.task_analysis || 'Legacy plan reconstruction',
+                  subtask_decomposition: storedPlan.subtasks || [],
+                  coordination_strategy: storedPlan.coordination_strategy || 'Sequential'
+                }
+              } as any as ExecutionPlan;
+            } else {
+              // Unknown format - create minimal plan
+              logger.error('❌ Unknown execution plan format in history', {
+                contextId: context.contextId,
+                planKeys: Object.keys(storedPlan)
+              });
+              throw new Error('Cannot reconstruct execution plan from history - unknown format');
+            }
+            
+            // The execution plan is already stored in the event history
+            // No need for parallel storage
+          } else {
+            // Last resort: create new plan
+            logger.warn('⚠️ Could not find execution plan, creating new one', {
+              contextId: context.contextId
+            });
+            executionPlan = await this.createExecutionPlan(context);
+            // The execution plan is stored in event history by createExecutionPlan()
+          }
+        } else {
+          // Fresh start - create new execution plan
+          logger.info('📝 Creating execution plan...');
+          executionPlan = await this.createExecutionPlan(context);
+          
+          // The execution plan is stored in event history by createExecutionPlan()
+        }
+        
+        // Cache in memory for this session (performance optimization)
+        if (executionPlan) {
+          this.activeExecutions.set(context.contextId, executionPlan);
+        }
+      } else {
+        logger.info('📋 Using cached execution plan', {
+          contextId: context.contextId,
+          phases: executionPlan?.phases?.length || 0
+        });
+      }
+      
+      // Ensure we have an execution plan at this point
+      if (!executionPlan) {
+        throw new Error('Failed to create or retrieve execution plan');
+      }
+      
+      logger.info('✅ Execution plan ready', {
         contextId: context.contextId,
-        phases: executionPlan.phases.length,
+        phases: executionPlan.phases?.length || 0,
         estimatedDuration: (executionPlan as any).estimated_duration,
         userInteractions: (executionPlan as any).user_interactions
       });
       
-      // NOTE: createExecutionPlan() already records the 'execution_plan_created' event
+      // NOTE: createExecutionPlan() already records the EXECUTION_PLAN_CREATED event
       // We don't need to record it again here to avoid duplicates
       
-      // 3. Execute plan phases
-      let allPhasesCompleted = true;
-      let phaseIndex = 0;
+      // 3. Determine where to start/resume execution
+      let startPhaseIndex = 0;
       
-      for (const phase of executionPlan.phases) {
-        phaseIndex++;
-        logger.info(`📌 Executing phase ${phaseIndex}/${executionPlan.phases.length}: ${phase.name}`, {
+      // If resuming, find the last completed phase from history
+      if (isResuming) {
+        // Look through history for subtask_delegated events to find completed phases
+        const completedPhases = new Set<string>();
+        
+        const phases = executionPlan.phases || [];
+        
+        for (const entry of context.history) {
+          if (entry.operation === ORCHESTRATOR_OPS.SUBTASK_DELEGATED && entry.data?.subtask_name) {
+            // Find which phase this subtask belongs to
+            for (let i = 0; i < phases.length; i++) {
+              const phase = phases[i];
+              const subtasks = (phase as any).subtasks || [];
+              if (subtasks.some((st: any) => st.description === entry.data.subtask_name)) {
+                completedPhases.add(phase.name);
+                startPhaseIndex = Math.max(startPhaseIndex, i + 1);
+              }
+            }
+          }
+        }
+        
+        logger.info('📊 Resume analysis complete', {
+          contextId: context.contextId,
+          completedPhases: Array.from(completedPhases),
+          startingFromPhase: startPhaseIndex + 1,
+          totalPhases: phases.length
+        });
+      }
+      
+      // 4. Execute plan phases (starting from the correct index)
+      let allPhasesCompleted = true;
+      let phaseIndex = startPhaseIndex;
+      const phases = executionPlan.phases || [];
+      
+      for (let i = startPhaseIndex; i < phases.length; i++) {
+        const phase = phases[i];
+        phaseIndex = i + 1;
+        
+        logger.info(`📌 ${isResuming && i === startPhaseIndex ? 'Resuming' : 'Executing'} phase ${phaseIndex}/${phases.length}: ${phase.name}`, {
           contextId: context.contextId,
           phaseName: phase.name,
           phaseNumber: phaseIndex,
-          totalPhases: executionPlan.phases.length
+          totalPhases: phases.length,
+          isResuming: isResuming && i === startPhaseIndex
         });
         
         const phaseResult = await this.executePhase(context, phase);
@@ -519,7 +802,7 @@ export class OrchestratorAgent extends BaseAgent {
         logger.info('✅ All phases completed successfully, marking task as complete', {
           contextId: context.contextId,
           phasesExecuted: phaseIndex,
-          totalPhases: executionPlan.phases.length
+          totalPhases: phases.length
         });
         await this.completeTaskContext(context);
       } else {
@@ -539,8 +822,9 @@ export class OrchestratorAgent extends BaseAgent {
           logger.info('⏸️ Task execution paused - waiting for user input', {
             contextId: context.contextId,
             phasesExecuted: phaseIndex,
-            totalPhases: executionPlan.phases.length,
-            status: currentStatus
+            totalPhases: phases.length,
+            status: currentStatus,
+            resumedFromPhase: startPhaseIndex + 1
           });
           // Don't record as incomplete when waiting for input - this is expected behavior
         } else if (currentStatus === TASK_STATUS.FAILED) {
@@ -548,14 +832,14 @@ export class OrchestratorAgent extends BaseAgent {
           logger.error('❌ Task execution failed', {
             contextId: context.contextId,
             phasesExecuted: phaseIndex,
-            totalPhases: executionPlan.phases.length,
+            totalPhases: phases.length,
             status: currentStatus
           });
           await this.recordContextEntry(context, {
             operation: `task_${TASK_STATUS.FAILED}`,
             data: {
               phasesCompleted: phaseIndex,
-              totalPhases: executionPlan.phases.length,
+              totalPhases: phases.length,
               status: currentStatus,
               reason: 'Phase execution failed'
             },
@@ -566,14 +850,14 @@ export class OrchestratorAgent extends BaseAgent {
           logger.warn('⚠️ Task execution incomplete - unexpected state', {
             contextId: context.contextId,
             phasesExecuted: phaseIndex,
-            totalPhases: executionPlan.phases.length,
+            totalPhases: phases.length,
             status: currentStatus
           });
           await this.recordContextEntry(context, {
             operation: 'task_incomplete', // Keep as-is since there's no TASK_STATUS.INCOMPLETE
             data: {
               phasesCompleted: phaseIndex,
-              totalPhases: executionPlan.phases.length,
+              totalPhases: phases.length,
               status: currentStatus,
               reason: 'Unexpected execution state'
             },
@@ -591,7 +875,9 @@ export class OrchestratorAgent extends BaseAgent {
         status: finalStatus,
         duration,
         phasesCompleted: phaseIndex,
-        totalPhases: executionPlan.phases.length
+        totalPhases: executionPlan.phases.length,
+        wasResumed: isResuming,
+        resumedFromPhase: isResuming ? startPhaseIndex + 1 : 1
       });
       
     } catch (error) {
@@ -953,25 +1239,13 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       } as any;
     }
     
-    // Store the execution plan with structured schema
-    // Transform the reasoning.subtask_decomposition into our cleaner structure
-    const subtasks = (plan as any).reasoning?.subtask_decomposition || [];
-    
+    // Store the COMPLETE execution plan for proper resumption
+    // This ensures we can recover the full plan structure after restarts
     await this.recordOrchestratorEvent(
       context,
-      'execution_plan_created',
+      ORCHESTRATOR_OPS.EXECUTION_PLAN_CREATED,
       {
-        plan: {
-          subtasks: subtasks.map((subtask: any, index: number) => ({
-            name: subtask.subtask || `Subtask ${index + 1}`,
-            assigned_agent: subtask.assigned_agent,
-            required_capabilities: subtask.required_capabilities || [],
-            dependencies: [], // Will be populated if phases define dependencies
-            rationale: subtask.rationale || ''
-          })),
-          coordination_strategy: (plan as any).reasoning?.coordination_strategy || 'Sequential execution',
-          task_analysis: (plan as any).reasoning?.task_analysis || 'Task analysis from LLM'
-        }
+        plan: plan as any  // Store the entire ExecutionPlan object (validation may warn but data is preserved)
       },
       'Created execution plan with detailed subtask decomposition'
     );
@@ -981,9 +1255,27 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
   }
   
   /**
-   * Execute a phase of the plan with enhanced subtask coordination
-   * Each phase now contains specific subtasks with detailed instructions for agents
-   * This method coordinates the execution of subtasks and manages data flow between them
+   * Execute a phase of the execution plan
+   * 
+   * PHASES represent workflow steps in the orchestration, NOT task status.
+   * Each phase is a logical grouping of work that needs to be done:
+   * - May contain multiple subtasks to be executed
+   * - Can be run in parallel or sequence based on dependencies
+   * - Is tracked for resumption purposes
+   * - Has specific goals and success criteria
+   * 
+   * Common phases include:
+   * - Initialization: Setup and context gathering
+   * - Discovery: Finding required information
+   * - Data Collection: Gathering user/business data
+   * - Validation: Checking data completeness
+   * - Processing: Running business logic
+   * - Generation: Creating outputs
+   * - Completion: Finalizing results
+   * 
+   * @param context - The task context with full history
+   * @param phase - The execution phase containing subtasks to execute
+   * @returns Phase results including any UI requests generated
    */
   private async executePhase(
     context: TaskContext,
@@ -1015,8 +1307,8 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       // Execute subtasks (parallel or sequential based on phase configuration)
       if ((phase as any).parallel_execution) {
         // Execute all subtasks in parallel for efficiency
-        const subtaskPromises = subtasks.map((subtask: any) => 
-          this.executeSubtask(context, subtask, phase)
+        const subtaskPromises = subtasks.map((subtask: any, index: number) => 
+          this.executeSubtask(context, subtask, phase, {}, index)
         );
         const subtaskResults = await Promise.allSettled(subtaskPromises);
         
@@ -1054,9 +1346,10 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
         // Execute subtasks sequentially, passing data between them
         let phaseData = {};
         
-        for (const subtask of subtasks) {
+        for (let index = 0; index < subtasks.length; index++) {
+          const subtask = subtasks[index];
           try {
-            const subtaskResult = await this.executeSubtask(context, subtask, phase, phaseData);
+            const subtaskResult = await this.executeSubtask(context, subtask, phase, phaseData, index);
             results.push(subtaskResult);
             
             // Pass output data to next subtask
@@ -1175,7 +1468,8 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     context: TaskContext,
     subtask: any,
     phase: ExecutionPhase,
-    inputData: any = {}
+    inputData: any = {},
+    subtaskIndex: number = 0
   ): Promise<any> {
     logger.info('🎯 Executing subtask with specific agent instruction', {
       contextId: context.contextId,
@@ -1284,12 +1578,12 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     // Record that we're delegating this subtask (structured event)
     await this.recordOrchestratorEvent(
       context,
-      'subtask_delegated',
+      ORCHESTRATOR_OPS.SUBTASK_DELEGATED,
       {
         agent_id: subtask.agent,
         subtask_name: subtask.description,
         instructions: subtask.specific_instruction || 'Execute subtask as defined',
-        subtask_index: 0 // We don't have the index here, using 0 as placeholder
+        subtask_index: subtaskIndex
       },
       `Delegating subtask "${subtask.description}" to ${subtask.agent}`
     );
@@ -2751,5 +3045,6 @@ Respond with JSON only:
     
     return missingFields;
   }
+  
   
 }

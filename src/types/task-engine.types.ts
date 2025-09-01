@@ -44,7 +44,6 @@ export interface TaskContext {
  */
 export interface TaskState {
   status: 'pending' | 'in_progress' | 'waiting_for_input' | 'completed' | 'failed' | 'cancelled';
-  phase: string;
   completeness: number; // 0-100
   data: Record<string, any>;
   lastUpdated?: string;
@@ -406,6 +405,25 @@ export interface AgentInstance {
     averageResponseTime: number;
     successRate: number;
   };
+}
+
+// ============================================================================
+// AGENT CONTEXT TYPES
+// ============================================================================
+
+/**
+ * Agent-specific context stored in TaskContext metadata
+ * Each agent can maintain its own state and findings within a task
+ */
+export interface AgentContext {
+  state: Record<string, any>;
+  requirements: string[];
+  findings: Array<{
+    type: string;
+    data: any;
+    timestamp: string;
+  }>;
+  nextActions: string[];
 }
 
 // ============================================================================

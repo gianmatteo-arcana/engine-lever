@@ -15,7 +15,7 @@ import {
   TaskTemplate,
   ContextEntry,
   TaskState
-} from '../../../src/types/engine-types';
+} from '../../../src/types/task-engine.types';
 
 // Mock dependencies
 jest.mock('../../../src/services/database', () => ({
@@ -186,7 +186,6 @@ describe('TaskService - Universal Task Creation', () => {
           tenantId: request.tenantId,
           currentState: {
             status: 'pending',
-            phase: 'initialization',
             completeness: 0
           },
           templateSnapshot: undefined

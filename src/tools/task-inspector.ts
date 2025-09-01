@@ -6,11 +6,11 @@
  * and performance characteristics.
  */
 
-import { StateComputer, ComputedState } from '../services/state-computer';
+import { StateComputer } from '../services/state-computer';
 import { 
   TaskContext, 
   ContextEntry 
-} from '../types/engine-types';
+} from '../types/task-engine.types';
 import { DatabaseService } from '../services/database';
 import { logger } from '../utils/logger';
 
@@ -19,7 +19,6 @@ export interface InspectionReport {
   timestamp: string;
   summary: {
     status: string;
-    phase: string;
     completeness: number;
     totalEvents: number;
     activeAgents: string[];
@@ -149,7 +148,6 @@ export class TaskInspector {
 
     return {
       status: context.currentState.status,
-      phase: context.currentState.phase,
       completeness: context.currentState.completeness,
       totalEvents: context.history.length,
       activeAgents,
@@ -447,7 +445,7 @@ export class TaskInspector {
   /**
    * Helper: Assess data quality
    */
-  private assessDataQuality(state: ComputedState): number {
+  private assessDataQuality(state: any): number {
     const data = state.data;
     let score = 100;
 

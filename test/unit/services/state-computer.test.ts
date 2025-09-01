@@ -7,7 +7,7 @@
  */
 
 import { StateComputer, ComputedState } from '../../../src/services/state-computer';
-import { ContextEntry } from '../../../src/types/engine-types';
+import { ContextEntry } from '../../../src/types/task-engine.types';
 
 describe('StateComputer - PRD Event Sourcing Implementation', () => {
   

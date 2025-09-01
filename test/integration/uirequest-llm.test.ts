@@ -10,7 +10,7 @@ import { LLMProvider } from '../../src/services/llm-provider';
 import { DefaultAgent } from '../../src/agents/DefaultAgent';
 import { AgentExecutor } from '../../src/services/agent-executor';
 import { BaseAgentRequest } from '../../src/types/base-agent-types';
-import { AgentRequest, TaskContext } from '../../src/types/engine-types';
+import { AgentRequest, TaskContext } from '../../src/types/task-engine.types';
 import { logger } from '../../src/utils/logger';
 
 // Load environment variables from .env file
@@ -46,7 +46,6 @@ describe('UIRequest LLM Integration Tests', () => {
         createdAt: new Date().toISOString(),
         currentState: {
           status: 'pending',
-          phase: 'initialization',
           completeness: 0,
           data: {
             taskId: 'test-task-123',
@@ -136,7 +135,6 @@ describe('UIRequest LLM Integration Tests', () => {
           createdAt: new Date().toISOString(),
           currentState: {
             status: 'pending',
-            phase: 'initialization',
             completeness: 0,
             data: {
               taskId: `test-task-${i}`,
@@ -203,7 +201,6 @@ describe('UIRequest LLM Integration Tests', () => {
         createdAt: new Date().toISOString(),
         currentState: {
           status: 'pending',
-          phase: 'data_gathering',
           completeness: 0,
           data: {
             taskId: 'test-task-data',
@@ -313,9 +310,9 @@ describe('UIRequest LLM Integration Tests', () => {
       // The extracted UIRequest should match what was in contextUpdate.data.uiRequest
       const extracted = response.uiRequests![0];
       expect(extracted.templateType).toBe('form');
-      expect(extracted.title).toBe('Test Form');
-      expect(extracted.instructions).toBe('Test instructions');
-      expect(extracted.fields).toEqual([
+      expect(extracted.semanticData?.title).toBe('Test Form');
+      expect(extracted.semanticData?.instructions).toBe('Test instructions');
+      expect(extracted.semanticData?.fields).toEqual([
         {
           name: 'test_field',
           type: 'text',

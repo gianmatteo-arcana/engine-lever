@@ -3,7 +3,7 @@
  * Central definition of all task status values used throughout the system
  */
 
-import { TaskStatus } from '../types/engine-types';
+import { TaskStatus } from '../types/task-engine.types';
 
 /**
  * Task Status Constants
