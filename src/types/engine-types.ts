@@ -44,7 +44,6 @@ export interface TaskContext {
  */
 export interface TaskState {
   status: 'pending' | 'in_progress' | 'waiting_for_input' | 'completed' | 'failed' | 'cancelled';
-  phase: string;
   completeness: number; // 0-100
   data: Record<string, any>;
   lastUpdated?: string;

@@ -160,7 +160,6 @@ export class TaskService {
         // Current state computed from history
         currentState: {
           status: TASK_STATUS.PENDING,
-          phase: 'initialization',
           completeness: 0,
           data: request.initialData || {}
         },
@@ -321,7 +320,6 @@ export class TaskService {
         // Current state from task record - no computation
         currentState: {
           status: taskData.status || 'pending',
-          phase: taskData.metadata?.phase || 'initialization',
           completeness: taskData.metadata?.completeness || 0,
           data: taskData.metadata || {}
         },
@@ -394,8 +392,7 @@ export class TaskService {
 
       logger.info('Task state updated', {
         contextId,
-        newStatus: newState.status,
-        newPhase: newState.phase
+        newStatus: newState.status
       });
 
     } catch (error) {
@@ -448,7 +445,6 @@ export class TaskService {
       const newState = StateComputer.computeState(context.history);
       await this.updateState(context.contextId, {
         status: newState.status as any,
-        phase: newState.phase,
         completeness: newState.completeness,
         data: newState.data
       });

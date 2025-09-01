@@ -6,7 +6,7 @@
  * and performance characteristics.
  */
 
-import { StateComputer, ComputedState } from '../services/state-computer';
+import { StateComputer } from '../services/state-computer';
 import { 
   TaskContext, 
   ContextEntry 
@@ -149,7 +149,7 @@ export class TaskInspector {
 
     return {
       status: context.currentState.status,
-      phase: context.currentState.phase,
+      phase: 'unknown', // Phase removed from TaskState, would need to compute from history
       completeness: context.currentState.completeness,
       totalEvents: context.history.length,
       activeAgents,
@@ -447,7 +447,7 @@ export class TaskInspector {
   /**
    * Helper: Assess data quality
    */
-  private assessDataQuality(state: ComputedState): number {
+  private assessDataQuality(state: any): number {
     const data = state.data;
     let score = 100;
 

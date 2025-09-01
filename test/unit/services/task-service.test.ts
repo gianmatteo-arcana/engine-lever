@@ -186,7 +186,6 @@ describe('TaskService - Universal Task Creation', () => {
           tenantId: request.tenantId,
           currentState: {
             status: 'pending',
-            phase: 'initialization',
             completeness: 0
           },
           templateSnapshot: undefined

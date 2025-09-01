@@ -336,7 +336,6 @@ router.get('/:contextId', requireAuth, async (req: AuthenticatedRequest, res) =>
     
     res.json({
       context,
-      currentPhase: context.currentState.phase,
       completeness: context.currentState.completeness,
       historyCount: context.history.length
     });
@@ -845,7 +844,6 @@ router.get('/:taskId/context/stream',
         initiatedByUserId: task.user_id,
         currentState: {
           status: task.status,
-          phase: task.metadata?.currentStep || 'initialization',
           completeness: task.metadata?.completeness || 0,
           data: task.metadata || {}
         },

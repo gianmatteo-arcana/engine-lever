@@ -84,7 +84,7 @@ export function toAgentTaskContext(engineContext: EngineTaskContext): AgentTaskC
     taskType: engineContext.taskTemplateId,
     status: engineContext.currentState.status === 'completed' ? 'completed' : 
             engineContext.currentState.status === 'failed' ? 'failed' : 'active',
-    currentPhase: engineContext.currentState.phase,
+    currentPhase: 'unknown', // Phase removed from TaskState
     completedPhases: engineContext.metadata?.completedPhases || [],
     sharedContext: {
       user: engineContext.metadata?.user || {},
@@ -192,7 +192,6 @@ export function createMinimalContext(overrides: Partial<AgentTaskContext> = {}):
     isComplete: overrides.isComplete || false,
     currentState: overrides.currentState || {
       status: 'in_progress',
-      phase: 'initial',
       completeness: 0,
       data: {}
     },

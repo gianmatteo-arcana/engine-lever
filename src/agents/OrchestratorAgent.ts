@@ -25,6 +25,8 @@ import { StateComputer } from '../services/state-computer';
 import { TaskService } from '../services/task-service';
 import { A2AEventBus } from '../services/a2a-event-bus';
 import { TASK_STATUS } from '../constants/task-status';
+// ExecutionPhase enum is available from '../constants/execution-phases' when needed
+// Currently using ExecutionPhase type from engine-types for compatibility
 import { logger } from '../utils/logger';
 import {
   TaskContext,
@@ -302,13 +304,8 @@ export class OrchestratorAgent extends BaseAgent {
       // Agents can query the history to find the responses they need
       
       // Update the current state to reflect we're resuming
-      // IMPORTANT: Status vs Phase distinction:
-      // - status: The EXECUTION STATE of the task (pending, in_progress, completed, etc.)
-      //   Uses TASK_STATUS enum constants for consistency
-      // - phase: The WORKFLOW STAGE we're in (initialization, discovery, execution, etc.)
-      //   Remains a string as phases are template-specific and describe business process steps
-      taskContext.currentState.status = TASK_STATUS.IN_PROGRESS; // Task execution state
-      taskContext.currentState.phase = 'execution'; // Workflow stage (not a status!)
+      // Set task status to in_progress (using TASK_STATUS enum)
+      taskContext.currentState.status = TASK_STATUS.IN_PROGRESS;
       
       // Clean up any stale execution plans to allow garbage collection
       // Agents should be ephemeral - created when needed, destroyed when done
@@ -323,7 +320,6 @@ export class OrchestratorAgent extends BaseAgent {
       logger.info('🔄 Resuming task orchestration after UI response', {
         taskId,
         currentStatus: taskContext.currentState.status,
-        currentPhase: taskContext.currentState.phase,
         historyLength: taskContext.history.length
       });
       
@@ -562,8 +558,6 @@ export class OrchestratorAgent extends BaseAgent {
       templateId: context.taskTemplateId,
       tenantId: context.tenantId,
       currentStatus: context.currentState.status,
-      currentPhase: context.currentState.phase,
-      isResuming: context.currentState.status === TASK_STATUS.IN_PROGRESS,
       hasMetadata: !!context.metadata,
       hasTaskDefinition: !!context.metadata?.taskDefinition,
       taskDefinitionKeys: context.metadata?.taskDefinition ? Object.keys(context.metadata.taskDefinition) : []
@@ -575,15 +569,17 @@ export class OrchestratorAgent extends BaseAgent {
     });
     
     try {
-      // CRITICAL FIX: Check if we're resuming or starting fresh
-      const isResuming = context.currentState.status === TASK_STATUS.IN_PROGRESS || 
-                        context.currentState.status === TASK_STATUS.WAITING_FOR_INPUT;
+      // Check if we're resuming based on AGENT STATE (execution plan exists)
+      // not TASK STATE. Agent state determines if we have work in progress.
+      const hasActiveExecution = this.activeExecutions.has(context.contextId);
+      const isResuming = hasActiveExecution;
       
       logger.info(isResuming ? 'Resuming task orchestration' : 'Starting universal task orchestration', {
         contextId: context.contextId,
         templateId: context.taskTemplateId,
         tenantId: context.tenantId,
-        currentPhase: context.currentState.phase,
+        hasActiveExecution,
+        taskStatus: context.currentState.status,
         historyLength: context.history.length,
         timestamp: new Date().toISOString()
       });
@@ -1180,9 +1176,27 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
   }
   
   /**
-   * Execute a phase of the plan with enhanced subtask coordination
-   * Each phase now contains specific subtasks with detailed instructions for agents
-   * This method coordinates the execution of subtasks and manages data flow between them
+   * Execute a phase of the execution plan
+   * 
+   * PHASES represent workflow steps in the orchestration, NOT task status.
+   * Each phase is a logical grouping of work that needs to be done:
+   * - May contain multiple subtasks to be executed
+   * - Can be run in parallel or sequence based on dependencies
+   * - Is tracked for resumption purposes
+   * - Has specific goals and success criteria
+   * 
+   * Common phases include:
+   * - Initialization: Setup and context gathering
+   * - Discovery: Finding required information
+   * - Data Collection: Gathering user/business data
+   * - Validation: Checking data completeness
+   * - Processing: Running business logic
+   * - Generation: Creating outputs
+   * - Completion: Finalizing results
+   * 
+   * @param context - The task context with full history
+   * @param phase - The execution phase containing subtasks to execute
+   * @returns Phase results including any UI requests generated
    */
   private async executePhase(
     context: TaskContext,
@@ -1214,8 +1228,8 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       // Execute subtasks (parallel or sequential based on phase configuration)
       if ((phase as any).parallel_execution) {
         // Execute all subtasks in parallel for efficiency
-        const subtaskPromises = subtasks.map((subtask: any) => 
-          this.executeSubtask(context, subtask, phase)
+        const subtaskPromises = subtasks.map((subtask: any, index: number) => 
+          this.executeSubtask(context, subtask, phase, {}, index)
         );
         const subtaskResults = await Promise.allSettled(subtaskPromises);
         
@@ -1253,9 +1267,10 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
         // Execute subtasks sequentially, passing data between them
         let phaseData = {};
         
-        for (const subtask of subtasks) {
+        for (let index = 0; index < subtasks.length; index++) {
+          const subtask = subtasks[index];
           try {
-            const subtaskResult = await this.executeSubtask(context, subtask, phase, phaseData);
+            const subtaskResult = await this.executeSubtask(context, subtask, phase, phaseData, index);
             results.push(subtaskResult);
             
             // Pass output data to next subtask
@@ -1374,7 +1389,8 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     context: TaskContext,
     subtask: any,
     phase: ExecutionPhase,
-    inputData: any = {}
+    inputData: any = {},
+    subtaskIndex: number = 0
   ): Promise<any> {
     logger.info('🎯 Executing subtask with specific agent instruction', {
       contextId: context.contextId,
@@ -1488,7 +1504,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
         agent_id: subtask.agent,
         subtask_name: subtask.description,
         instructions: subtask.specific_instruction || 'Execute subtask as defined',
-        subtask_index: 0 // We don't have the index here, using 0 as placeholder
+        subtask_index: subtaskIndex
       },
       `Delegating subtask "${subtask.description}" to ${subtask.agent}`
     );

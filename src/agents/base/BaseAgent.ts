@@ -1493,7 +1493,6 @@ Respond with a JSON array of field definitions.
         createdAt: new Date().toISOString(),
         currentState: {
           status: 'in_progress',
-          phase: 'data_collection',
           completeness: 50,
           data: {}
         },
