@@ -25,6 +25,8 @@
     "test:puppeteer": "node test-puppeteer-setup.js",
     "test:ca-search": "npx ts-node --project tsconfig.json ../tests/test-ca-search.ts",
     "test:ca-search:debug": "DEBUG_BROWSER=1 npx ts-node --project tsconfig.json ../tests/test-ca-search.ts",
+    "debug:network": "npx ts-node --project tsconfig.json src/debug-network-capture.ts",
+    "test:agent-lookup": "npx ts-node --project tsconfig.json ../tests/test-agent-business-lookup.ts",
     "db:check": "tsx scripts/check-database.ts",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
