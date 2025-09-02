@@ -239,7 +239,8 @@ describe('Business Tools', () => {
       expect(toolNames).toContain('businessAnalyzer');
       expect(toolNames).toContain('documentProcessor');
       expect(toolNames).toContain('complianceChecker');
-      expect(toolNames).toHaveLength(3);
+      expect(toolNames).toContain('californiaBusinessSearch');
+      expect(toolNames).toHaveLength(4);
     });
   });
 
