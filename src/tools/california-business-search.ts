@@ -48,9 +48,15 @@ export class CaliforniaBusinessSearchTool {
     
     try {
       // Create new Stagehand instance for this search
+      // Run headless by default, unless DEBUG_BROWSER env var is set
+      const headless = !process.env.DEBUG_BROWSER;
+      
       stagehand = new Stagehand({
         env: 'LOCAL',
-        verbose: 1
+        verbose: 1,
+        localBrowserLaunchOptions: {
+          headless
+        }
       });
       
       await stagehand.init();
@@ -178,9 +184,15 @@ export class CaliforniaBusinessSearchTool {
     let stagehand: Stagehand | null = null;
     
     try {
+      // Run headless by default, unless DEBUG_BROWSER env var is set
+      const headless = !process.env.DEBUG_BROWSER;
+      
       stagehand = new Stagehand({
         env: 'LOCAL',
-        verbose: 1
+        verbose: 1,
+        localBrowserLaunchOptions: {
+          headless
+        }
       });
       
       await stagehand.init();
