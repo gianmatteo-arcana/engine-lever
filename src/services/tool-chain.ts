@@ -9,13 +9,34 @@
 import { CredentialVault } from './credential-vault';
 import { californiaBusinessSearch } from '../tools/california-business-search';
 
+// Canonical entity types that we recognize across jurisdictions
+export enum EntityType {
+  LLC = 'LLC',
+  CORPORATION = 'Corporation',
+  LIMITED_PARTNERSHIP = 'Limited Partnership',
+  GENERAL_PARTNERSHIP = 'General Partnership',
+  SOLE_PROPRIETORSHIP = 'Sole Proprietorship',
+  LLP = 'LLP',
+  PROFESSIONAL_CORPORATION = 'Professional Corporation',
+  NONPROFIT = 'Nonprofit'
+}
+
+// Canonical statuses that we recognize across jurisdictions
+export enum EntityStatus {
+  ACTIVE = 'Active',
+  SUSPENDED = 'Suspended',
+  DISSOLVED = 'Dissolved',
+  MERGED = 'Merged',
+  CONVERTED = 'Converted'
+}
+
 export interface BusinessEntity {
   name: string;
   entityType: string;           // Raw entity type from source
-  entityTypeNormalized?: string; // Canonical form when recognizable (LLC, Corporation, etc.)
+  entityTypeNormalized?: EntityType; // Canonical form when recognizable
   formationDate: string;
   status: string;                // Raw status from source  
-  statusNormalized?: string;     // Canonical form when recognizable (Active, Suspended, Dissolved)
+  statusNormalized?: EntityStatus;   // Canonical form when recognizable
   ein?: string;
   jurisdiction?: string;         // Where the entity is registered
   address?: {
@@ -126,54 +147,54 @@ export class ToolChain {
    * Normalize entity types to canonical forms when recognizable
    * Returns undefined if the type doesn't match known patterns
    */
-  private normalizeEntityType(rawType: string): string | undefined {
+  private normalizeEntityType(rawType: string): EntityType | undefined {
     const typeUpper = rawType.toUpperCase();
     
     // Map common variations to canonical forms
     if (typeUpper.includes('LLC') || 
         typeUpper.includes('LIMITED LIABILITY COMPANY') ||
         typeUpper.includes('L.L.C.')) {
-      return 'LLC';
+      return EntityType.LLC;
     }
     
     if (typeUpper.includes('CORPORATION') || 
         typeUpper.includes('CORP') ||
         typeUpper.includes('INC') ||
         typeUpper.includes('INCORPORATED')) {
-      return 'Corporation';
+      return EntityType.CORPORATION;
     }
     
     if (typeUpper.includes('LIMITED PARTNERSHIP') ||
         typeUpper.includes('LP') ||
         typeUpper === 'L.P.') {
-      return 'Limited Partnership';
+      return EntityType.LIMITED_PARTNERSHIP;
     }
     
     if (typeUpper.includes('GENERAL PARTNERSHIP') ||
         typeUpper === 'PARTNERSHIP' ||
         typeUpper === 'GP') {
-      return 'General Partnership';
+      return EntityType.GENERAL_PARTNERSHIP;
     }
     
     if (typeUpper.includes('SOLE PROPRIETOR')) {
-      return 'Sole Proprietorship';
+      return EntityType.SOLE_PROPRIETORSHIP;
     }
     
     if (typeUpper.includes('LIMITED LIABILITY PARTNERSHIP') ||
         typeUpper === 'LLP') {
-      return 'LLP';
+      return EntityType.LLP;
     }
     
     if (typeUpper.includes('PROFESSIONAL CORPORATION') ||
         typeUpper === 'PC' ||
         typeUpper === 'P.C.') {
-      return 'Professional Corporation';
+      return EntityType.PROFESSIONAL_CORPORATION;
     }
     
     if (typeUpper.includes('NON-PROFIT') ||
         typeUpper.includes('NONPROFIT') ||
         typeUpper.includes('NOT-FOR-PROFIT')) {
-      return 'Nonprofit';
+      return EntityType.NONPROFIT;
     }
     
     // Return undefined for unrecognized types
@@ -185,19 +206,19 @@ export class ToolChain {
    * Normalize status to canonical forms when recognizable
    * Returns undefined if the status doesn't match known patterns
    */
-  private normalizeStatus(rawStatus: string): string | undefined {
+  private normalizeStatus(rawStatus: string): EntityStatus | undefined {
     const statusUpper = rawStatus.toUpperCase();
     
     if (statusUpper.includes('ACTIVE') || 
         statusUpper.includes('GOOD STANDING') ||
         statusUpper === 'CURRENT') {
-      return 'Active';
+      return EntityStatus.ACTIVE;
     }
     
     if (statusUpper.includes('SUSPENDED') ||
         statusUpper.includes('SUSPEND') ||
         statusUpper.includes('FORFEITED')) {
-      return 'Suspended';
+      return EntityStatus.SUSPENDED;
     }
     
     if (statusUpper.includes('DISSOLVED') ||
@@ -205,15 +226,15 @@ export class ToolChain {
         statusUpper.includes('CANCELLED') ||
         statusUpper.includes('TERMINATED') ||
         statusUpper.includes('INACTIVE')) {
-      return 'Dissolved';
+      return EntityStatus.DISSOLVED;
     }
     
     if (statusUpper.includes('MERGED')) {
-      return 'Merged';
+      return EntityStatus.MERGED;
     }
     
     if (statusUpper.includes('CONVERTED')) {
-      return 'Converted';
+      return EntityStatus.CONVERTED;
     }
     
     // Return undefined for unrecognized statuses

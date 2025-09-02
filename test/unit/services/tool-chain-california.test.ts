@@ -2,7 +2,7 @@
  * Unit tests for ToolChain California business search integration
  */
 
-import { ToolChain } from '../../../src/services/tool-chain';
+import { ToolChain, EntityType, EntityStatus } from '../../../src/services/tool-chain';
 import { californiaBusinessSearch } from '../../../src/tools/california-business-search';
 
 // Mock the california business search tool
@@ -53,14 +53,14 @@ describe('ToolChain - California Business Search Integration', () => {
       expect(results).toHaveLength(2);
       expect(results[0].name).toBe('Test Corp');
       expect(results[0].status).toBe('ACTIVE');
-      expect(results[0].statusNormalized).toBe('Active');
+      expect(results[0].statusNormalized).toBe(EntityStatus.ACTIVE);
       expect(results[0].entityType).toBe('CORPORATION');
-      expect(results[0].entityTypeNormalized).toBe('Corporation');
+      expect(results[0].entityTypeNormalized).toBe(EntityType.CORPORATION);
       expect(results[1].name).toBe('Test Corp LLC');
       expect(results[1].status).toBe('SUSPENDED');
-      expect(results[1].statusNormalized).toBe('Suspended');
+      expect(results[1].statusNormalized).toBe(EntityStatus.SUSPENDED);
       expect(results[1].entityType).toBe('LLC');
-      expect(results[1].entityTypeNormalized).toBe('LLC');
+      expect(results[1].entityTypeNormalized).toBe(EntityType.LLC);
     });
     
     it('should return empty array for non-California states', async () => {
@@ -80,12 +80,12 @@ describe('ToolChain - California Business Search Integration', () => {
     
     it('should normalize entity types correctly', async () => {
       const testCases = [
-        { input: 'LIMITED LIABILITY COMPANY', normalized: 'LLC' },
-        { input: 'LLC', normalized: 'LLC' },
-        { input: 'CORPORATION', normalized: 'Corporation' },
-        { input: 'CORP', normalized: 'Corporation' },
-        { input: 'GENERAL PARTNERSHIP', normalized: 'General Partnership' },
-        { input: 'SOLE PROPRIETORSHIP', normalized: 'Sole Proprietorship' },
+        { input: 'LIMITED LIABILITY COMPANY', normalized: EntityType.LLC },
+        { input: 'LLC', normalized: EntityType.LLC },
+        { input: 'CORPORATION', normalized: EntityType.CORPORATION },
+        { input: 'CORP', normalized: EntityType.CORPORATION },
+        { input: 'GENERAL PARTNERSHIP', normalized: EntityType.GENERAL_PARTNERSHIP },
+        { input: 'SOLE PROPRIETORSHIP', normalized: EntityType.SOLE_PROPRIETORSHIP },
         { input: 'ALIEN ENTITY TYPE', normalized: undefined } // unrecognized
       ];
       
@@ -110,10 +110,10 @@ describe('ToolChain - California Business Search Integration', () => {
     
     it('should normalize status correctly', async () => {
       const testCases = [
-        { input: 'ACTIVE', normalized: 'Active' },
-        { input: 'SUSPENDED', normalized: 'Suspended' },
-        { input: 'DISSOLVED', normalized: 'Dissolved' },
-        { input: 'CANCELED', normalized: 'Dissolved' },
+        { input: 'ACTIVE', normalized: EntityStatus.ACTIVE },
+        { input: 'SUSPENDED', normalized: EntityStatus.SUSPENDED },
+        { input: 'DISSOLVED', normalized: EntityStatus.DISSOLVED },
+        { input: 'CANCELED', normalized: EntityStatus.DISSOLVED },
         { input: 'UNKNOWN STATUS', normalized: undefined } // unrecognized
       ];
       
@@ -287,9 +287,9 @@ describe('ToolChain - California Business Search Integration', () => {
       expect(result).toBeDefined();
       expect(result?.name).toBe('Apple Inc.');
       expect(result?.status).toBe('ACTIVE');
-      expect(result?.statusNormalized).toBe('Active');
+      expect(result?.statusNormalized).toBe(EntityStatus.ACTIVE);
       expect(result?.entityType).toBe('CORPORATION');
-      expect(result?.entityTypeNormalized).toBe('Corporation');
+      expect(result?.entityTypeNormalized).toBe(EntityType.CORPORATION);
     });
     
     it('should return null when entity not found', async () => {
