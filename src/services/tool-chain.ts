@@ -7,6 +7,7 @@
  */
 
 import { CredentialVault } from './credential-vault';
+import { californiaBusinessSearch } from '../tools/california-business-search';
 
 export interface BusinessEntity {
   name: string;
@@ -50,38 +51,90 @@ export class ToolChain {
   /**
    * California Business Connect API
    * PRD lines 1247-1271
+   * 
+   * Uses real California Secretary of State data via Stagehand browser automation
    */
   async searchBusinessEntity(
     businessName: string,
     state: string = 'CA'
   ): Promise<BusinessEntity | null> {
     try {
-      // For MVP, return mock data
-      // TODO: Integrate with real CA SOS API
-      console.log(`[ToolChain] Searching for business: ${businessName} in ${state}`);
-      
-      // Mock response for demo
-      if (businessName.toLowerCase().includes('tech')) {
-        return {
-          name: businessName,
-          entityType: 'LLC',
-          formationDate: '2023-01-15',
-          status: 'Active',
-          ein: '12-3456789',
-          address: {
-            street: '123 Market St',
-            city: 'San Francisco',
-            state: 'CA',
-            zip: '94105'
-          }
-        };
+      // Only supports California searches
+      if (state !== 'CA') {
+        console.log(`[ToolChain] State ${state} not supported. Only California (CA) is available.`);
+        return null;
       }
       
-      return null;
+      console.log(`[ToolChain] Searching California Secretary of State for: ${businessName}`);
+      
+      // Use the real California business search tool
+      const results = await californiaBusinessSearch.searchByName(businessName);
+      
+      if (!results || results.length === 0) {
+        console.log(`[ToolChain] No results found for: ${businessName}`);
+        return null;
+      }
+      
+      // Return the first/best match, converting to our BusinessEntity format
+      const bestMatch = results[0];
+      
+      // Parse address from the detailed information
+      let address: BusinessEntity['address'] | undefined;
+      if (bestMatch.principalAddress) {
+        // Basic parsing - can be improved based on actual format
+        const addressParts = bestMatch.principalAddress.split(',').map(s => s.trim());
+        if (addressParts.length >= 3) {
+          const lastPart = addressParts[addressParts.length - 1];
+          const stateZipMatch = lastPart.match(/([A-Z]{2})\s+(\d{5}(?:-\d{4})?)/);
+          
+          address = {
+            street: addressParts.slice(0, -2).join(', '),
+            city: addressParts[addressParts.length - 2] || '',
+            state: stateZipMatch ? stateZipMatch[1] : 'CA',
+            zip: stateZipMatch ? stateZipMatch[2] : ''
+          };
+        }
+      }
+      
+      return {
+        name: bestMatch.entityName,
+        entityType: this.mapEntityType(bestMatch.entityType),
+        formationDate: bestMatch.registrationDate || '',
+        status: this.mapStatus(bestMatch.status),
+        ein: undefined, // California SOS doesn't provide EIN
+        address
+      };
+      
     } catch (error) {
-      console.error('CBC API error:', error);
+      console.error('[ToolChain] California business search error:', error);
       return null;
     }
+  }
+  
+  /**
+   * Map California entity types to our standardized types
+   */
+  private mapEntityType(caType: string): BusinessEntity['entityType'] {
+    const typeUpper = caType.toUpperCase();
+    if (typeUpper.includes('LLC')) return 'LLC';
+    if (typeUpper.includes('CORP')) return 'Corporation';
+    if (typeUpper.includes('PARTNERSHIP')) return 'Partnership';
+    if (typeUpper.includes('SOLE')) return 'Sole Proprietorship';
+    // Default to Corporation for unknown types
+    return 'Corporation';
+  }
+  
+  /**
+   * Map California status to our standardized status
+   */
+  private mapStatus(caStatus: string): BusinessEntity['status'] {
+    const statusUpper = caStatus.toUpperCase();
+    if (statusUpper.includes('ACTIVE')) return 'Active';
+    if (statusUpper.includes('SUSPENDED')) return 'Suspended';
+    if (statusUpper.includes('DISSOLVED')) return 'Dissolved';
+    if (statusUpper.includes('CANCELED')) return 'Dissolved';
+    // Default to Active for unknown statuses
+    return 'Active';
   }
   
   /**
@@ -184,13 +237,128 @@ export class ToolChain {
   getAvailableTools(): string {
     return `
 Available Tools:
-- searchBusinessEntity(businessName, state): Search CA Secretary of State
-- getQuickBooksData(tenantId, dataType): Retrieve QuickBooks data
-- processPayment(amount, description, tenantId): Process payment via Stripe
+- searchBusinessEntity(businessName, state): Search California Secretary of State for business entities
+  * Returns: Business entity details including name, type, status, formation date, and address
+  * State: Only 'CA' (California) is supported
+  * Data source: Real-time data from bizfileonline.sos.ca.gov
+  * Details available: Entity name, number, type, status, registration date, agent info, addresses, officers, filing history
+  
+- getQuickBooksData(tenantId, dataType): Retrieve QuickBooks data (requires credentials)
+- processPayment(amount, description, tenantId): Process payment via Stripe (requires credentials)
 - validateEmail(email): Validate email format
-- validateEIN(ein): Validate EIN format
-- extractGoogleOAuthData(profile): Extract user data from OAuth
+- validateEIN(ein): Validate EIN format (XX-XXXXXXX)
+- extractGoogleOAuthData(profile): Extract user data from OAuth profile
 `;
+  }
+  
+  /**
+   * Get structured tool registry for programmatic discovery
+   */
+  getToolRegistry() {
+    return {
+      searchBusinessEntity: {
+        name: 'searchBusinessEntity',
+        description: 'Search California Secretary of State for registered business entities',
+        category: 'public_records',
+        parameters: {
+          businessName: {
+            type: 'string',
+            required: true,
+            description: 'Name of the business to search for'
+          },
+          state: {
+            type: 'string',
+            required: false,
+            default: 'CA',
+            enum: ['CA'],
+            description: 'State to search in (only California supported)'
+          }
+        },
+        returns: {
+          type: 'BusinessEntity',
+          nullable: true,
+          description: 'Business entity details or null if not found'
+        },
+        capabilities: [
+          'real_time_data',
+          'california_only',
+          'public_records',
+          'no_authentication_required'
+        ],
+        dataSource: 'https://bizfileonline.sos.ca.gov',
+        limitations: [
+          'California entities only',
+          'Does not provide EIN',
+          'May have rate limits',
+          'Requires browser automation (slower than API)'
+        ]
+      },
+      getQuickBooksData: {
+        name: 'getQuickBooksData',
+        description: 'Retrieve financial data from QuickBooks',
+        category: 'financial',
+        requiresCredentials: true,
+        parameters: {
+          tenantId: {
+            type: 'string',
+            required: true,
+            description: 'Tenant identifier'
+          },
+          dataType: {
+            type: 'string',
+            required: true,
+            description: 'Type of data to retrieve'
+          }
+        }
+      },
+      processPayment: {
+        name: 'processPayment',
+        description: 'Process payments via Stripe',
+        category: 'payments',
+        requiresCredentials: true,
+        parameters: {
+          amount: {
+            type: 'number',
+            required: true,
+            description: 'Payment amount in cents'
+          },
+          description: {
+            type: 'string',
+            required: true,
+            description: 'Payment description'
+          },
+          tenantId: {
+            type: 'string',
+            required: true,
+            description: 'Tenant identifier'
+          }
+        }
+      },
+      validateEmail: {
+        name: 'validateEmail',
+        description: 'Validate email address format',
+        category: 'validation',
+        parameters: {
+          email: {
+            type: 'string',
+            required: true,
+            description: 'Email address to validate'
+          }
+        }
+      },
+      validateEIN: {
+        name: 'validateEIN',
+        description: 'Validate Employer Identification Number format',
+        category: 'validation',
+        parameters: {
+          ein: {
+            type: 'string',
+            required: true,
+            description: 'EIN to validate (format: XX-XXXXXXX)'
+          }
+        }
+      }
+    };
   }
   
   /**

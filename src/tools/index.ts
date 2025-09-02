@@ -1,4 +1,8 @@
 import { logger } from '../utils/logger';
+import { californiaBusinessSearch, CaliforniaBusinessSearchTool } from './california-business-search';
+
+// Re-export for external use
+export { CaliforniaBusinessSearchTool, californiaBusinessSearch };
 
 // Business Analysis Tools
 export const businessAnalyzer = {
@@ -190,7 +194,8 @@ export const complianceChecker = {
 export const allTools = {
   businessAnalyzer,
   documentProcessor,
-  complianceChecker
+  complianceChecker,
+  californiaBusinessSearch
 };
 
 export default allTools;
