@@ -10,12 +10,27 @@ agent:
   
   # Agent mission - focused on knowledge extraction and persistence
   mission: |
-    Analyze completed task contexts to extract reusable business knowledge.
-    Identify facts with high confidence from verified sources.
-    Persist learned preferences and behavioral patterns.
-    Ensure all extracted knowledge is traceable to its source.
+    You are the Knowledge Extraction Agent for SmallBizAlly.
     
-    Key outputs: business facts, learned preferences, relationship mappings, pattern recognition.
+    Your mission: Analyze completed task contexts to extract reusable business knowledge.
+    
+    Core responsibilities:
+    1. Extract verified business facts from task data
+    2. Identify user preferences and communication patterns
+    3. Recognize behavioral patterns (after multiple observations)
+    4. Map business relationships (vendors, advisors, partners)
+    5. Persist all knowledge with appropriate confidence scores
+    
+    CRITICAL INSTRUCTIONS:
+    - Only extract knowledge with confidence >= 0.6
+    - Prefer verified sources over user-provided data
+    - Use the persistKnowledge tool to save extracted knowledge
+    - Each fact must include: businessId, knowledgeType, category, fieldName, fieldValue, confidence
+    - Add TTL (expiresAt) for temporary facts like employee count
+    - Include verificationMethod when known
+    
+    IMPORTANT: You must call the persistKnowledge tool with properly formatted ExtractedKnowledge items.
+    The tool expects an array of objects with specific fields - follow the schema exactly.
     
   # A2A Protocol Configuration
   a2a:
@@ -181,6 +196,8 @@ examples:
   - instruction: "Extract knowledge from completed onboarding task"
     input:
       taskContext:
+        contextId: "ctx-12345"
+        businessId: "biz-98765"
         taskTemplateId: "onboarding"
         currentState:
           status: "completed"
@@ -201,6 +218,78 @@ examples:
       verificationSources:
         ein: "irs_database"
         entityType: "ca_sos_records"
+    
+    analysis: |
+      First, I'll analyze the completed task data to extract high-confidence business knowledge.
+      
+      From the onboarding data, I can extract:
+      1. Business identity facts (name, EIN, entity type) - verified through IRS and CA SOS
+      2. Contact information (primary email)
+      3. Operational details (employee count, industry)
+      
+      Now I'll format these as ExtractedKnowledge items and persist them using the tool.
+    
+    toolCall:
+      tool: "persistKnowledge"
+      parameters:
+        knowledge:
+          - businessId: "biz-98765"
+            knowledgeType: "profile"
+            category: "identity"
+            fieldName: "business.name"
+            fieldValue: "TechStartup Inc"
+            confidence: 1.0
+            sourceTaskId: "ctx-12345"
+            verificationMethod: "user_provided"
+          - businessId: "biz-98765"
+            knowledgeType: "profile"
+            category: "identity"
+            fieldName: "business.ein"
+            fieldValue: "87-1234567"
+            confidence: 0.95
+            sourceTaskId: "ctx-12345"
+            verificationMethod: "api_verified"
+          - businessId: "biz-98765"
+            knowledgeType: "profile"
+            category: "structure"
+            fieldName: "business.entityType"
+            fieldValue: "Corporation"
+            confidence: 0.9
+            sourceTaskId: "ctx-12345"
+            verificationMethod: "public_records"
+          - businessId: "biz-98765"
+            knowledgeType: "profile"
+            category: "structure"
+            fieldName: "business.formationDate"
+            fieldValue: "2023-01-15"
+            confidence: 0.9
+            sourceTaskId: "ctx-12345"
+            verificationMethod: "public_records"
+          - businessId: "biz-98765"
+            knowledgeType: "profile"
+            category: "operations"
+            fieldName: "profile.employees"
+            fieldValue: 12
+            confidence: 0.8
+            sourceTaskId: "ctx-12345"
+            verificationMethod: "user_provided"
+            expiresAt: "2026-09-02T00:00:00Z"
+          - businessId: "biz-98765"
+            knowledgeType: "profile"
+            category: "operations"
+            fieldName: "profile.industry"
+            fieldValue: "Software Development"
+            confidence: 0.85
+            sourceTaskId: "ctx-12345"
+            verificationMethod: "user_provided"
+          - businessId: "biz-98765"
+            knowledgeType: "profile"
+            category: "contact_info"
+            fieldName: "contact.email"
+            fieldValue: "john@techstartup.com"
+            confidence: 1.0
+            sourceTaskId: "ctx-12345"
+            verificationMethod: "user_provided"
     
     expectedOutput:
       status: "completed"

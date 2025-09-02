@@ -553,6 +553,53 @@ Available Tools:
           'May have incomplete data for new businesses'
         ]
       },
+      persistKnowledge: {
+        name: 'persistKnowledge',
+        description: 'Persist extracted business knowledge (RESTRICTED: knowledge_extraction_agent only)',
+        category: 'knowledge_base',
+        restricted: true,
+        parameters: {
+          knowledge: {
+            type: 'array',
+            required: true,
+            description: 'Array of ExtractedKnowledge items to persist',
+            items: {
+              type: 'object',
+              properties: {
+                businessId: { type: 'string', required: true },
+                knowledgeType: { 
+                  type: 'string', 
+                  enum: ['profile', 'preference', 'pattern', 'relationship', 'compliance'],
+                  required: true 
+                },
+                category: { 
+                  type: 'string',
+                  enum: ['identity', 'structure', 'contact_info', 'operations', 'financial', 'compliance_status', 'communication', 'decision_making', 'documentation'],
+                  required: true 
+                },
+                fieldName: { type: 'string', required: true },
+                fieldValue: { type: 'any', required: true },
+                confidence: { type: 'number', minimum: 0, maximum: 1, required: true },
+                sourceTaskId: { type: 'string' },
+                verificationMethod: { 
+                  type: 'string',
+                  enum: ['user_provided', 'public_records', 'api_verified', 'inferred', 'document_upload']
+                },
+                expiresAt: { type: 'string', format: 'date-time' }
+              }
+            }
+          }
+        },
+        returns: {
+          type: 'object',
+          description: 'Confirmation of persisted knowledge items'
+        },
+        capabilities: [
+          'write_access',
+          'knowledge_persistence',
+          'restricted_access'
+        ]
+      },
       getQuickBooksData: {
         name: 'getQuickBooksData',
         description: 'Retrieve financial data from QuickBooks',
@@ -764,6 +811,34 @@ Available Tools:
             data: userData,
             executionTime: Date.now()
           };
+        }
+
+        case 'persistKnowledge': {
+          // Restricted tool - only for knowledge_extraction_agent
+          try {
+            const knowledge = params.knowledge as any[];
+            if (!Array.isArray(knowledge)) {
+              return {
+                success: false,
+                error: 'Knowledge must be an array of ExtractedKnowledge items'
+              };
+            }
+            
+            await this.businessMemory.persistKnowledge(knowledge);
+            return {
+              success: true,
+              data: {
+                persisted: knowledge.length,
+                message: `Successfully persisted ${knowledge.length} knowledge items`
+              },
+              executionTime: Date.now()
+            };
+          } catch (error) {
+            return {
+              success: false,
+              error: error instanceof Error ? error.message : 'Failed to persist knowledge'
+            };
+          }
         }
 
         case 'getQuickBooksData': {
