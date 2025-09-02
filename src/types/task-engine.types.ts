@@ -18,6 +18,7 @@ export interface TaskContext {
   contextId: string;
   taskTemplateId: string;
   tenantId: string;
+  businessId?: string; // Optional business ID for knowledge extraction
   createdAt: string; // ISO 8601
   currentState: TaskState;
   history: ContextEntry[];

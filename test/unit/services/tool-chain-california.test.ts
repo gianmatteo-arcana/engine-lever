@@ -247,7 +247,7 @@ describe('ToolChain - California Business Search Integration', () => {
   
   describe('Tool Discovery', () => {
     it('should provide detailed tool description for LLMs', () => {
-      const tools = toolChain.getAvailableTools();
+      const tools = toolChain.getAvailableToolsDescription();
       
       expect(tools).toContain('searchBusinessEntity');
       expect(tools).toContain('California Secretary of State');
@@ -256,7 +256,7 @@ describe('ToolChain - California Business Search Integration', () => {
     });
     
     it('should list all available data fields', () => {
-      const tools = toolChain.getAvailableTools();
+      const tools = toolChain.getAvailableToolsDescription();
       
       expect(tools).toContain('Entity name');
       expect(tools).toContain('number');

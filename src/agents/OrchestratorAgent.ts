@@ -28,6 +28,7 @@ import { TASK_STATUS } from '../constants/task-status';
 // ExecutionPhase enum is available from '../constants/execution-phases' when needed
 // Currently using ExecutionPhase type from engine-types for compatibility
 import { logger } from '../utils/logger';
+import { ToolChain } from '../services/tool-chain';
 import {
   TaskContext,
   ExecutionPlan,
@@ -155,6 +156,7 @@ export class OrchestratorAgent extends BaseAgent {
   private configManager: ConfigurationManager;
   private dbService: DatabaseService;
   private stateComputer: StateComputer;
+  protected toolChain: ToolChain; // Changed to protected to match BaseAgent
   
   // Agent registry and coordination
   private agentRegistry: Map<string, AgentCapability>;
@@ -191,6 +193,7 @@ export class OrchestratorAgent extends BaseAgent {
       this.configManager = null as any;
       this.dbService = null as any;
       this.stateComputer = null as any;
+      this.toolChain = new ToolChain();
       logger.info('✅ Lazy initialization configured');
       
       logger.info('📋 Agent registry will be initialized dynamically from YAML on first use');
@@ -905,8 +908,41 @@ export class OrchestratorAgent extends BaseAgent {
   private async createExecutionPlan(context: TaskContext): Promise<ExecutionPlan> {
     logger.info('🧠 createExecutionPlan() starting', {
       contextId: context.contextId,
-      hasAgentRegistry: this.agentRegistry.size > 0
+      hasAgentRegistry: this.agentRegistry.size > 0,
+      businessId: context.businessId
     });
+    
+    // STEP 1: Search business memory to enrich context with prior knowledge
+    if (context.businessId && context.businessId !== 'system') {
+      try {
+        logger.info('[Orchestrator] Searching business memory for context enrichment', {
+          businessId: context.businessId
+        });
+        
+        const knowledge = await this.toolChain.searchBusinessMemory(
+          context.businessId,
+          undefined, // Get all categories
+          0.7 // Minimum confidence threshold
+        );
+        
+        if (knowledge && knowledge.metadata.factCount > 0) {
+          logger.info('[Orchestrator] Found business knowledge', {
+            businessId: context.businessId,
+            factCount: knowledge.metadata.factCount,
+            averageConfidence: knowledge.metadata.averageConfidence
+          });
+          
+          // Inject knowledge into context for agents to use
+          context.metadata = context.metadata || {};
+          context.metadata.businessKnowledge = knowledge;
+        }
+      } catch (error) {
+        logger.warn('[Orchestrator] Failed to search business memory', {
+          businessId: context.businessId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
     
     // CRITICAL: Check for missing business data using toolchain-first approach
     const taskType = context.currentState?.data?.taskType || 'general';
@@ -2044,9 +2080,65 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       reasoning: 'All phases executed successfully'
     });
     
+    // Trigger knowledge extraction for completed task (fire and forget)
+    // This happens asynchronously after task completion
+    if (context.businessId && context.businessId !== 'system') {
+      this.triggerKnowledgeExtraction(context);
+    }
+    
     // Clean up
     this.activeExecutions.delete(context.contextId);
     this.pendingUIRequests.delete(context.contextId);
+  }
+  
+  /**
+   * Trigger knowledge extraction for a completed task
+   * Runs asynchronously without blocking task completion
+   */
+  private async triggerKnowledgeExtraction(context: TaskContext): Promise<void> {
+    try {
+      logger.info('[Orchestrator] Triggering knowledge extraction', {
+        contextId: context.contextId,
+        businessId: context.businessId,
+        taskTemplateId: context.taskTemplateId
+      });
+      
+      // Import dynamically to avoid circular dependencies
+      const { KnowledgeExtractionAgent } = await import('./KnowledgeExtractionAgent');
+      
+      // Create knowledge extraction agent
+      const extractionAgent = new KnowledgeExtractionAgent(
+        context.businessId!,
+        context.contextId
+      );
+      
+      // Extract knowledge asynchronously (don't await)
+      extractionAgent.extractKnowledge({
+        contextId: context.contextId,
+        taskTemplateId: context.taskTemplateId,
+        businessId: context.businessId!,
+        completedTaskData: context.currentState.data
+      }).then(result => {
+        logger.info('[Orchestrator] Knowledge extraction completed', {
+          contextId: context.contextId,
+          status: result.status,
+          extractedCount: result.extractedCount,
+          reasoning: result.reasoning
+        });
+      }).catch(error => {
+        logger.error('[Orchestrator] Knowledge extraction failed', {
+          contextId: context.contextId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+      
+    } catch (error) {
+      // Log error but don't fail the task completion
+      logger.error('[Orchestrator] Failed to trigger knowledge extraction', {
+        contextId: context.contextId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
   }
   
   /**
@@ -2661,6 +2753,7 @@ Respond with JSON only:
       contextId: taskId,
       taskTemplateId: state.metadata?.templateId || 'unknown',
       tenantId: state.metadata?.userId || 'system',
+      businessId: state.metadata?.businessId || state.data?.businessId,
       createdAt: state.metadata?.createdAt || new Date().toISOString(),
       currentState: state,
       history: state.history || [],
@@ -2677,6 +2770,7 @@ Respond with JSON only:
       contextId: `ctx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       taskTemplateId: taskRequest.templateId,
       tenantId: taskRequest.userId,
+      businessId: taskRequest.businessId,
       createdAt: new Date().toISOString(),
       currentState: {
         status: 'pending',

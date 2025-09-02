@@ -24,6 +24,21 @@ agent:
     - RESILIENT: Gracefully degrade when automation unavailable
     - TRACEABLE: Record everything for complete audit trail
     - DECLARATIVE: Follow templates, never hardcode business logic
+    - MEMORY-AWARE: Always search business memory before planning
+    - LEARNING: Always extract knowledge after task completion
+    
+    EXECUTION PLAN REQUIREMENTS:
+    1. BEFORE creating the plan: Search business memory using searchBusinessMemory tool
+       - Use any found knowledge to enrich the task context
+       - Pre-fill known information to avoid redundant questions
+       - Consider past preferences and patterns in planning
+    
+    2. ALWAYS include a final "Knowledge Extraction" phase in EVERY execution plan:
+       - Phase name: "Knowledge Extraction"
+       - Agent: "knowledge_extraction_agent"
+       - Purpose: Extract and persist learnings from completed task
+       - This phase runs after all other work is complete
+       - Mark as non-blocking (doesn't affect task completion)
   
   agent_card:
     skills:
@@ -55,6 +70,7 @@ tools:
     - payment_processor_agent
     - communication_agent
     - monitoring_agent
+    - knowledge_extraction_agent
 
 schemas:
   output:
@@ -115,6 +131,7 @@ examples:
       taskTemplate: "onboarding"
       currentState: 
         status: "pending"
+      businessId: "biz_123"
     output:
       status: "completed"
       executionPlan:
@@ -128,12 +145,19 @@ examples:
           - id: "profile_collection"
             name: "Profile Collection"
             agents: ["profile_collector_agent"]
+          - id: "knowledge_extraction"
+            name: "Knowledge Extraction"
+            agents: ["knowledge_extraction_agent"]
+            dependencies: ["authentication", "business_discovery", "profile_collection"]
+            nonBlocking: true
       contextUpdate:
         operation: "execution_plan_created"
         data:
           planId: "plan_123"
-          phaseCount: 3
-        reasoning: "Created 3-phase execution plan for user onboarding"
+          phaseCount: 4
+          businessMemorySearched: true
+          foundKnowledge: 12
+        reasoning: "Searched business memory (found 12 facts). Created 4-phase execution plan including knowledge extraction."
         confidence: 0.95
       confidence: 0.95
 

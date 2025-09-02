@@ -9,6 +9,7 @@
 import { CredentialVault } from './credential-vault';
 import { californiaBusinessSearch } from '../tools/california-business-search';
 import { BusinessMemoryTool, BusinessMemorySearchParams, BusinessKnowledge } from '../tools/business-memory';
+import type { Tool, ToolExecutionResult, ToolChain as IToolChain } from '../toolchain/ToolChain';
 
 // Canonical business entity types that we recognize across jurisdictions
 export enum BusinessEntityType {
@@ -65,8 +66,9 @@ export class NeedCredentialsError extends Error {
 /**
  * ToolChain provides all external integrations
  * Exactly matches PRD lines 1244-1330
+ * Implements IToolChain interface for agent compatibility
  */
-export class ToolChain {
+export class ToolChain implements IToolChain {
   private credentials: CredentialVault;
   private businessMemory: BusinessMemoryTool;
   
@@ -403,8 +405,10 @@ export class ToolChain {
   
   /**
    * Get list of available tools for LLM context
+   * NOTE: This returns a string for backward compatibility
+   * Use getAvailableTools() for structured data
    */
-  getAvailableTools(): string {
+  getAvailableToolsDescription(): string {
     return `
 Available Tools:
 - searchBusinessEntity(businessName, state): Search California Secretary of State for business entities by name
@@ -417,6 +421,12 @@ Available Tools:
   * Returns: Single business entity or null if not found
   * State: Only 'CA' (California) is supported
   * Use when you have the exact entity number
+
+- searchBusinessMemory(businessId, categories?, minConfidence?): Search stored business knowledge
+  * Returns: BusinessKnowledge with facts, preferences, patterns, relationships
+  * Categories: identity, structure, contact_info, operations, financial, etc.
+  * Default confidence: 0.7
+  * Use to retrieve learned information about a business
   
 - getQuickBooksData(tenantId, dataType): Retrieve QuickBooks data (requires credentials)
 - processPayment(amount, description, tenantId): Process payment via Stripe (requires credentials)
@@ -429,7 +439,7 @@ Available Tools:
   /**
    * Get structured tool registry for programmatic discovery
    */
-  getToolRegistry() {
+  getToolRegistry(): Record<string, any> {
     return {
       searchBusinessEntity: {
         name: 'searchBusinessEntity',
@@ -502,6 +512,45 @@ Available Tools:
           'California entities only',
           'Requires exact entity number',
           'Does not provide EIN'
+        ]
+      },
+      searchBusinessMemory: {
+        name: 'searchBusinessMemory',
+        description: 'Search stored business knowledge from previous interactions',
+        category: 'knowledge_base',
+        parameters: {
+          businessId: {
+            type: 'string',
+            required: true,
+            description: 'The business ID to search knowledge for'
+          },
+          categories: {
+            type: 'array',
+            required: false,
+            description: 'Optional categories to filter by (identity, structure, contact_info, etc.)'
+          },
+          minConfidence: {
+            type: 'number',
+            required: false,
+            default: 0.7,
+            description: 'Minimum confidence threshold (0.0 to 1.0)'
+          }
+        },
+        returns: {
+          type: 'BusinessKnowledge',
+          description: 'Structured knowledge including facts, preferences, patterns, and relationships'
+        },
+        capabilities: [
+          'read_only',
+          'knowledge_retrieval',
+          'progressive_learning',
+          'no_authentication_required'
+        ],
+        dataSource: 'business_knowledge table',
+        limitations: [
+          'Read-only access',
+          'Only returns knowledge above confidence threshold',
+          'May have incomplete data for new businesses'
         ]
       },
       getQuickBooksData: {
@@ -641,4 +690,191 @@ Available Tools:
    * TODO: Migrate to MCP Server
    * This will become: await mcp.call('searchBusinessEntity', params)
    */
+
+  // ======================================================================
+  // IToolChain Interface Implementation for Agent Compatibility
+  // ======================================================================
+
+  /**
+   * Execute a tool by ID with given parameters
+   * This is the main entry point for agents to call tools during LLM reasoning
+   */
+  async executeTool(toolId: string, params: Record<string, unknown>): Promise<ToolExecutionResult> {
+    try {
+      switch (toolId) {
+        case 'searchBusinessEntity': {
+          const entities = await this.searchBusinessEntity(
+            params.businessName as string,
+            params.state as string || 'CA'
+          );
+          return {
+            success: true,
+            data: entities,
+            executionTime: Date.now()
+          };
+        }
+
+        case 'searchByEntityNumber': {
+          const entity = await this.searchByEntityNumber(
+            params.entityNumber as string,
+            params.state as string || 'CA'
+          );
+          return {
+            success: true,
+            data: entity,
+            executionTime: Date.now()
+          };
+        }
+
+        case 'searchBusinessMemory': {
+          const knowledge = await this.searchBusinessMemory(
+            params.businessId as string,
+            params.categories as string[] | undefined,
+            params.minConfidence as number || 0.7
+          );
+          return {
+            success: true,
+            data: knowledge,
+            executionTime: Date.now()
+          };
+        }
+
+        case 'validateEmail': {
+          const emailValid = this.validateEmail(params.email as string);
+          return {
+            success: true,
+            data: { valid: emailValid },
+            executionTime: Date.now()
+          };
+        }
+
+        case 'validateEIN': {
+          const einValid = this.validateEIN(params.ein as string);
+          return {
+            success: true,
+            data: { valid: einValid },
+            executionTime: Date.now()
+          };
+        }
+
+        case 'extractGoogleOAuthData': {
+          const userData = this.extractGoogleOAuthData(params.profile as any);
+          return {
+            success: true,
+            data: userData,
+            executionTime: Date.now()
+          };
+        }
+
+        case 'getQuickBooksData': {
+          try {
+            const qbData = await this.getQuickBooksData(
+              params.tenantId as string,
+              params.dataType as string
+            );
+            return {
+              success: true,
+              data: qbData,
+              executionTime: Date.now()
+            };
+          } catch (error) {
+            if (error instanceof NeedCredentialsError) {
+              return {
+                success: false,
+                error: error.message,
+                metadata: { requiresCredentials: true }
+              };
+            }
+            throw error;
+          }
+        }
+
+        case 'processPayment': {
+          try {
+            const payment = await this.processPayment(
+              params.amount as number,
+              params.description as string,
+              params.tenantId as string
+            );
+            return {
+              success: true,
+              data: payment,
+              executionTime: Date.now()
+            };
+          } catch (error) {
+            if (error instanceof NeedCredentialsError) {
+              return {
+                success: false,
+                error: error.message,
+                metadata: { requiresCredentials: true }
+              };
+            }
+            throw error;
+          }
+        }
+
+        default:
+          return {
+            success: false,
+            error: `Unknown tool: ${toolId}`
+          };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Tool execution failed'
+      };
+    }
+  }
+
+  /**
+   * Get all available tools as structured data
+   */
+  async getAvailableTools(): Promise<Tool[]> {
+    const registry = this.getToolRegistry();
+    return Object.entries(registry).map(([id, tool]) => ({
+      id,
+      name: tool.name,
+      description: tool.description,
+      version: '1.0.0',
+      capabilities: tool.capabilities || [],
+      parameters: tool.parameters
+    }));
+  }
+
+  /**
+   * Find tools by capability
+   */
+  async findToolsByCapability(capability: string): Promise<Tool[]> {
+    const allTools = await this.getAvailableTools();
+    return allTools.filter(tool => 
+      tool.capabilities.includes(capability)
+    );
+  }
+
+  /**
+   * Get information about a specific tool
+   */
+  async getToolInfo(toolId: string): Promise<Tool | null> {
+    const registry = this.getToolRegistry();
+    const tool = registry[toolId];
+    if (!tool) return null;
+
+    return {
+      id: toolId,
+      name: tool.name,
+      description: tool.description,
+      version: '1.0.0',
+      capabilities: tool.capabilities || [],
+      parameters: tool.parameters
+    };
+  }
+
+  /**
+   * Check if a tool is available
+   */
+  async isToolAvailable(toolId: string): Promise<boolean> {
+    const registry = this.getToolRegistry();
+    return toolId in registry;
+  }
 }
