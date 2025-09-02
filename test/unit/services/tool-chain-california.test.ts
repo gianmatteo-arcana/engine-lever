@@ -26,7 +26,7 @@ describe('ToolChain - California Business Search Integration', () => {
   });
   
   describe('searchBusinessEntity', () => {
-    it('should use California business search tool for CA searches', async () => {
+    it('should return all matches from California business search', async () => {
       const mockResults = [
         {
           entityName: 'Test Corp',
@@ -35,44 +35,58 @@ describe('ToolChain - California Business Search Integration', () => {
           entityType: 'CORPORATION',
           registrationDate: '2020-01-01',
           principalAddress: '123 Main St, Suite 100, San Francisco, CA 94105'
+        },
+        {
+          entityName: 'Test Corp LLC',
+          entityNumber: '789012',
+          status: 'SUSPENDED',
+          entityType: 'LLC',
+          registrationDate: '2019-05-15'
         }
       ];
       
       (californiaBusinessSearch.searchByName as jest.Mock).mockResolvedValue(mockResults);
       
-      const result = await toolChain.searchBusinessEntity('Test Corp', 'CA');
+      const results = await toolChain.searchBusinessEntity('Test Corp', 'CA');
       
       expect(californiaBusinessSearch.searchByName).toHaveBeenCalledWith('Test Corp');
-      expect(result).toBeDefined();
-      expect(result?.name).toBe('Test Corp');
-      expect(result?.status).toBe('Active');
-      expect(result?.entityType).toBe('Corporation');
+      expect(results).toHaveLength(2);
+      expect(results[0].name).toBe('Test Corp');
+      expect(results[0].status).toBe('ACTIVE');
+      expect(results[0].statusNormalized).toBe('Active');
+      expect(results[0].entityType).toBe('CORPORATION');
+      expect(results[0].entityTypeNormalized).toBe('Corporation');
+      expect(results[1].name).toBe('Test Corp LLC');
+      expect(results[1].status).toBe('SUSPENDED');
+      expect(results[1].statusNormalized).toBe('Suspended');
+      expect(results[1].entityType).toBe('LLC');
+      expect(results[1].entityTypeNormalized).toBe('LLC');
     });
     
-    it('should return null for non-California states', async () => {
-      const result = await toolChain.searchBusinessEntity('Test Corp', 'NY');
+    it('should return empty array for non-California states', async () => {
+      const results = await toolChain.searchBusinessEntity('Test Corp', 'NY');
       
-      expect(result).toBeNull();
+      expect(results).toEqual([]);
       expect(californiaBusinessSearch.searchByName).not.toHaveBeenCalled();
     });
     
-    it('should return null when no results found', async () => {
+    it('should return empty array when no results found', async () => {
       (californiaBusinessSearch.searchByName as jest.Mock).mockResolvedValue([]);
       
-      const result = await toolChain.searchBusinessEntity('Nonexistent Company', 'CA');
+      const results = await toolChain.searchBusinessEntity('Nonexistent Company', 'CA');
       
-      expect(result).toBeNull();
+      expect(results).toEqual([]);
     });
     
-    it('should map entity types correctly', async () => {
+    it('should normalize entity types correctly', async () => {
       const testCases = [
-        { input: 'LIMITED LIABILITY COMPANY', expected: 'LLC' },
-        { input: 'LLC', expected: 'LLC' },
-        { input: 'CORPORATION', expected: 'Corporation' },
-        { input: 'CORP', expected: 'Corporation' },
-        { input: 'PARTNERSHIP', expected: 'Partnership' },
-        { input: 'SOLE PROPRIETORSHIP', expected: 'Sole Proprietorship' },
-        { input: 'UNKNOWN TYPE', expected: 'Corporation' } // default
+        { input: 'LIMITED LIABILITY COMPANY', normalized: 'LLC' },
+        { input: 'LLC', normalized: 'LLC' },
+        { input: 'CORPORATION', normalized: 'Corporation' },
+        { input: 'CORP', normalized: 'Corporation' },
+        { input: 'GENERAL PARTNERSHIP', normalized: 'General Partnership' },
+        { input: 'SOLE PROPRIETORSHIP', normalized: 'Sole Proprietorship' },
+        { input: 'ALIEN ENTITY TYPE', normalized: undefined } // unrecognized
       ];
       
       for (const testCase of testCases) {
@@ -86,19 +100,21 @@ describe('ToolChain - California Business Search Integration', () => {
           }
         ]);
         
-        const result = await toolChain.searchBusinessEntity('Test', 'CA');
+        const results = await toolChain.searchBusinessEntity('Test', 'CA');
         
-        expect(result?.entityType).toBe(testCase.expected);
+        expect(results).toHaveLength(1);
+        expect(results[0].entityType).toBe(testCase.input); // Raw value preserved
+        expect(results[0].entityTypeNormalized).toBe(testCase.normalized);
       }
     });
     
-    it('should map status correctly', async () => {
+    it('should normalize status correctly', async () => {
       const testCases = [
-        { input: 'ACTIVE', expected: 'Active' },
-        { input: 'SUSPENDED', expected: 'Suspended' },
-        { input: 'DISSOLVED', expected: 'Dissolved' },
-        { input: 'CANCELED', expected: 'Dissolved' },
-        { input: 'UNKNOWN', expected: 'Active' } // default
+        { input: 'ACTIVE', normalized: 'Active' },
+        { input: 'SUSPENDED', normalized: 'Suspended' },
+        { input: 'DISSOLVED', normalized: 'Dissolved' },
+        { input: 'CANCELED', normalized: 'Dissolved' },
+        { input: 'UNKNOWN STATUS', normalized: undefined } // unrecognized
       ];
       
       for (const testCase of testCases) {
@@ -111,9 +127,11 @@ describe('ToolChain - California Business Search Integration', () => {
           }
         ]);
         
-        const result = await toolChain.searchBusinessEntity('Test', 'CA');
+        const results = await toolChain.searchBusinessEntity('Test', 'CA');
         
-        expect(result?.status).toBe(testCase.expected);
+        expect(results).toHaveLength(1);
+        expect(results[0].status).toBe(testCase.input); // Raw value preserved
+        expect(results[0].statusNormalized).toBe(testCase.normalized);
       }
     });
     
@@ -130,9 +148,10 @@ describe('ToolChain - California Business Search Integration', () => {
       
       (californiaBusinessSearch.searchByName as jest.Mock).mockResolvedValue(mockResults);
       
-      const result = await toolChain.searchBusinessEntity('Test Corp', 'CA');
+      const results = await toolChain.searchBusinessEntity('Test Corp', 'CA');
       
-      expect(result?.address).toEqual({
+      expect(results).toHaveLength(1);
+      expect(results[0].address).toEqual({
         street: '123 Main Street',
         city: 'San Francisco',
         state: 'CA',
@@ -153,9 +172,10 @@ describe('ToolChain - California Business Search Integration', () => {
       
       (californiaBusinessSearch.searchByName as jest.Mock).mockResolvedValue(mockResults);
       
-      const result = await toolChain.searchBusinessEntity('Test Corp', 'CA');
+      const results = await toolChain.searchBusinessEntity('Test Corp', 'CA');
       
-      expect(result?.address).toEqual({
+      expect(results).toHaveLength(1);
+      expect(results[0].address).toEqual({
         street: '456 Market St, Suite 2000, Floor 20',
         city: 'San Francisco',
         state: 'CA',
@@ -176,9 +196,10 @@ describe('ToolChain - California Business Search Integration', () => {
       
       (californiaBusinessSearch.searchByName as jest.Mock).mockResolvedValue(mockResults);
       
-      const result = await toolChain.searchBusinessEntity('Test Corp', 'CA');
+      const results = await toolChain.searchBusinessEntity('Test Corp', 'CA');
       
-      expect(result?.address).toBeUndefined();
+      expect(results).toHaveLength(1);
+      expect(results[0].address).toBeUndefined();
     });
     
     it('should handle search errors gracefully', async () => {
@@ -186,9 +207,9 @@ describe('ToolChain - California Business Search Integration', () => {
         new Error('Network error')
       );
       
-      const result = await toolChain.searchBusinessEntity('Test Corp', 'CA');
+      const results = await toolChain.searchBusinessEntity('Test Corp', 'CA');
       
-      expect(result).toBeNull();
+      expect(results).toEqual([]);
       expect(console.error).toHaveBeenCalledWith(
         '[ToolChain] California business search error:',
         expect.any(Error)
@@ -247,6 +268,46 @@ describe('ToolChain - California Business Search Integration', () => {
     });
   });
   
+  describe('searchByEntityNumber', () => {
+    it('should return single entity when found', async () => {
+      const mockResult = {
+        entityName: 'Apple Inc.',
+        entityNumber: 'C0806592',
+        status: 'ACTIVE',
+        entityType: 'CORPORATION',
+        registrationDate: '1977-01-03',
+        principalAddress: 'One Apple Park Way, Cupertino, CA 95014'
+      };
+      
+      (californiaBusinessSearch.searchByEntityNumber as jest.Mock).mockResolvedValue(mockResult);
+      
+      const result = await toolChain.searchByEntityNumber('C0806592', 'CA');
+      
+      expect(californiaBusinessSearch.searchByEntityNumber).toHaveBeenCalledWith('C0806592');
+      expect(result).toBeDefined();
+      expect(result?.name).toBe('Apple Inc.');
+      expect(result?.status).toBe('ACTIVE');
+      expect(result?.statusNormalized).toBe('Active');
+      expect(result?.entityType).toBe('CORPORATION');
+      expect(result?.entityTypeNormalized).toBe('Corporation');
+    });
+    
+    it('should return null when entity not found', async () => {
+      (californiaBusinessSearch.searchByEntityNumber as jest.Mock).mockResolvedValue(null);
+      
+      const result = await toolChain.searchByEntityNumber('INVALID123', 'CA');
+      
+      expect(result).toBeNull();
+    });
+    
+    it('should return null for non-California states', async () => {
+      const result = await toolChain.searchByEntityNumber('123456', 'NY');
+      
+      expect(result).toBeNull();
+      expect(californiaBusinessSearch.searchByEntityNumber).not.toHaveBeenCalled();
+    });
+  });
+  
   describe('searchPublicRecords alias', () => {
     it('should work as an alias for searchBusinessEntity', async () => {
       const mockResults = [
@@ -260,10 +321,11 @@ describe('ToolChain - California Business Search Integration', () => {
       
       (californiaBusinessSearch.searchByName as jest.Mock).mockResolvedValue(mockResults);
       
-      const result = await toolChain.searchPublicRecords('Test Corp');
+      const results = await toolChain.searchPublicRecords('Test Corp');
       
       expect(californiaBusinessSearch.searchByName).toHaveBeenCalledWith('Test Corp');
-      expect(result?.name).toBe('Test Corp');
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe('Test Corp');
     });
   });
 });
