@@ -27,6 +27,7 @@ describe('CaliforniaBusinessSearchTool', () => {
       goto: jest.fn().mockResolvedValue(undefined),
       act: jest.fn().mockResolvedValue(undefined),
       waitForLoadState: jest.fn().mockResolvedValue(undefined),
+      waitForSelector: jest.fn().mockResolvedValue(undefined),
       goBack: jest.fn().mockResolvedValue(undefined),
       extract: jest.fn()
     };
