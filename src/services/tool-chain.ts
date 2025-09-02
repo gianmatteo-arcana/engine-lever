@@ -8,6 +8,7 @@
 
 import { CredentialVault } from './credential-vault';
 import { californiaBusinessSearch } from '../tools/california-business-search';
+import { BusinessMemoryTool, BusinessMemorySearchParams, BusinessKnowledge } from '../tools/business-memory';
 
 // Canonical business entity types that we recognize across jurisdictions
 export enum BusinessEntityType {
@@ -67,9 +68,11 @@ export class NeedCredentialsError extends Error {
  */
 export class ToolChain {
   private credentials: CredentialVault;
+  private businessMemory: BusinessMemoryTool;
   
   constructor() {
     this.credentials = new CredentialVault();
+    this.businessMemory = new BusinessMemoryTool();
   }
   
   /**
@@ -567,6 +570,71 @@ Available Tools:
         }
       }
     };
+  }
+  
+  /**
+   * Search business memory for context enrichment
+   * Available to ALL agents during task execution
+   * Read-only access to persisted business knowledge
+   * 
+   * @param businessId - The business to search knowledge for
+   * @param categories - Optional categories to filter by
+   * @param minConfidence - Minimum confidence threshold (default 0.7)
+   * @returns BusinessKnowledge with facts, preferences, patterns, and relationships
+   */
+  async searchBusinessMemory(
+    businessId: string,
+    categories?: string[],
+    minConfidence: number = 0.7
+  ): Promise<BusinessKnowledge> {
+    try {
+      console.log(`[ToolChain] Searching business memory for: ${businessId}`);
+      
+      const params: BusinessMemorySearchParams = {
+        businessId,
+        minConfidence,
+        includeExpired: false
+      };
+      
+      // Map string categories to proper types if provided
+      if (categories && categories.length > 0) {
+        params.categories = categories as any; // Type assertion for flexibility
+      }
+      
+      const knowledge = await this.businessMemory.searchMemory(params);
+      
+      console.log(`[ToolChain] Found ${knowledge.metadata.factCount} facts with avg confidence ${knowledge.metadata.averageConfidence}`);
+      
+      return knowledge;
+    } catch (error) {
+      console.error('[ToolChain] Error searching business memory:', error);
+      // Return empty knowledge on error to allow graceful degradation
+      return {
+        facts: {},
+        preferences: {},
+        patterns: {},
+        relationships: {},
+        metadata: {
+          lastUpdated: new Date().toISOString(),
+          factCount: 0,
+          averageConfidence: 0
+        }
+      };
+    }
+  }
+  
+  /**
+   * Check if business has any stored knowledge
+   * Quick check for agents to determine if memory exists
+   */
+  async hasBusinessMemory(businessId: string): Promise<boolean> {
+    try {
+      const knowledge = await this.searchBusinessMemory(businessId, undefined, 0.5);
+      return knowledge.metadata.factCount > 0;
+    } catch (error) {
+      console.error('[ToolChain] Error checking business memory:', error);
+      return false;
+    }
   }
   
   /**

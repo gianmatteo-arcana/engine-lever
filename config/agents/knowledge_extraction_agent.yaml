@@ -1,0 +1,293 @@
+# Knowledge Extraction Agent Configuration
+# Extracts and persists learnings from completed tasks
+# Part of Issue #55: Knowledge Extraction and Business Memory System
+
+agent:
+  id: "knowledge_extraction_agent"
+  name: "Knowledge Extraction Agent"
+  version: "1.0.0"
+  role: "knowledge_curator"
+  
+  # Agent mission - focused on knowledge extraction and persistence
+  mission: |
+    Analyze completed task contexts to extract reusable business knowledge.
+    Identify facts with high confidence from verified sources.
+    Persist learned preferences and behavioral patterns.
+    Ensure all extracted knowledge is traceable to its source.
+    
+    Key outputs: business facts, learned preferences, relationship mappings, pattern recognition.
+    
+  # A2A Protocol Configuration
+  a2a:
+    protocolVersion: "1.0.0"
+    communicationMode: "async"
+    messageFormats:
+      - "json"
+    routing:
+      canReceiveFrom:
+        - "orchestrator_agent"
+      canSendTo:
+        - "orchestrator_agent"
+    messageHandling:
+      bufferSize: 10
+      timeoutMs: 30000
+      retryEnabled: false
+  
+  # Agent capabilities card for discovery
+  agent_card:
+    skills:
+      - "Extract business facts from completed task data"
+      - "Identify user preferences and behavioral patterns"
+      - "Determine confidence levels based on source verification"
+      - "Categorize knowledge for efficient retrieval"
+      - "Deduplicate and merge related facts"
+      - "Persist knowledge with proper metadata"
+    
+    capabilities:
+      - "Access to completed task context and full data"
+      - "Write access to business_knowledge store"
+      - "Ability to analyze data quality and source reliability"
+      - "Pattern recognition across multiple interactions"
+      - "TTL management for temporary or time-sensitive facts"
+    
+    output_formats:
+      - "Extracted business facts with confidence scores"
+      - "Identified preference patterns"
+      - "Relationship mappings"
+      - "Knowledge persistence confirmation"
+
+# Response schemas for LLM structured output
+schemas:
+  output:
+    type: "object"
+    required: ["status", "extractedKnowledge", "reasoning"]
+    properties:
+      status:
+        type: "string"
+        enum: ["completed", "partial", "no_knowledge_found", "failed"]
+        description: "The outcome of the knowledge extraction process"
+      
+      extractedKnowledge:
+        type: "object"
+        properties:
+          facts:
+            type: "array"
+            description: "Core business facts extracted from the task"
+            items:
+              type: "object"
+              required: ["category", "fieldName", "fieldValue", "confidence"]
+              properties:
+                category:
+                  type: "string"
+                  enum: ["identity", "structure", "contact_info", "operations", "financial", "compliance_status"]
+                  description: "The category this fact belongs to"
+                fieldName:
+                  type: "string"
+                  description: "Dot-notation field name (e.g., 'profile.ein', 'address.street')"
+                fieldValue:
+                  description: "The actual value of the field"
+                confidence:
+                  type: "number"
+                  minimum: 0
+                  maximum: 1
+                  description: "Confidence score based on source verification"
+                verificationMethod:
+                  type: "string"
+                  enum: ["user_provided", "public_records", "api_verified", "inferred", "document_upload"]
+                  description: "How this fact was verified"
+                ttlDays:
+                  type: "number"
+                  description: "Optional TTL in days for temporary facts"
+          
+          preferences:
+            type: "array"
+            description: "User/business preferences observed"
+            items:
+              type: "object"
+              required: ["category", "preference", "value", "confidence"]
+              properties:
+                category:
+                  type: "string"
+                  enum: ["communication", "decision_making", "documentation"]
+                preference:
+                  type: "string"
+                  description: "The specific preference observed"
+                value:
+                  type: "string"
+                  description: "The preference value"
+                confidence:
+                  type: "number"
+                  minimum: 0
+                  maximum: 1
+          
+          patterns:
+            type: "array"
+            description: "Behavioral patterns identified"
+            items:
+              type: "object"
+              properties:
+                patternType:
+                  type: "string"
+                  enum: ["interaction_style", "response_time", "data_completeness", "task_complexity"]
+                observation:
+                  type: "string"
+                  description: "Description of the pattern observed"
+                occurrences:
+                  type: "number"
+                  description: "How many times this pattern was observed"
+                confidence:
+                  type: "number"
+                  minimum: 0
+                  maximum: 1
+          
+          relationships:
+            type: "array"
+            description: "Business relationships identified"
+            items:
+              type: "object"
+              properties:
+                relationshipType:
+                  type: "string"
+                  enum: ["vendor", "customer", "advisor", "partner", "employee"]
+                entityName:
+                  type: "string"
+                role:
+                  type: "string"
+                confidence:
+                  type: "number"
+                  minimum: 0
+                  maximum: 1
+      
+      reasoning:
+        type: "string"
+        description: "Explanation of what was extracted and why"
+      
+      metadata:
+        type: "object"
+        properties:
+          sourceTaskId:
+            type: "string"
+            description: "The task this knowledge was extracted from"
+          extractionTimestamp:
+            type: "string"
+            description: "When the extraction occurred"
+          totalFactsExtracted:
+            type: "number"
+          averageConfidence:
+            type: "number"
+
+# Example interactions for LLM guidance
+examples:
+  - instruction: "Extract knowledge from completed onboarding task"
+    input:
+      taskContext:
+        taskTemplateId: "onboarding"
+        currentState:
+          status: "completed"
+          data:
+            user:
+              firstName: "John"
+              lastName: "Smith"
+              email: "john@techstartup.com"
+            business:
+              name: "TechStartup Inc"
+              entityType: "Corporation"
+              ein: "87-1234567"
+              state: "CA"
+              formationDate: "2023-01-15"
+            profile:
+              employees: 12
+              industry: "Software Development"
+      verificationSources:
+        ein: "irs_database"
+        entityType: "ca_sos_records"
+    
+    expectedOutput:
+      status: "completed"
+      extractedKnowledge:
+        facts:
+          - category: "identity"
+            fieldName: "business.name"
+            fieldValue: "TechStartup Inc"
+            confidence: 1.0
+            verificationMethod: "user_provided"
+          - category: "identity"
+            fieldName: "business.ein"
+            fieldValue: "87-1234567"
+            confidence: 0.95
+            verificationMethod: "api_verified"
+          - category: "structure"
+            fieldName: "business.entityType"
+            fieldValue: "Corporation"
+            confidence: 0.9
+            verificationMethod: "public_records"
+          - category: "structure"
+            fieldName: "business.formationDate"
+            fieldValue: "2023-01-15"
+            confidence: 0.9
+            verificationMethod: "public_records"
+          - category: "operations"
+            fieldName: "profile.employees"
+            fieldValue: 12
+            confidence: 0.8
+            verificationMethod: "user_provided"
+          - category: "operations"
+            fieldName: "profile.industry"
+            fieldValue: "Software Development"
+            confidence: 0.85
+            verificationMethod: "user_provided"
+          - category: "contact_info"
+            fieldName: "contact.email"
+            fieldValue: "john@techstartup.com"
+            confidence: 1.0
+            verificationMethod: "user_provided"
+        preferences: []
+        patterns: []
+        relationships: []
+      reasoning: |
+        Extracted 7 high-confidence facts from completed onboarding task.
+        Business identity verified through IRS database (EIN) and CA SOS records (entity type).
+        Contact and operational details marked as user-provided with appropriate confidence levels.
+        No behavioral patterns identified as this is the first interaction.
+
+  - instruction: "Extract knowledge when limited data is available"
+    input:
+      taskContext:
+        taskTemplateId: "quick_question"
+        currentState:
+          status: "completed"
+          data:
+            question: "What licenses do I need?"
+            businessName: "Acme Corp"
+    
+    expectedOutput:
+      status: "partial"
+      extractedKnowledge:
+        facts:
+          - category: "identity"
+            fieldName: "business.name"
+            fieldValue: "Acme Corp"
+            confidence: 0.7
+            verificationMethod: "user_provided"
+        preferences:
+          - category: "documentation"
+            preference: "information_depth"
+            value: "concise"
+            confidence: 0.6
+        patterns: []
+        relationships: []
+      reasoning: |
+        Limited data available from quick question interaction.
+        Captured business name with moderate confidence.
+        Noted preference for concise information based on question style.
+        Further interactions needed for comprehensive knowledge extraction.
+
+# Behavioral guidelines for the agent
+behavioral_rules:
+  - "Only extract facts with confidence >= 0.6"
+  - "Prefer verified sources over user-provided data when available"
+  - "Do not extract personally identifiable information beyond business contact details"
+  - "Flag any inconsistencies between new and existing knowledge for review"
+  - "Apply appropriate TTL to facts that may change frequently (e.g., employee count)"
+  - "Recognize and preserve relationships mentioned in conversations"
+  - "Identify patterns only after observing behavior at least twice"
