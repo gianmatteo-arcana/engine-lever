@@ -52,10 +52,26 @@ describe('CaliforniaBusinessSearchTool', () => {
       // Perform search
       await tool.searchByName('Test Company');
       
-      // Verify Stagehand was created
+      // Verify Stagehand was created with enhanced bot detection evasion
       expect(Stagehand).toHaveBeenCalledWith({
         env: 'LOCAL',
-        verbose: 1
+        verbose: 1,
+        domSettleTimeoutMs: 15000,
+        localBrowserLaunchOptions: {
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--window-size=1920,1080',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-features=VizDisplayCompositor',
+            '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+          ],
+          viewport: { width: 1920, height: 1080 },
+          userDataDir: undefined
+        }
       });
       
       // Verify initialization
@@ -79,10 +95,10 @@ describe('CaliforniaBusinessSearchTool', () => {
       
       await tool.searchByName('Apple Inc');
       
-      // Verify search actions
-      expect(mockPage.act).toHaveBeenNthCalledWith(1, 'Select "Corporation Name" from the search type dropdown');
-      expect(mockPage.act).toHaveBeenNthCalledWith(2, 'Enter "Apple Inc" in the business name search field');
-      expect(mockPage.act).toHaveBeenNthCalledWith(3, 'Click the Search button');
+      // Verify search actions with enhanced options
+      expect(mockPage.act).toHaveBeenNthCalledWith(1, { action: 'Select "Corporation Name" from the search type dropdown', iframes: true, domSettleTimeoutMs: 15000 });
+      expect(mockPage.act).toHaveBeenNthCalledWith(2, { action: 'Enter "Apple Inc" in the business name search field', iframes: true, domSettleTimeoutMs: 15000 });
+      expect(mockPage.act).toHaveBeenNthCalledWith(3, { action: 'Click the Search button', iframes: true, domSettleTimeoutMs: 15000 });
     });
     
     it('should return empty array when no results found', async () => {
@@ -95,7 +111,7 @@ describe('CaliforniaBusinessSearchTool', () => {
       expect(results).toEqual([]);
     });
     
-    it('should extract and return business details', async () => {
+    it('should return basic search results only (fast search)', async () => {
       const mockResults = [
         {
           entityName: 'Apple Inc.',
@@ -106,15 +122,9 @@ describe('CaliforniaBusinessSearchTool', () => {
         }
       ];
       
-      // Mock search results
+      // Mock search results (no additional details extraction)
       mockPage.extract.mockResolvedValueOnce({
         results: mockResults
-      });
-      
-      // Mock details extraction
-      mockPage.extract.mockResolvedValueOnce({
-        agentName: 'CT Corporation System',
-        principalAddress: 'One Apple Park Way, Cupertino, CA 95014'
       });
       
       const results = await tool.searchByName('Apple Inc');
@@ -124,11 +134,18 @@ describe('CaliforniaBusinessSearchTool', () => {
         entityName: 'Apple Inc.',
         entityNumber: 'C0806592',
         status: 'Active',
-        agentName: 'CT Corporation System'
+        entityType: 'Corporation',
+        registrationDate: '1977-01-03'
       });
+      
+      // Verify no detail fetching happened (no additional extract calls)
+      expect(mockPage.extract).toHaveBeenCalledTimes(1);
+      // Verify no navigation to individual entity pages
+      expect(mockPage.act).toHaveBeenCalledTimes(3); // Only the search actions
+      expect(mockPage.goBack).not.toHaveBeenCalled();
     });
     
-    it('should handle multiple search results', async () => {
+    it('should handle multiple search results quickly (fast search)', async () => {
       const mockResults = [
         {
           entityName: 'Google LLC',
@@ -148,14 +165,15 @@ describe('CaliforniaBusinessSearchTool', () => {
         results: mockResults
       });
       
-      // Mock details for each result
-      mockPage.extract.mockResolvedValueOnce({ agentName: 'Agent 1' });
-      mockPage.extract.mockResolvedValueOnce({ agentName: 'Agent 2' });
-      
       const results = await tool.searchByName('Google');
       
       expect(results).toHaveLength(2);
-      expect(mockPage.goBack).toHaveBeenCalledTimes(2);
+      expect(results[0].entityName).toBe('Google LLC');
+      expect(results[1].entityName).toBe('Google Inc (Dissolved)');
+      
+      // Verify fast search behavior - no navigation to individual pages
+      expect(mockPage.extract).toHaveBeenCalledTimes(1); // Only search results extraction
+      expect(mockPage.goBack).not.toHaveBeenCalled(); // No navigation back from detail pages
     });
     
     it('should always close the browser even on error', async () => {
@@ -166,50 +184,64 @@ describe('CaliforniaBusinessSearchTool', () => {
       expect(mockStagehand.close).toHaveBeenCalled();
     });
     
-    it('should handle extraction errors gracefully', async () => {
-      const mockResults = [
-        {
-          entityName: 'Test Company',
-          entityNumber: '123',
-          status: 'Active',
-          entityType: 'LLC'
-        }
-      ];
+    it('should handle search extraction errors gracefully', async () => {
+      mockPage.extract.mockRejectedValue(new Error('Search extraction failed'));
       
-      mockPage.extract.mockResolvedValueOnce({
-        results: mockResults
-      });
+      await expect(tool.searchByName('Test Company')).rejects.toThrow('Failed to search California business registry');
       
-      // Simulate error getting details
-      mockPage.extract.mockRejectedValueOnce(new Error('Details extraction failed'));
-      
-      const results = await tool.searchByName('Test Company');
-      
-      // Should still return basic info even if details fail
-      expect(results).toHaveLength(1);
-      expect(results[0].entityName).toBe('Test Company');
+      // Browser should still be closed even on error
+      expect(mockStagehand.close).toHaveBeenCalled();
     });
   });
   
   describe('searchByEntityNumber', () => {
-    it('should search by entity number correctly', async () => {
+    it('should search by entity number and return comprehensive details', async () => {
       const mockDetails = {
         entityName: 'Apple Inc.',
         entityNumber: 'C0806592',
         status: 'Active',
         entityType: 'Corporation',
-        agentName: 'CT Corporation System'
+        registrationDate: '1977-01-03',
+        jurisdiction: 'California',
+        
+        // Agent information
+        agentName: 'CT Corporation System',
+        agentAddress: '818 West Seventh Street, Los Angeles, CA 90017',
+        
+        // Business addresses
+        principalAddress: 'One Apple Park Way, Cupertino, CA 95014',
+        mailingAddress: 'One Apple Park Way, Cupertino, CA 95014',
+        
+        // Officers
+        ceoName: 'Tim Cook',
+        presidentName: 'Tim Cook',
+        secretaryName: 'Kate Adams',
+        cfoName: 'Luca Maestri',
+        
+        // Business details
+        businessPurpose: 'To engage in any lawful act or activity',
+        filingHistory: [
+          {
+            date: '2024-01-15',
+            type: 'Statement of Information',
+            description: 'Annual filing',
+            status: 'Filed'
+          }
+        ]
       };
       
       mockPage.extract.mockResolvedValue(mockDetails);
       
       const result = await tool.searchByEntityNumber('C0806592');
       
-      expect(mockPage.act).toHaveBeenNthCalledWith(1, 'Select "Entity Number" from the search type dropdown');
-      expect(mockPage.act).toHaveBeenNthCalledWith(2, 'Enter "C0806592" in the entity number search field');
-      expect(mockPage.act).toHaveBeenNthCalledWith(3, 'Click the Search button');
+      expect(mockPage.act).toHaveBeenNthCalledWith(1, { action: 'Select "Entity Number" from the search type dropdown', iframes: true, domSettleTimeoutMs: 15000 });
+      expect(mockPage.act).toHaveBeenNthCalledWith(2, { action: 'Enter "C0806592" in the entity number search field', iframes: true, domSettleTimeoutMs: 15000 });
+      expect(mockPage.act).toHaveBeenNthCalledWith(3, { action: 'Click the Search button', iframes: true, domSettleTimeoutMs: 15000 });
       
       expect(result).toMatchObject(mockDetails);
+      expect(result?.agentName).toBe('CT Corporation System');
+      expect(result?.ceoName).toBe('Tim Cook');
+      expect(result?.filingHistory).toHaveLength(1);
     });
     
     it('should return null when entity not found', async () => {
@@ -238,7 +270,23 @@ describe('CaliforniaBusinessSearchTool', () => {
       
       expect(Stagehand).toHaveBeenCalledWith({
         env: 'LOCAL',
-        verbose: 1
+        verbose: 1,
+        domSettleTimeoutMs: 15000,
+        localBrowserLaunchOptions: {
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--window-size=1920,1080',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-features=VizDisplayCompositor',
+            '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+          ],
+          viewport: { width: 1920, height: 1080 },
+          userDataDir: undefined
+        }
       });
     });
     

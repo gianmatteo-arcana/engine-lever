@@ -54,8 +54,21 @@ export class CaliforniaBusinessSearchTool {
       stagehand = new Stagehand({
         env: 'LOCAL',
         verbose: 1,
+        domSettleTimeoutMs: 15000,
         localBrowserLaunchOptions: {
-          headless
+          headless,
+          args: headless ? [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--window-size=1920,1080',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-features=VizDisplayCompositor',
+            '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+          ] : [],
+          viewport: { width: 1920, height: 1080 },
+          userDataDir: undefined // Don't persist browser data
         }
       });
       
@@ -65,12 +78,34 @@ export class CaliforniaBusinessSearchTool {
       
       logger.info('[CaliforniaBusinessSearch] Navigated to search page');
       
-      // Select search type and enter business name
-      await page.act('Select "Corporation Name" from the search type dropdown');
+      // Wait for iframe content to fully load
+      await page.waitForLoadState('networkidle');
+      await new Promise(resolve => setTimeout(resolve, 3000)); // Additional 3 second wait
       
-      await page.act(`Enter "${businessName}" in the business name search field`);
-      
-      await page.act('Click the Search button');
+      // Try direct approach first - use known selectors
+      try {
+        // Wait for iframe to be ready
+        await page.waitForSelector('iframe', { timeout: 10000 });
+        const iframe = page.locator('iframe').first();
+        const iframeContent = await iframe.contentFrame();
+        
+        if (iframeContent) {
+          // Fill the search input directly
+          await iframeContent.locator('input.search-input').fill(businessName);
+          await iframeContent.locator('button:has-text("Execute search")').click();
+          
+          logger.info('[CaliforniaBusinessSearch] Used direct selectors successfully');
+        } else {
+          throw new Error('Could not access iframe content');
+        }
+      } catch (directError) {
+        logger.info(`[CaliforniaBusinessSearch] Direct approach failed: ${directError}. Falling back to Stagehand AI.`);
+        
+        // Fallback to Stagehand AI approach
+        await page.act({ action: 'Select "Corporation Name" from the search type dropdown', iframes: true, domSettleTimeoutMs: 15000 });
+        await page.act({ action: `Enter "${businessName}" in the business name search field`, iframes: true, domSettleTimeoutMs: 15000 });
+        await page.act({ action: 'Click the Search button', iframes: true, domSettleTimeoutMs: 15000 });
+      }
       
       // Wait for results to load
       await page.waitForLoadState('networkidle');
@@ -93,7 +128,9 @@ export class CaliforniaBusinessSearchTool {
       
       const extractedData = await page.extract({
         instruction: `Extract all business search results. For each result, get the entity name, entity number, registration date, status, entity type, and jurisdiction if available`,
-        schema: searchResultsSchema
+        schema: searchResultsSchema,
+        iframes: true,
+        domSettleTimeoutMs: 15000
       });
       
       const searchResults = extractedData.results || [];
@@ -105,59 +142,10 @@ export class CaliforniaBusinessSearchTool {
       
       logger.info(`[CaliforniaBusinessSearch] Found ${searchResults.length} results`);
       
-      // For each result, click through to get detailed information
-      const detailedResults: CaliforniaBusinessDetails[] = [];
-      
-      for (const result of searchResults) {
-        try {
-          // Navigate back to search results if needed
-          await page.act(`Click on the entity number ${result.entityNumber} to view details`);
-          
-          await page.waitForLoadState('networkidle');
-          
-          // Extract detailed information from the entity page
-          const detailsSchema = z.object({
-            agentName: z.string().optional(),
-            agentAddress: z.string().optional(),
-            principalAddress: z.string().optional(),
-            mailingAddress: z.string().optional(),
-            ceoName: z.string().optional(),
-            secretaryName: z.string().optional(),
-            cfoName: z.string().optional(),
-            directors: z.array(z.string()).optional(),
-            filingHistory: z.array(
-              z.object({
-                date: z.string(),
-                type: z.string(),
-                description: z.string()
-              })
-            ).optional()
-          });
-          
-          const details = await page.extract({
-            instruction: `Extract all available business details including entity information, agent information, addresses, officers, and filing history`,
-            schema: detailsSchema
-          });
-          
-          // Combine basic and detailed information
-          detailedResults.push({
-            ...result,
-            ...(details || {})
-          });
-          
-          // Navigate back to search results for next entity
-          await page.goBack();
-          await page.waitForLoadState('networkidle');
-          
-        } catch (detailError) {
-          logger.error(`[CaliforniaBusinessSearch] Error getting details for ${result.entityNumber}:`, detailError);
-          // Still include the basic information even if details fail
-          detailedResults.push(result as CaliforniaBusinessDetails);
-        }
-      }
-      
-      logger.info(`[CaliforniaBusinessSearch] Completed search with ${detailedResults.length} detailed results`);
-      return detailedResults;
+      // Return basic search results directly (no detailed page navigation)
+      // This makes searchByName fast regardless of result count
+      logger.info(`[CaliforniaBusinessSearch] Completed fast search with ${searchResults.length} basic results`);
+      return searchResults;
       
     } catch (error) {
       logger.error('[CaliforniaBusinessSearch] Search error:', error);
@@ -190,8 +178,21 @@ export class CaliforniaBusinessSearchTool {
       stagehand = new Stagehand({
         env: 'LOCAL',
         verbose: 1,
+        domSettleTimeoutMs: 15000,
         localBrowserLaunchOptions: {
-          headless
+          headless,
+          args: headless ? [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--window-size=1920,1080',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-features=VizDisplayCompositor',
+            '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+          ] : [],
+          viewport: { width: 1920, height: 1080 },
+          userDataDir: undefined // Don't persist browser data
         }
       });
       
@@ -199,16 +200,20 @@ export class CaliforniaBusinessSearchTool {
       const page = stagehand.page;
       await page.goto(this.searchUrl);
       
+      // Wait for iframe content to fully load
+      await page.waitForLoadState('networkidle');
+      await new Promise(resolve => setTimeout(resolve, 3000)); // Additional 3 second wait
+      
       // Select entity number search
-      await page.act('Select "Entity Number" from the search type dropdown');
+      await page.act({ action: 'Select "Entity Number" from the search type dropdown', iframes: true, domSettleTimeoutMs: 15000 });
       
-      await page.act(`Enter "${entityNumber}" in the entity number search field`);
+      await page.act({ action: `Enter "${entityNumber}" in the entity number search field`, iframes: true, domSettleTimeoutMs: 15000 });
       
-      await page.act('Click the Search button');
+      await page.act({ action: 'Click the Search button', iframes: true, domSettleTimeoutMs: 15000 });
       
       await page.waitForLoadState('networkidle');
       
-      // Extract the detailed information directly (entity number search goes straight to details)
+      // Extract comprehensive detailed information (searchByEntityNumber returns ALL available details)
       const detailsSchema = z.object({
         entityName: z.string(),
         entityNumber: z.string(),
@@ -216,26 +221,75 @@ export class CaliforniaBusinessSearchTool {
         status: z.string(),
         entityType: z.string(),
         jurisdiction: z.string().optional(),
+        
+        // Agent information
         agentName: z.string().optional(),
         agentAddress: z.string().optional(),
+        agentCity: z.string().optional(),
+        agentState: z.string().optional(),
+        agentZip: z.string().optional(),
+        
+        // Business addresses
         principalAddress: z.string().optional(),
         mailingAddress: z.string().optional(),
+        streetAddress: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        zipCode: z.string().optional(),
+        
+        // Officers and management
         ceoName: z.string().optional(),
+        presidentName: z.string().optional(),
         secretaryName: z.string().optional(),
         cfoName: z.string().optional(),
+        treasurerName: z.string().optional(),
         directors: z.array(z.string()).optional(),
+        officers: z.array(z.object({
+          name: z.string(),
+          title: z.string(),
+          address: z.string().optional()
+        })).optional(),
+        
+        // Business details
+        businessPurpose: z.string().optional(),
+        ein: z.string().optional(),
+        phone: z.string().optional(),
+        email: z.string().optional(),
+        website: z.string().optional(),
+        
+        // Filing and status information
         filingHistory: z.array(
           z.object({
             date: z.string(),
             type: z.string(),
-            description: z.string()
+            description: z.string(),
+            status: z.string().optional()
           })
-        ).optional()
+        ).optional(),
+        lastFilingDate: z.string().optional(),
+        nextFilingDue: z.string().optional(),
+        taxStatus: z.string().optional(),
+        
+        // Additional metadata
+        incorporationState: z.string().optional(),
+        stockShares: z.string().optional(),
+        stockType: z.string().optional()
       });
       
       const details = await page.extract({
-        instruction: `Extract all available business details including entity name, number, status, type, registration date, agent information, addresses, officers, and filing history`,
-        schema: detailsSchema
+        instruction: `Extract ALL available business information from this entity details page including:
+        - Basic entity info (name, number, status, type, registration date)
+        - Complete agent information (name, full address)
+        - All business addresses (principal, mailing, street addresses)  
+        - All officers and directors with names and titles
+        - Business details (purpose, EIN, contact info)
+        - Complete filing history with dates and types
+        - Tax and incorporation status
+        - Any stock or share information
+        - All other available details on the page`,
+        schema: detailsSchema,
+        iframes: true,
+        domSettleTimeoutMs: 15000
       });
       
       logger.info('[CaliforniaBusinessSearch] Entity details extracted successfully');
