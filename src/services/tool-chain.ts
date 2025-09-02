@@ -116,7 +116,7 @@ export class ToolChain {
    */
   private mapEntityType(caType: string): BusinessEntity['entityType'] {
     const typeUpper = caType.toUpperCase();
-    if (typeUpper.includes('LLC')) return 'LLC';
+    if (typeUpper.includes('LLC') || typeUpper.includes('LIMITED LIABILITY')) return 'LLC';
     if (typeUpper.includes('CORP')) return 'Corporation';
     if (typeUpper.includes('PARTNERSHIP')) return 'Partnership';
     if (typeUpper.includes('SOLE')) return 'Sole Proprietorship';
