@@ -121,6 +121,8 @@ agent_template:
   data_acquisition_protocol:
     strategy: "toolchain_first_ui_fallback"
     description: |
+      🚨 CRITICAL: NEVER BOTHER USERS FOR INFORMATION TOOLS CAN FIND!
+      
       When any agent needs information to complete their task:
       1. FIRST: Check toolchain for available tools that can provide the data
       2. SECOND: If toolchain has relevant tools, use them to gather information
@@ -131,10 +133,19 @@ agent_template:
       priority: "mandatory_first_step"
       instruction: |
         Before requesting user input, you MUST:
-        - Query available toolchain tools to see if they can provide needed data
-        - Use business_data_lookup, public_records_search, or other relevant tools
-        - Only request user input if NO toolchain tools can help
-        - Document which tools were checked and why they couldn't help
+        - Check ALL available tools to see if any can provide needed data
+        - Try relevant search and lookup tools first
+        - Explore connected integrations that might have the information
+        - Only request user input after exhausting tool options
+        - Document which tools were tried and their results
+        
+        Tool-first mindset:
+        - Assume tools might have the data until proven otherwise
+        - Different tools provide different types of information
+        - Public records tools have entity and registration data
+        - Connected services may have private business data
+        - Memory tools have previously collected information
+        - Always check what's available before deciding
     
     ui_request_criteria:
       generate_only_when: |
@@ -143,6 +154,7 @@ agent_template:
         - Data requires human judgment or personal preferences
         - Legal authorization needed from business owner
         - Information is confidential and cannot be auto-discovered
+        - Data is explicitly private (EIN, email, phone, etc.)
   
   # Communication patterns
   communication:

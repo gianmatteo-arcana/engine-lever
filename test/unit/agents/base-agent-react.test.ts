@@ -445,7 +445,9 @@ describe('BaseAgent ReAct Pattern', () => {
       expect(response.status).toBe('needs_input');
       expect(response.contextUpdate?.data.uiRequest).toBeDefined();
       expect(response.contextUpdate?.data.uiRequest.templateType).toBe('form');
-      expect(response.contextUpdate?.data.uiRequest.fields).toHaveLength(1);
+      // Agent now generates multiple default fields when no specific field is requested
+      expect(response.contextUpdate?.data.uiRequest.fields).toBeDefined();
+      expect(response.contextUpdate?.data.uiRequest.fields.length).toBeGreaterThan(0);
     });
   });
   

@@ -48,6 +48,10 @@ export class AgentDiscoveryService {
   
   constructor(private configPath: string = 'config/agents') {
     this.configPath = path.join(process.cwd(), configPath);
+    // TODO: Simple optimization - Add file watching to auto-refresh cache
+    // When agent YAML files change, automatically reload that agent's config
+    // This would eliminate need to restart server during development
+    // Example: fs.watch(this.configPath, (event, filename) => this.reloadAgent(filename))
   }
   
   /**
@@ -55,6 +59,12 @@ export class AgentDiscoveryService {
    * Builds capability registry and routing table
    */
   async discoverAgents(): Promise<Map<string, AgentCapability>> {
+    // TODO: Simple optimization - Cache discovery results
+    // Only re-scan files if cache is empty or files changed
+    // if (this.capabilityRegistry.size > 0 && !this.cacheInvalidated) {
+    //   return this.capabilityRegistry; // Return cached results
+    // }
+    
     logger.info('🔍 Starting agent discovery from YAML configurations', {
       configPath: this.configPath
     });

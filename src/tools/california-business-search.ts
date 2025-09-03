@@ -164,9 +164,28 @@ export class CaliforniaBusinessSearchTool {
       
       logger.info(`[CaliforniaBusinessSearch] Found ${searchResults.length} results`);
       
-      // Return basic search results directly (no detailed page navigation)
-      // This makes searchByName fast regardless of result count
-      logger.info(`[CaliforniaBusinessSearch] Completed fast search with ${searchResults.length} basic results`);
+      // For the first result, automatically fetch detailed information
+      // This provides agents with complete data they need
+      if (searchResults.length > 0) {
+        const firstResult = searchResults[0];
+        logger.info(`[CaliforniaBusinessSearch] Fetching detailed info for top result: ${firstResult.entityNumber}`);
+        
+        // Close current browser and create new one for entity search
+        if (stagehand) {
+          await stagehand.close();
+        }
+        
+        // Get detailed information for the top result
+        const detailedResult = await this.searchByEntityNumber(firstResult.entityNumber);
+        
+        if (detailedResult) {
+          // Replace the first result with detailed version
+          searchResults[0] = detailedResult;
+          logger.info(`[CaliforniaBusinessSearch] Enhanced first result with full details including EIN, addresses, and agent info`);
+        }
+      }
+      
+      logger.info(`[CaliforniaBusinessSearch] Completed search with ${searchResults.length} results (first has full details)`);
       return searchResults;
       
     } catch (error) {

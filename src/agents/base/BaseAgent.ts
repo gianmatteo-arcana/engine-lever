@@ -1223,6 +1223,42 @@ Respond with JSON:
   }
   
   /**
+   * Infer needed fields from the agent's reasoning
+   * This is a fallback when the agent doesn't explicitly list needed fields
+   */
+  private inferNeededFieldsFromThought(thought: string): string[] {
+    const commonFields = {
+      'business name': 'business_name',
+      'company name': 'business_name',
+      'business type': 'business_type',
+      'entity type': 'business_type',
+      'ein': 'ein',
+      'tax id': 'ein',
+      'state': 'formation_state',
+      'formation state': 'formation_state',
+      'address': 'business_address',
+      'email': 'email',
+      'phone': 'phone'
+    };
+    
+    const inferredFields: string[] = [];
+    const lowerThought = thought.toLowerCase();
+    
+    for (const [phrase, field] of Object.entries(commonFields)) {
+      if (lowerThought.includes(phrase) && !inferredFields.includes(field)) {
+        inferredFields.push(field);
+      }
+    }
+    
+    // If no fields inferred, return common onboarding fields
+    if (inferredFields.length === 0) {
+      return ['business_name', 'business_type', 'ein', 'formation_state'];
+    }
+    
+    return inferredFields;
+  }
+  
+  /**
    * Create field definitions for missing data using LLM reasoning
    */
   private async createFieldDefinitionsForMissingData(
@@ -1240,13 +1276,27 @@ Task context:
 ${JSON.stringify(taskContext.currentState?.data || {}, null, 2)}
 
 For each field, generate an appropriate form field definition with:
-- id: field identifier
-- label: human-readable label
+- id: field identifier (use the field name from the missing fields list)
+- label: human-readable label (concise, 1-3 words)
 - type: appropriate input type (text, email, tel, select, textarea, etc.)
 - required: whether the field is required
-- placeholder: helpful placeholder text
-- help: brief help text
+- placeholder: example value (for text fields only, e.g., "name@company.com" for email)
+- help: "" (leave empty - good UI needs no explanation)
 - options: (for select fields only) array of {value, label} options
+
+IMPORTANT RULES:
+1. For "entity_type" field, ALWAYS use type "select" with these options:
+   - {value: "llc", label: "Limited Liability Company (LLC)"}
+   - {value: "corporation", label: "Corporation"}
+   - {value: "partnership", label: "Partnership"}
+   - {value: "sole_proprietorship", label: "Sole Proprietorship"}
+   - {value: "nonprofit", label: "Non-Profit Organization"}
+
+2. For "formation_state" or "state" fields, use type "select" with US state options
+
+3. For email fields (containing "email"), use type "email"
+
+4. For phone fields (containing "phone" or "tel"), use type "tel"
 
 Respond with a JSON array of field definitions.
 `;
@@ -1272,14 +1322,85 @@ Respond with a JSON array of field definitions.
     }
     
     // Fallback to generic field definitions if LLM fails
-    return missingFields.map(field => ({
-      id: field,
-      label: field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-      type: 'text',
-      required: true,
-      placeholder: `Enter ${field.replace(/_/g, ' ')}`,
-      help: `Please provide the ${field.replace(/_/g, ' ')}`
-    }));
+    return missingFields.map(field => {
+      const fieldLower = field.toLowerCase();
+      const label = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      
+      // Determine field type based on field name
+      let type: string = 'text';
+      let options: any[] | undefined;
+      
+      if (fieldLower === 'entity_type' || fieldLower === 'business_type') {
+        type = 'select';
+        options = [
+          { value: 'llc', label: 'Limited Liability Company (LLC)' },
+          { value: 'corporation', label: 'Corporation' },
+          { value: 'partnership', label: 'Partnership' },
+          { value: 'sole_proprietorship', label: 'Sole Proprietorship' },
+          { value: 'nonprofit', label: 'Non-Profit Organization' }
+        ];
+      } else if (fieldLower.includes('email')) {
+        type = 'email';
+      } else if (fieldLower.includes('phone') || fieldLower.includes('tel')) {
+        type = 'tel';
+      } else if (fieldLower.includes('state') && !fieldLower.includes('statement')) {
+        type = 'select';
+        options = [
+          { value: 'CA', label: 'California' },
+          { value: 'TX', label: 'Texas' },
+          { value: 'NY', label: 'New York' },
+          { value: 'FL', label: 'Florida' },
+          { value: 'IL', label: 'Illinois' },
+          { value: 'PA', label: 'Pennsylvania' },
+          { value: 'OH', label: 'Ohio' },
+          { value: 'GA', label: 'Georgia' },
+          { value: 'NC', label: 'North Carolina' },
+          { value: 'MI', label: 'Michigan' }
+          // Add more states as needed
+        ];
+      } else if (fieldLower.includes('description') || fieldLower.includes('notes')) {
+        type = 'textarea';
+      }
+      
+      // Create helpful placeholder examples
+      let placeholder: string | undefined = '';
+      
+      if (type === 'select') {
+        placeholder = undefined; // Selects use their first option as placeholder
+      } else if (type === 'email') {
+        placeholder = 'name@company.com';
+      } else if (type === 'tel') {
+        placeholder = '(555) 123-4567';
+      } else if (fieldLower.includes('ein')) {
+        placeholder = '12-3456789';
+      } else if (fieldLower.includes('business') && fieldLower.includes('name')) {
+        placeholder = 'Acme Corporation';
+      } else if (fieldLower.includes('address')) {
+        placeholder = '123 Main Street';
+      } else if (fieldLower.includes('city')) {
+        placeholder = 'San Francisco';
+      } else if (fieldLower.includes('zip')) {
+        placeholder = '94105';
+      } else {
+        // Default to empty - let the label guide the user
+        placeholder = '';
+      }
+      
+      const fieldDef: any = {
+        id: field,
+        label,
+        type,
+        required: true,
+        placeholder,
+        help: '' // No help text - let the UI be self-explanatory
+      };
+      
+      if (options) {
+        fieldDef.options = options;
+      }
+      
+      return fieldDef;
+    });
   }
 
    /**
@@ -1300,6 +1421,9 @@ Respond with a JSON array of field definitions.
    */
   async executeInternal(request: BaseAgentRequest): Promise<BaseAgentResponse> {
     // Constants for ReAct loop control
+    // TODO: Simple optimization - Make MAX_ITERATIONS configurable per task complexity
+    // Easy win: onboarding might need 5, complex business discovery might need 15
+    // Could read from task template: template.configuration?.maxReActIterations || 10
     const MAX_ITERATIONS = 10; // Generous limit to allow complex reasoning
     const ENABLE_REACT = true; // Feature flag for ReAct pattern
     
@@ -1509,14 +1633,65 @@ Respond with a JSON array of field definitions.
           iteration
         });
         
-        // Ensure UIRequest is properly structured
-        // The agent should have provided this in details.uiRequest
-        const uiRequest = iterationResponse.details?.uiRequest || {
-          templateType: 'form',
-          title: 'Information Required',
-          instructions: iterationResponse.thought,
-          fields: iterationResponse.details?.fields || []
-        };
+        // Generate proper form fields based on what the agent needs
+        // The agent should specify what data it needs in details.needed_fields
+        const neededFields = iterationResponse.details?.needed_fields || 
+                            iterationResponse.details?.required_data ||
+                            iterationResponse.details?.missing_fields ||
+                            // Fallback: try to infer from the agent's thought
+                            this.inferNeededFieldsFromThought(iterationResponse.thought);
+        
+        // Generate proper field definitions
+        let fields = [];
+        if (Array.isArray(neededFields) && neededFields.length > 0) {
+          fields = await this.createFieldDefinitionsForMissingData(neededFields, request.taskContext);
+        } else {
+          // Fallback: create basic fields for common onboarding data
+          logger.warn('No specific fields requested, using default onboarding fields');
+          fields = await this.createFieldDefinitionsForMissingData(
+            ['business_name', 'business_type', 'ein', 'formation_state'], 
+            request.taskContext
+          );
+        }
+        
+        // Ensure UIRequest is properly structured with user-facing instructions
+        let uiRequest = iterationResponse.details?.uiRequest || {};
+        
+        // Always ensure we have proper user-facing content
+        if (!uiRequest.templateType) {
+          uiRequest.templateType = 'form';
+        }
+        
+        if (!uiRequest.title || uiRequest.title === 'Information Required') {
+          uiRequest.title = 'Business Information Required';
+        }
+        
+        // Check if instructions look like agent reasoning (contains "I should", "I need", etc.)
+        const agentReasoningPatterns = /\b(I should|I need|I must|I will|task to|following.*principles|reviewing.*context|check if we have)\b/i;
+        
+        if (uiRequest.instructions && 
+            (uiRequest.instructions.length > 100 || agentReasoningPatterns.test(uiRequest.instructions))) {
+          // Remove verbose or agent-facing instructions
+          uiRequest.instructions = undefined;
+        }
+        
+        // Provide minimal but helpful context when needed
+        if (!uiRequest.instructions || uiRequest.instructions.trim() === '') {
+          // Context-aware brief instructions based on what we're collecting
+          if (fields.some(f => f.id === 'entity_type' || f.id === 'business_type')) {
+            uiRequest.instructions = 'Tell us about your business.';
+          } else if (fields.some(f => f.id === 'ein' || f.id === 'tax_id')) {
+            uiRequest.instructions = 'Tax and registration details.';
+          } else if (fields.length === 1) {
+            // Single field doesn't need instructions
+            uiRequest.instructions = '';
+          } else {
+            uiRequest.instructions = 'Complete these details to proceed.';
+          }
+        }
+        
+        // Always add the fields we generated
+        uiRequest.fields = fields;
         
         // Validate UIRequest has required fields
         if (!uiRequest.templateType || !uiRequest.title || !uiRequest.instructions) {
@@ -1678,10 +1853,37 @@ Respond with a JSON array of field definitions.
     const toolResultsSummary = Object.entries(reasoningContext.toolResults)
       .slice(-5) // Show last 5 tool results
       .map(([key, result]: [string, any]) => {
-        const resultStr = JSON.stringify(result.data || result);
-        return `${key}: ${result.success === false ? '[FAILED] ' : ''}${resultStr.substring(0, 200)}...`;
+        // Don't truncate tool results - agents need full data to make decisions
+        const resultData = result.data || result;
+        
+        // For California business search, ensure we show all key fields
+        if (key.includes('california_business_search') && resultData) {
+          // Extract and format key business information
+          if (Array.isArray(resultData) && resultData.length > 0) {
+            const business = resultData[0];
+            return `${key}: [SUCCESS] Found business:
+  - Entity Name: ${business.entityName}
+  - Entity Number: ${business.entityNumber}
+  - EIN: ${business.ein || 'Not found'}
+  - Status: ${business.status}
+  - Principal Address: ${business.principalAddress || business.streetAddress || 'Not found'}
+  - Mailing Address: ${business.mailingAddress || 'Not found'}
+  - Registered Agent: ${business.agentName || 'Not found'}
+  - Agent Address: ${business.agentAddress || 'Not found'}
+  - CEO/President: ${business.ceoName || business.presidentName || 'Not found'}
+  - Full Data Available: Yes`;
+          }
+        }
+        
+        // For other tools, show more data but with reasonable limits
+        const resultStr = JSON.stringify(resultData);
+        if (resultStr.length > 1000) {
+          // For very large results, show key fields and indicate more is available
+          return `${key}: ${result.success === false ? '[FAILED] ' : '[SUCCESS] '}${resultStr.substring(0, 800)}... [${resultStr.length} chars total]`;
+        }
+        return `${key}: ${result.success === false ? '[FAILED] ' : '[SUCCESS] '}${resultStr}`;
       })
-      .join('\n');
+      .join('\n\n');
     
     // Append ReAct enhancement to the inherited prompt
     return `${basePrompt}
@@ -1690,8 +1892,18 @@ Respond with a JSON array of field definitions.
 
 You are now reasoning iteratively with tool access. This is iteration ${iteration} of maximum ${10}.
 
-## Available Tools for This Task
-${availableTools.map(t => `- ${t.name}: ${t.description}`).join('\n') || 'No tools available'}
+## 🛠️ Available Tools for This Task (USE THESE FIRST!)
+${availableTools.map(t => {
+  // Highlight the California Business Search tool
+  if (t.name === 'searchBusinessEntity') {
+    return `⭐ **${t.name}**: ${t.description}
+     Can find: addresses, entity numbers, status, officers, agent info
+     Example: searchBusinessEntity("ARCANA DWELL, LLC", "CA")`;
+  }
+  return `- ${t.name}: ${t.description}`;
+}).join('\n') || 'No tools available'}
+
+**IMPORTANT: Always check if a tool can provide the information before asking the user!**
 
 ## Previous Iterations Context
 ${previousThoughts || 'This is your first iteration - no previous context'}
@@ -1706,23 +1918,53 @@ ${JSON.stringify(reasoningContext.accumulatedKnowledge, null, 2) || '{}'}
 
 For this iteration, you must decide on ONE of these actions:
 
-### 1. USE A TOOL (action: "tool")
-Choose this when you need information from external systems.
+### 🔍 PRIORITY 1: CHECK TOOLS FIRST (action: "tool")
+**ALWAYS TRY TOOLS BEFORE ASKING USERS!**
+If you need business information and haven't searched yet:
+- Use searchBusinessEntity for California businesses FIRST
+- The tool can find: addresses, entity numbers, status, officers, agent info
+- Example: searchBusinessEntity("ARCANA DWELL, LLC", "CA") returns full business details
+
 Your response must include in details:
 - tool: "exact_tool_name"
 - params: { /* tool-specific parameters */ }
 
-### 2. PROVIDE ANSWER (action: "answer")
+### ✅ PRIORITY 2: PROVIDE ANSWER (action: "answer")
 Choose this when you have sufficient information to complete the task.
 Return the STANDARD RESPONSE FORMAT from above with:
 - status: "completed"
 - Full contextUpdate with operation, data, reasoning, confidence
 
-### 3. REQUEST USER INPUT (action: "needs_user_input")
-Choose this when tools cannot provide needed information.
-Return the STANDARD RESPONSE FORMAT with:
-- status: "needs_input"
-- contextUpdate.data.uiRequest with proper structure
+### 👤 PRIORITY 3: REQUEST USER INPUT (action: "needs_user_input")
+**ONLY use this AFTER trying relevant tools!**
+Check your iteration history:
+- Did you try searchBusinessEntity for the business name? 
+- Did you check searchBusinessMemory for stored data?
+- If tools found partial data, ONLY ask for missing pieces
+
+NEVER ask for information that tools can find:
+- Business addresses (searchable via California SOS)
+- Entity numbers (searchable via California SOS)
+- Business status (searchable via California SOS)
+- Officer names (searchable via California SOS)
+- Agent information (searchable via California SOS)
+
+Only ask users for:
+- EIN/Tax ID (not in public records)
+- Private contact info (emails, phone numbers)
+- Internal preferences or decisions
+- Information tools explicitly couldn't find
+
+Your response must include in details:
+- needed_fields: ["field1", "field2", ...] // ONLY fields NOT findable by tools
+- uiRequest: {
+    templateType: "form",
+    title: "Brief title (3-5 words)",
+    instructions: "One short helpful phrase (5-8 words)" // Brief context, not your reasoning!
+    // DO NOT include fields here - they will be generated based on needed_fields
+  }
+Example fields: ["ein", "business_email", "phone_number"] // Private data only!
+CRITICAL: If you haven't tried searchBusinessEntity yet, DO THAT FIRST!
 
 ### 4. REQUEST HELP (action: "help")
 Choose this when you're stuck or detecting circular reasoning.
@@ -1774,6 +2016,10 @@ What is your decision for iteration ${iteration}?`;
     taskContext: TaskContext,
     iteration: number
   ): Promise<any> {
+    // TODO: Future optimization - Support parallel tool execution
+    // When agent identifies multiple independent tools to call,
+    // we could run them in parallel with Promise.all()
+    // Example: searching multiple databases simultaneously
     const { tool, params } = details;
     
     logger.info('🔧 Executing tool action', {

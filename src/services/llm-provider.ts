@@ -655,13 +655,79 @@ export class LLMProvider {
       
       return response;
       
-    } catch (error) {
+    } catch (error: any) {
       logger.error('LLM request failed', {
         error,
         model,
         duration: Date.now() - startTime,
         metadata: request.metadata
       });
+      
+      // TODO: Automatic fallback to alternative provider
+      // If Anthropic fails with overload, try OpenAI
+      // If OpenAI fails, try Anthropic
+      // This provides resilience against API outages
+      if (error.status === 529 || error.message?.includes('Overloaded')) {
+        logger.warn('Primary provider overloaded, attempting fallback', {
+          failedProvider: modelConfig.provider,
+          originalModel: model
+        });
+        
+        // Try fallback provider
+        if (modelConfig.provider === 'anthropic' && this.openaiClient) {
+          logger.info('Falling back to OpenAI due to Anthropic overload');
+          try {
+            // Use GPT-4 as fallback
+            const fallbackRequest = {
+              ...request,
+              model: 'gpt-4-turbo-preview'
+            };
+            const fallbackConfig = modelRegistry.getModel('gpt-4-turbo-preview');
+            if (!fallbackConfig) {
+              throw new Error('Fallback model gpt-4-turbo-preview not configured');
+            }
+            const response = await this.completeWithOpenAI(fallbackRequest, fallbackConfig);
+            
+            logger.info('✅ Fallback to OpenAI successful', {
+              originalModel: model,
+              fallbackModel: 'gpt-4-turbo-preview',
+              duration: Date.now() - startTime
+            });
+            
+            return response;
+          } catch (fallbackError) {
+            logger.error('Fallback to OpenAI also failed', { fallbackError });
+            // Fall through to throw original error
+          }
+        } else if (modelConfig.provider === 'openai' && this.anthropicClient) {
+          logger.info('Falling back to Anthropic due to OpenAI failure');
+          try {
+            // Use Claude as fallback
+            const fallbackRequest = {
+              ...request,
+              model: 'claude-3-5-sonnet-20241022'
+            };
+            const fallbackConfig = modelRegistry.getModel('claude-3-5-sonnet-20241022');
+            if (!fallbackConfig) {
+              throw new Error('Fallback model claude-3-5-sonnet-20241022 not configured');
+            }
+            const response = await this.completeWithAnthropic(fallbackRequest, fallbackConfig);
+            
+            logger.info('✅ Fallback to Anthropic successful', {
+              originalModel: model,
+              fallbackModel: 'claude-3-5-sonnet-20241022',
+              duration: Date.now() - startTime
+            });
+            
+            return response;
+          } catch (fallbackError) {
+            logger.error('Fallback to Anthropic also failed', { fallbackError });
+            // Fall through to throw original error
+          }
+        }
+      }
+      
+      // If no fallback or fallback failed, throw original error
       throw error;
     }
   }

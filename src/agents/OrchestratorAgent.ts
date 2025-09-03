@@ -1350,6 +1350,18 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
         // Execute subtasks sequentially, passing data between them
         let phaseData = {};
         
+        // CRITICAL FIX: Extract all UI response data from context history
+        // This ensures that data collected via UIRequests is available to subsequent agents
+        const uiResponseData = this.extractUIResponseData(context);
+        if (Object.keys(uiResponseData).length > 0) {
+          logger.info('📊 Extracted UI response data from context history', {
+            contextId: context.contextId,
+            dataKeys: Object.keys(uiResponseData),
+            sampleData: JSON.stringify(uiResponseData).substring(0, 200)
+          });
+          phaseData = { ...phaseData, ...uiResponseData };
+        }
+        
         for (let index = 0; index < subtasks.length; index++) {
           const subtask = subtasks[index];
           try {
@@ -1536,6 +1548,10 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       throw new Error(`Agent ${subtask.agent} is not available (${agent.availability})`);
     }
     
+    // CRITICAL: Extract UI response data to ensure agents have access to user-provided information
+    // This prevents agents from re-requesting data that users already provided
+    const allUIResponseData = this.extractUIResponseData(context);
+    
     // Create comprehensive agent request with specific instructions
     const request: AgentRequest = {
       requestId: `subtask_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -1545,6 +1561,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
         // Combine expected input data structure with actual input data
         ...subtask.input_data,
         ...inputData,
+        ...allUIResponseData, // Include all UI response data collected so far
         taskContext: {
           contextId: context.contextId,
           taskType: context.currentState?.task_type,
@@ -1692,6 +1709,66 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       uiRequests: [errorUIRequest],
       reasoning: `Subtask failed, requesting manual user input as fallback`
     };
+  }
+  
+  /**
+   * Extract all UI response data from the task context history
+   * This method aggregates all user-submitted data from UI_RESPONSE_SUBMITTED events
+   * to ensure data persistence across agent transitions
+   * 
+   * @param context - The task context containing history
+   * @returns Aggregated data from all UI responses
+   */
+  private extractUIResponseData(context: TaskContext): Record<string, any> {
+    const aggregatedData: Record<string, any> = {};
+    
+    // Iterate through history to find all UI_RESPONSE_SUBMITTED events
+    for (const event of context.history) {
+      if (event.operation === 'UI_RESPONSE_SUBMITTED' && event.data?.response) {
+        // Merge the response data into our aggregated data
+        Object.assign(aggregatedData, event.data.response);
+        
+        logger.debug('📝 Found UI response data in history', {
+          contextId: context.contextId,
+          requestId: event.data.requestId,
+          dataKeys: Object.keys(event.data.response),
+          timestamp: event.timestamp
+        });
+      }
+    }
+    
+    // Also check for any user-provided data in the current state
+    if (context.currentState?.data) {
+      // Extract business-relevant data from current state
+      const stateData = context.currentState.data;
+      const businessData: Record<string, any> = {};
+      
+      // Extract known business fields
+      const businessFields = [
+        'business_name', 'businessName', 'entity_type', 'entityType',
+        'formation_state', 'formationState', 'ein', 'address',
+        'city', 'state', 'zip', 'phone', 'email', 'website'
+      ];
+      
+      for (const field of businessFields) {
+        if (stateData[field]) {
+          // Normalize field names to snake_case for consistency
+          const normalizedField = field.replace(/([A-Z])/g, '_$1').toLowerCase()
+            .replace(/^_/, '').replace(/__/g, '_');
+          businessData[normalizedField] = stateData[field];
+        }
+      }
+      
+      if (Object.keys(businessData).length > 0) {
+        Object.assign(aggregatedData, businessData);
+        logger.debug('📝 Extracted business data from current state', {
+          contextId: context.contextId,
+          dataKeys: Object.keys(businessData)
+        });
+      }
+    }
+    
+    return aggregatedData;
   }
 
   /**
@@ -2078,6 +2155,30 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       reasoning: 'Orchestration encountered an error, applying recovery strategy'
     });
     
+    // CRITICAL: Announce that we're pausing the orchestration
+    // This was missing - the orchestrator should communicate its state
+    await this.recordContextEntry(context, {
+      operation: ORCHESTRATOR_OPS.AGENT_EXECUTION_PAUSED,
+      data: {
+        agentId: 'orchestrator_agent',
+        reason: 'automation_failure',
+        error: error.message,
+        nextStep: 'switching_to_manual_mode'
+      },
+      reasoning: 'I am pausing orchestration due to an error. Switching to manual mode to continue with user assistance.',
+      confidence: 1.0,
+      trigger: {
+        type: 'system_event',
+        source: 'orchestration_failure',
+        details: { error: error.message }
+      }
+    });
+    
+    logger.info('⏸️ ORCHESTRATOR: I am pausing - switching to manual mode', {
+      contextId: context.contextId,
+      error: error.message
+    });
+    
     switch (this.config.resilience.fallbackStrategy) {
       case 'degrade':
         // Switch to manual mode
@@ -2117,6 +2218,16 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     };
     
     await this.sendUIRequests(context, [manualGuide]);
+    
+    // CRITICAL: Update task status to waiting_for_input
+    // This was missing, causing tasks to remain in limbo after failures
+    await this.updateTaskStatus(context, TASK_STATUS.WAITING_FOR_INPUT);
+    context.currentState.status = TASK_STATUS.WAITING_FOR_INPUT;
+    
+    logger.info('⏸️ Task paused - switched to manual mode due to automation failure', {
+      contextId: context.contextId,
+      status: TASK_STATUS.WAITING_FOR_INPUT
+    });
   }
   
   /**
@@ -2144,6 +2255,15 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     };
     
     await this.sendUIRequests(context, [guideRequest]);
+    
+    // Update task status when providing guidance
+    await this.updateTaskStatus(context, TASK_STATUS.WAITING_FOR_INPUT);
+    context.currentState.status = TASK_STATUS.WAITING_FOR_INPUT;
+    
+    logger.info('⏸️ Task paused - providing manual guidance', {
+      contextId: context.contextId,
+      status: TASK_STATUS.WAITING_FOR_INPUT
+    });
   }
   
   /**

@@ -52,6 +52,13 @@ export class A2AEventBus extends EventEmitter {
   private subscriptions: Map<string, Set<A2ASubscription>> = new Map();
   private eventHistory: Map<string, A2AEvent[]> = new Map();
   private readonly MAX_HISTORY_SIZE = 100;
+  
+  // TODO: Simple optimization for multi-instance deployments
+  // If we need to scale to multiple servers, add Redis pub/sub:
+  // 1. Check if Redis available: if (process.env.REDIS_URL) 
+  // 2. Use Redis for broadcasting across instances
+  // 3. Fall back to in-memory EventEmitter for single instance
+  // This is only needed when scaling beyond single server
 
   private constructor() {
     super();
