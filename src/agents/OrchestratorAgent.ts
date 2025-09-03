@@ -1876,9 +1876,8 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
               phaseData = { ...phaseData, ...subtaskResult.outputData };
             }
             
-            // MODIFIED: Don't immediately collect UIRequests, queue them for optimization
+            // Collect UIRequests from subtasks, adding source agent info
             if (subtaskResult.uiRequests && subtaskResult.uiRequests.length > 0) {
-              // Store UIRequests with their source agent for optimization
               for (const uiRequest of subtaskResult.uiRequests) {
                 uiRequests.push({
                   ...uiRequest,
@@ -2490,7 +2489,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
   /**
    * Handle progressive disclosure of UI requests
    * Engine PRD Lines 50, 83-85
-   * MODIFIED: Delegate to ux_optimization_agent for intelligent merging
+   * Sends UIRequests and optionally starts UXOptimizationAgent for deduplication
    */
   private async handleProgressiveDisclosure(
     context: TaskContext,
@@ -2502,20 +2501,18 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       return;
     }
     
-    // When multiple UIRequests detected, ensure UXOptimizationAgent is running
+    // When multiple UIRequests detected, start UXOptimizationAgent for deduplication
     if (uiRequests.length > 1) {
-      logger.info('🎯 Multiple UIRequests detected, ensuring UXOptimizationAgent is active', {
+      logger.info('🎯 Multiple UIRequests detected, starting UXOptimizationAgent', {
         contextId: context.contextId,
         requestCount: uiRequests.length
       });
       
-      // Ensure UXOptimizationAgent is instantiated and listening
-      // It will read UIRequests from context history and optimize them
+      // Start UXOptimizationAgent to listen for and deduplicate UIRequests
       await this.ensureUXOptimizationAgent(context);
     }
     
-    // Send all UIRequests as-is
-    // UXOptimizationAgent will intercept via SSE if running
+    // Send UIRequests to frontend
     await this.sendUIRequests(context, uiRequests);
   }
   
