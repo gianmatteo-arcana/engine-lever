@@ -2489,7 +2489,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
   /**
    * Handle progressive disclosure of UI requests
    * Engine PRD Lines 50, 83-85
-   * Sends UIRequests and optionally starts UXOptimizationAgent for deduplication
+   * Orchestrator only sends UIRequests - UXOptimizationAgent handles its own lifecycle
    */
   private async handleProgressiveDisclosure(
     context: TaskContext,
@@ -2501,130 +2501,16 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       return;
     }
     
-    // When multiple UIRequests detected, start UXOptimizationAgent for deduplication
-    if (uiRequests.length > 1) {
-      logger.info('🎯 Multiple UIRequests detected, starting UXOptimizationAgent', {
-        contextId: context.contextId,
-        requestCount: uiRequests.length
-      });
-      
-      // Start UXOptimizationAgent to listen for and deduplicate UIRequests
-      await this.ensureUXOptimizationAgent(context);
-    }
+    // Just send UIRequests - UXOptimizationAgent will auto-detect via SSE if needed
+    logger.info('📤 Sending UIRequests to frontend', {
+      contextId: context.contextId,
+      requestCount: uiRequests.length
+    });
     
-    // Send UIRequests to frontend
     await this.sendUIRequests(context, uiRequests);
   }
   
-  /**
-   * Ensure UXOptimizationAgent is running for this context
-   * The agent will listen for UIRequest events and optimize them automatically
-   */
-  private async ensureUXOptimizationAgent(
-    context: TaskContext
-  ): Promise<void> {
-    logger.info('🎨 Ensuring UXOptimizationAgent is active', {
-      contextId: context.contextId
-    });
-    
-    try {
-      // Check if UXOptimizationAgent is already running for this context
-      const agentKey = `ux_optimization_${context.contextId}`;
-      if (this.activeAgents.has(agentKey)) {
-        logger.debug('UXOptimizationAgent already active for context', {
-          contextId: context.contextId
-        });
-        return;
-      }
-      
-      // Instantiate UXOptimizationAgent for this context
-      const { agentDiscovery } = await import('../services/agent-discovery');
-      const uxAgent = await agentDiscovery.instantiateAgent(
-        'ux_optimization_agent',
-        context.tenantId,
-        context.metadata?.userId
-      );
-      
-      // Start the agent listening for UIRequest events
-      // The agent will:
-      // 1. Read existing UIRequests from context history
-      // 2. Listen for new UI_REQUEST_CREATED events via SSE
-      // 3. Optimize and merge UIRequests automatically
-      const agentRequest = {
-        taskContext: context,
-        operation: 'start_listening',
-        parameters: {
-          contextId: context.contextId,
-          mode: 'background'
-        }
-      };
-      
-      // Start the agent in background mode
-      (uxAgent as any).process(agentRequest).then((result: any) => {
-        if (result.status === 'completed') {
-          logger.info('✅ UXOptimizationAgent started successfully', {
-            contextId: context.contextId
-          });
-        } else {
-          logger.warn('⚠️ UXOptimizationAgent failed to start', {
-            contextId: context.contextId,
-            status: result.status
-          });
-        }
-      }).catch((error: any) => {
-        logger.error('❌ Error starting UXOptimizationAgent', {
-          contextId: context.contextId,
-          error: error instanceof Error ? error.message : String(error)
-        });
-      });
-      
-      // Mark agent as active
-      this.activeAgents.add(agentKey);
-      
-    } catch (error) {
-      logger.error('❌ Failed to ensure UXOptimizationAgent', {
-        contextId: context.contextId,
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
-  }
   
-  /**
-   * Optimize UI requests to minimize user interruption
-   */
-  private async optimizeUIRequests(requests: UIRequest[]): Promise<UIRequest[]> {
-    // Use LLM to intelligently reorder requests
-    const optimizationPrompt = `
-      Reorder these UI requests to minimize user interruption:
-      1. Group related requests together
-      2. Put requests that might eliminate others first
-      3. Prioritize critical information
-      
-      Requests: ${JSON.stringify(requests)}
-      
-      Return the optimized order as a JSON array of request IDs.
-    `;
-    
-    try {
-      const response = await this.llmProvider.complete({
-        prompt: optimizationPrompt,
-        model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
-        temperature: 0.3,
-        systemPrompt: 'You optimize UI request ordering for minimal user interruption.'
-      });
-      
-      const optimizedOrder = JSON.parse(response.content) as string[];
-      
-      // Reorder requests based on LLM recommendation
-      return optimizedOrder
-        .map(id => requests.find(r => r.requestId === id))
-        .filter(r => r !== undefined) as UIRequest[];
-        
-    } catch (error) {
-      logger.warn('Failed to optimize UI requests, using original order', { error });
-      return requests;
-    }
-  }
   
   /**
    * Send UI requests to frontend
@@ -2636,6 +2522,10 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       count: requests.length,
       types: requests.map(r => r.templateType)
     });
+    
+    // Notify UIRequest monitor for UXOptimizationAgent auto-start
+    const { uiRequestMonitor } = await import('../services/ui-request-monitor');
+    uiRequestMonitor.notifyUIRequestsSent(context, requests);
     
     // Record FULL UI requests in context for proper persistence
     // UI requests are now stored as task_context_events
