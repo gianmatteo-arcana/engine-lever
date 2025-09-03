@@ -108,6 +108,10 @@ export abstract class BaseAgent implements AgentExecutor {
   protected userId?: string;
   protected taskContext?: any; // Will be injected via dependency injection
   
+  // SSE subscription management for real-time context updates
+  private sseUnsubscribe?: () => void;
+  private dynamicContextData: Record<string, any> = {};
+  
   constructor(
     specializedConfigPath: string,
     businessId: string,
@@ -1405,6 +1409,12 @@ Respond with a JSON array of field definitions.
       accumulatedKnowledge: {} as Record<string, any>,
       startTime: Date.now()
     };
+
+    // Subscribe to real-time context updates via SSE
+    // This allows agents to receive UI responses and other agent updates during execution
+    if (request.taskContext?.contextId) {
+      await this.subscribeToContextUpdates(request.taskContext.contextId);
+    }
     
     // Get available tools dynamically
     const availableTools = await this.toolChain.getAvailableTools();
@@ -1418,7 +1428,7 @@ Respond with a JSON array of field definitions.
     // ReAct loop
     for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
       // Build iterative prompt with accumulated context
-      const iterativePrompt = this.buildReActPrompt(request, reasoningContext, availableTools, iteration);
+      const iterativePrompt = await this.buildReActPrompt(request, reasoningContext, availableTools, iteration);
       
       // Record system-level iteration start
       await this.recordContextEntry(request.taskContext!, {
@@ -1550,6 +1560,9 @@ Respond with a JSON array of field definitions.
           confidence: 0.5
         });
         
+        // Clean up SSE subscription before returning
+        this.unsubscribeFromContextUpdates();
+        
         // Return with needs_input status for orchestrator to handle
         return {
           status: 'needs_input',
@@ -1612,6 +1625,9 @@ Respond with a JSON array of field definitions.
             iteration,
             details: iterationResponse.details
           });
+          
+          // Clean up SSE subscription before returning
+          this.unsubscribeFromContextUpdates();
           
           // Return to help state - agent needs guidance
           return {
@@ -1695,6 +1711,9 @@ Respond with a JSON array of field definitions.
           });
         }
         
+        // Clean up SSE subscription before returning
+        this.unsubscribeFromContextUpdates();
+        
         // Return in standard format with UIRequest in correct location
         // Per base_agent.yaml: uiRequest MUST be in contextUpdate.data.uiRequest
         return {
@@ -1738,6 +1757,9 @@ Respond with a JSON array of field definitions.
         });
         
         // Return what we have with error status
+        // Clean up SSE subscription before returning error
+        this.unsubscribeFromContextUpdates();
+        
         return {
           status: 'error',
           contextUpdate: {
@@ -1767,6 +1789,9 @@ Respond with a JSON array of field definitions.
         };
       }
     }
+    
+    // Clean up SSE subscription at the end of successful execution
+    this.unsubscribeFromContextUpdates();
     
     // Should never reach here, but safety fallback
     return this.executeSimpleReasoning(request);
@@ -1827,12 +1852,12 @@ Respond with a JSON array of field definitions.
    * - Maintains standard response schema from base_agent.yaml
    * - Preserves ethical boundaries and decision frameworks
    */
-  private buildReActPrompt(
+  private async buildReActPrompt(
     request: BaseAgentRequest,
     reasoningContext: any,
     availableTools: any[],
     iteration: number
-  ): string {
+  ): Promise<string> {
     // Start with the full inherited prompt (base + specialized)
     // This ensures we maintain all principles, ethics, and specialized capabilities
     const basePrompt = this.buildInheritedPrompt(request);
@@ -1878,12 +1903,46 @@ Respond with a JSON array of field definitions.
       })
       .join('\n\n');
     
-    // Extract available data from request for agent awareness
-    const availableData = request.parameters || {};
-    const hasBusinessName = availableData.business_name || 
-                           availableData.businessName || 
-                           availableData.company_name ||
-                           availableData.companyName;
+    // Extract available data by combining multiple sources in order of precedence:
+    // 1. Fresh context from database (base data)
+    // 2. Dynamic context from SSE updates (real-time data) 
+    // 3. Request parameters (highest precedence)
+    let availableData = {};
+    
+    // 1. If we have a contextId, fetch fresh context and extract all available data
+    if (request.taskContext?.contextId) {
+      const freshContext = await this.fetchFreshTaskContext(request.taskContext.contextId);
+      if (freshContext) {
+        const contextData = this.extractAvailableDataFromContext(freshContext);
+        Object.assign(availableData, contextData);
+        
+        logger.debug('📚 Enhanced availableData with fresh context', {
+          agentId: this.specializedTemplate.agent.id,
+          contextId: request.taskContext.contextId,
+          contextDataKeys: Object.keys(contextData)
+        });
+      }
+    }
+
+    // 2. Add dynamic context data from SSE updates (real-time updates)
+    const dynamicData = this.getDynamicContextData();
+    if (Object.keys(dynamicData).length > 0) {
+      Object.assign(availableData, dynamicData);
+      
+      logger.debug('🔄 Enhanced availableData with dynamic SSE updates', {
+        agentId: this.specializedTemplate.agent.id,
+        dynamicDataKeys: Object.keys(dynamicData)
+      });
+    }
+
+    // 3. Request parameters take highest precedence (can override everything)
+    Object.assign(availableData, request.parameters || {});
+    
+    logger.debug('📊 Final availableData composition', {
+      agentId: this.specializedTemplate.agent.id,
+      totalKeys: Object.keys(availableData).length,
+      keys: Object.keys(availableData).slice(0, 10) // Show first 10 to avoid log spam
+    });
     
     // Append ReAct enhancement to the inherited prompt
     return `${basePrompt}
@@ -1897,10 +1956,7 @@ ${Object.keys(availableData).length > 0 ?
   `You have access to the following data:
 ${JSON.stringify(availableData, null, 2)}
 
-**CRITICAL**: Only use data that actually exists! 
-- Business name: ${hasBusinessName ? `"${hasBusinessName}"` : 'NOT PROVIDED YET'}
-- If business name is NOT PROVIDED, you must request it from the user first
-- NEVER search for "undefined" or "null" - these are not business names!` 
+Note: Tool execution layer has universal guards against invalid parameters.` 
   : 
   'No data provided yet - you may need to request user input first'}
 
@@ -1944,20 +2000,13 @@ For this iteration, you must decide on ONE of these actions:
    - NO → Go to "REQUEST USER INPUT" for missing pieces
 
 ### 🔍 ACTION: USE TOOL (action: "tool")
-**ONLY use when you have valid required parameters!**
-
-Before calling any tool:
-- Verify you have the required data (not undefined/null/empty)
-- Use real values from Available Data section above
-- Example: searchBusinessEntity("ARCANA DWELL, LLC", "CA")
-
-**NEVER call a tool with:**
-- undefined, null, or empty strings as parameters
-- Placeholder text like "business_name" instead of actual values
+Use when you need information from external systems.
 
 Your response must include in details:
-- tool: "exact_tool_name"
-- params: { /* actual values, not undefined */ }
+- tool: "exact_tool_name"  
+- params: { /* tool-specific parameters */ }
+
+Note: Universal validation guards will prevent invalid parameters and provide clear error messages.
 
 ### ✅ ACTION: PROVIDE ANSWER (action: "answer")
 Choose this when you have sufficient information to complete the task.
@@ -2823,6 +2872,104 @@ What is your decision for iteration ${iteration}?`;
   }
 
   /**
+   * Fetch fresh task context from database
+   * This ensures agents have access to all previously collected data
+   * when they are instantiated mid-task or need to refresh their context
+   * 
+   * @param contextId - The task context ID to fetch
+   * @returns Fresh task context with complete history
+   * @protected
+   */
+  protected async fetchFreshTaskContext(contextId: string): Promise<TaskContext | null> {
+    try {
+      const { TaskService } = await import('../../services/task-service');
+      const taskService = TaskService.getInstance();
+      
+      const freshContext = await taskService.getTask(contextId);
+      
+      if (freshContext) {
+        logger.debug('📋 Fetched fresh task context from database', {
+          contextId,
+          agentId: this.specializedTemplate.agent.id,
+          historyEvents: freshContext.history?.length || 0,
+          currentState: freshContext.currentState?.status
+        });
+      } else {
+        logger.warn('⚠️ Task context not found in database', {
+          contextId,
+          agentId: this.specializedTemplate.agent.id
+        });
+      }
+      
+      return freshContext;
+    } catch (error) {
+      logger.error('❌ Failed to fetch fresh task context', {
+        contextId,
+        agentId: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Extract all available data from task context history
+   * This aggregates both UI responses and agent execution results
+   * to provide complete context to the agent
+   * 
+   * @param context - The task context to extract data from
+   * @returns Aggregated data from all sources
+   * @protected
+   */
+  protected extractAvailableDataFromContext(context: TaskContext): Record<string, any> {
+    const aggregatedData: Record<string, any> = {};
+    
+    // Extract data from task history
+    for (const event of context.history || []) {
+      // UI responses (user-provided data)
+      if (event.operation === 'UI_RESPONSE_SUBMITTED' && event.data?.response) {
+        Object.assign(aggregatedData, event.data.response);
+        
+        logger.debug('📝 Found UI response data', {
+          contextId: context.contextId,
+          dataKeys: Object.keys(event.data.response),
+          timestamp: event.timestamp
+        });
+      }
+      
+      // Agent execution results (tool results, contextUpdate.data)
+      if (event.operation?.includes('agent.') && event.data?.contextUpdate?.data) {
+        Object.assign(aggregatedData, event.data.contextUpdate.data);
+        
+        logger.debug('🤖 Found agent execution data', {
+          contextId: context.contextId,
+          operation: event.operation,
+          dataKeys: Object.keys(event.data.contextUpdate.data),
+          timestamp: event.timestamp
+        });
+      }
+    }
+    
+    // Also check current state data
+    if (context.currentState?.data) {
+      Object.assign(aggregatedData, context.currentState.data);
+      
+      logger.debug('📊 Found current state data', {
+        contextId: context.contextId,
+        dataKeys: Object.keys(context.currentState.data)
+      });
+    }
+    
+    logger.debug('🔄 Extracted available data from context', {
+      contextId: context.contextId,
+      totalKeys: Object.keys(aggregatedData).length,
+      keys: Object.keys(aggregatedData).slice(0, 10) // Log first 10 keys to avoid spam
+    });
+    
+    return aggregatedData;
+  }
+
+  /**
    * Announce that this agent is blocked and needs something
    * Other agents listen for these announcements to provide help
    * 
@@ -3265,6 +3412,95 @@ What is your decision for iteration ${iteration}?`;
     });
 
     return requestId;
+  }
+
+  /**
+   * Subscribe to SSE events for real-time task context updates
+   * This enables agents to receive and incorporate new data while executing
+   */
+  protected async subscribeToContextUpdates(contextId: string): Promise<void> {
+    if (this.sseUnsubscribe) {
+      // Clean up existing subscription
+      this.sseUnsubscribe();
+    }
+
+    // Import A2A Event Bus
+    const { a2aEventBus } = await import('../../services/a2a-event-bus');
+    
+    const subscriberId = `${this.specializedTemplate.agent.id}-${Date.now()}`;
+    
+    logger.info('🔄 Subscribing to context updates', {
+      agentId: this.specializedTemplate.agent.id,
+      contextId,
+      subscriberId
+    });
+
+    // Subscribe to task-specific events with skip history since we fetch fresh context separately
+    this.sseUnsubscribe = a2aEventBus.subscribe(
+      contextId,
+      (event) => this.handleContextUpdateEvent(event),
+      subscriberId,
+      true // Skip history - we get fresh context via fetchFreshTaskContext
+    );
+  }
+
+  /**
+   * Handle incoming SSE context update events
+   * Updates the dynamic context data that gets merged during prompt building
+   */
+  private handleContextUpdateEvent(event: any): void {
+    logger.debug('📥 Received context update event', {
+      agentId: this.specializedTemplate.agent.id,
+      eventType: event.type,
+      operation: event.operation,
+      hasData: !!event.data
+    });
+
+    // Extract data from UI responses and agent executions
+    if (event.type === 'UI_REQUEST_RESPONSE' && event.data) {
+      // Merge UI response data into dynamic context
+      Object.assign(this.dynamicContextData, event.data);
+      
+      logger.debug('🖥️ Updated context with UI response', {
+        agentId: this.specializedTemplate.agent.id,
+        newDataKeys: Object.keys(event.data),
+        totalContextKeys: Object.keys(this.dynamicContextData).length
+      });
+    } else if (event.operation?.includes('agent.') && event.data?.contextUpdate?.data) {
+      // Merge agent execution data into dynamic context
+      Object.assign(this.dynamicContextData, event.data.contextUpdate.data);
+      
+      logger.debug('🤖 Updated context with agent execution data', {
+        agentId: this.specializedTemplate.agent.id,
+        sourceOperation: event.operation,
+        newDataKeys: Object.keys(event.data.contextUpdate.data),
+        totalContextKeys: Object.keys(this.dynamicContextData).length
+      });
+    }
+  }
+
+  /**
+   * Get current dynamic context data accumulated from SSE events
+   * This is used during prompt building to include real-time updates
+   */
+  protected getDynamicContextData(): Record<string, any> {
+    return { ...this.dynamicContextData };
+  }
+
+  /**
+   * Clean up SSE subscription when agent execution completes
+   */
+  protected unsubscribeFromContextUpdates(): void {
+    if (this.sseUnsubscribe) {
+      logger.info('👋 Unsubscribing from context updates', {
+        agentId: this.specializedTemplate.agent.id
+      });
+      this.sseUnsubscribe();
+      this.sseUnsubscribe = undefined;
+    }
+    
+    // Clear dynamic context data
+    this.dynamicContextData = {};
   }
 
 }

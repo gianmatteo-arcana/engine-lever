@@ -159,11 +159,9 @@ risk_levels:
 # Tools for compliance analysis
 tools:
   regulatory_research:
-    - "regulatory_database_lookup"
-    - "deadline_calculator"
-    - "compliance_calendar_generator"
+    - "searchBusinessEntity"  # Use CA business search for regulatory info
+    - "searchBusinessMemory"  # Check stored compliance knowledge
   
   risk_assessment:
-    - "risk_assessor"
-    - "penalty_calculator"
-    - "compliance_gap_analyzer"
+    - "searchBusinessMemory"  # Access previous compliance assessments
+    - "validateEIN"          # Basic validation tools
