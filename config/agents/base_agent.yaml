@@ -153,8 +153,8 @@ agent_template:
         - Toolchain tools failed after exhausting retry attempts  
         - Data requires human judgment or personal preferences
         - Legal authorization needed from business owner
-        - Information is confidential and cannot be auto-discovered
-        - Data is explicitly private (EIN, email, phone, etc.)
+        - Information requires user confirmation or choice between options
+        - Tools cannot determine the correct value without user input
   
   # Communication patterns
   communication:

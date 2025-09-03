@@ -110,6 +110,10 @@ export class A2AEventBus extends EventEmitter {
       type,
       timestamp: event.timestamp
     });
+
+    // CRITICAL: Yield control to event loop immediately
+    // This allows SSE to send events without waiting for agent processing
+    await new Promise(resolve => setImmediate(resolve));
   }
 
   /**

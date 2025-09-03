@@ -22,7 +22,8 @@ jest.mock('../../../src/services/tool-chain');
 // Mock a2a-event-bus
 jest.mock('../../../src/services/a2a-event-bus', () => ({
   a2aEventBus: {
-    broadcast: jest.fn().mockResolvedValue(undefined)
+    broadcast: jest.fn().mockResolvedValue(undefined),
+    subscribe: jest.fn().mockReturnValue(() => {})
   }
 }));
 

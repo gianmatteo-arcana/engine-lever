@@ -605,7 +605,7 @@ export class OrchestratorAgent extends BaseAgent {
           logger.info(`🔁 Retrying ${agentId} execution`, { taskId, attempt: attempts });
           
           // Find the failed subtask and retry it
-          if (execution) {
+          if (execution && execution.subtasks) {
             const failedSubtask = execution.subtasks.find((st: any) => 
               st.agentId === agentId && st.status === 'failed'
             );
@@ -614,6 +614,8 @@ export class OrchestratorAgent extends BaseAgent {
               failedSubtask.status = 'pending';
               await this.continueExecution(taskId);
             }
+          } else {
+            logger.error('Cannot retry - execution or subtasks not found', { taskId, agentId });
           }
         }, action.retry.delay);
         break;
@@ -1260,8 +1262,7 @@ export class OrchestratorAgent extends BaseAgent {
           // The task is NOT failed, NOT completed, just waiting
           await this.updateTaskStatus(context, TASK_STATUS.WAITING_FOR_INPUT);
           
-          // Also update the context state to reflect this
-          context.currentState.status = TASK_STATUS.WAITING_FOR_INPUT;
+          // TaskService will handle the status update in the database
           
           // Don't mark as complete, exit orchestration loop
           allPhasesCompleted = false;
@@ -2633,7 +2634,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     });
     
     // Update the context state to completed
-    context.currentState.status = TASK_STATUS.COMPLETED;
+    // Status is updated in the database by TaskService
     context.currentState.completeness = 100;
     
     // Update task status in database via TaskService
@@ -2733,7 +2734,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       case 'fail':
       default:
         // Mark task as failed
-        context.currentState.status = 'failed';
+        // Status is updated in the database by TaskService
         break;
     }
   }
@@ -2762,7 +2763,6 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     // CRITICAL: Update task status to waiting_for_input
     // This was missing, causing tasks to remain in limbo after failures
     await this.updateTaskStatus(context, TASK_STATUS.WAITING_FOR_INPUT);
-    context.currentState.status = TASK_STATUS.WAITING_FOR_INPUT;
     
     logger.info('⏸️ Task paused - switched to manual mode due to automation failure', {
       contextId: context.contextId,
@@ -2798,7 +2798,6 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     
     // Update task status when providing guidance
     await this.updateTaskStatus(context, TASK_STATUS.WAITING_FOR_INPUT);
-    context.currentState.status = TASK_STATUS.WAITING_FOR_INPUT;
     
     logger.info('⏸️ Task paused - providing manual guidance', {
       contextId: context.contextId,
