@@ -24,6 +24,7 @@ import { DatabaseService } from '../services/database';
 import { StateComputer } from '../services/state-computer';
 import { TaskService } from '../services/task-service';
 import { A2AEventBus } from '../services/a2a-event-bus';
+import { taskPerformanceTracker } from '../services/task-performance-tracker';
 import { TASK_STATUS } from '../constants/task-status';
 // ExecutionPhase enum is available from '../constants/execution-phases' when needed
 // Currently using ExecutionPhase type from engine-types for compatibility
@@ -1084,6 +1085,17 @@ export class OrchestratorAgent extends BaseAgent {
         historyLength: context.history.length,
         timestamp: new Date().toISOString()
       });
+      
+      // Start performance tracking for this task
+      if (!isResuming) {
+        taskPerformanceTracker.startTask(context.contextId);
+      }
+      taskPerformanceTracker.recordEvent(
+        context.contextId, 
+        'agent_start', 
+        'orchestrator',
+        { isResuming, taskType: context.currentState.task_type || 'unknown' }
+      );
       
       // 1. Get or create execution plan
       // Check memory cache first (optimization)
@@ -2346,8 +2358,14 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
   (context.currentState as any)?.user_id
       );
       
-      // Execute the real agent with the request
-      const agentResponse = await (agentInstance as any).executeInternal(request);
+      // Execute the real agent with the request (with performance tracking)
+      const agentResponse = await taskPerformanceTracker.measureOperation(
+        context.contextId,
+        'agent_complete',
+        agent.agentId,
+        async () => (agentInstance as any).executeInternal(request),
+        { phase: phase.name, role: agent.role }
+      );
       
       return agentResponse;
     } catch (error) {

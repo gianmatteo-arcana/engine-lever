@@ -78,7 +78,8 @@ import {
 } from '../../types/base-agent-types';
 import { TaskContext, OrchestratorRequest, OrchestratorResponse } from '../../types/task-engine.types';
 import { DatabaseService } from '../../services/database';
-import { logger } from '../../utils/logger';
+import { logger, createTaskLogger } from '../../utils/logger';
+import { taskPerformanceTracker } from '../../services/task-performance-tracker';
 import { a2aEventBus } from '../../services/a2a-event-bus';
 import {
   AgentExecutor,
@@ -1389,6 +1390,10 @@ Respond with a JSON array of field definitions.
    * integrating ReAct as an enhancement rather than a replacement.
    */
   async executeInternal(request: BaseAgentRequest): Promise<BaseAgentResponse> {
+    // Extract taskId for performance tracking and structured logging
+    const taskId = request.taskContext?.contextId || 'unknown';
+    const taskLogger = createTaskLogger(taskId);
+    
     // Constants for ReAct loop control
     // TODO: Simple optimization - Make MAX_ITERATIONS configurable per task complexity
     // Easy win: onboarding might need 5, complex business discovery might need 15
@@ -1447,14 +1452,25 @@ Respond with a JSON array of field definitions.
         }
       });
       
-      // Call LLM for this iteration
-      const llmStartTime = Date.now();
-      const llmResult = await this.llmProvider.complete({
-        prompt: iterativePrompt,
-        model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
-        temperature: 0.3,
-        systemPrompt: `You are ${this.specializedTemplate.agent.name}, an autonomous agent with the ability to reason and use tools iteratively to accomplish your goals.`
+      // Call LLM for this iteration with performance tracking
+      taskLogger.info(`Starting LLM call for iteration ${iteration}`, { 
+        agentType: this.specializedTemplate.agent.id,
+        iteration 
       });
+      
+      const llmStartTime = Date.now();
+      const llmResult = await taskPerformanceTracker.measureOperation(
+        taskId,
+        'llm_call',
+        `${this.specializedTemplate.agent.id}_iteration_${iteration}`,
+        async () => await this.llmProvider.complete({
+          prompt: iterativePrompt,
+          model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
+          temperature: 0.3,
+          systemPrompt: `You are ${this.specializedTemplate.agent.name}, an autonomous agent with the ability to reason and use tools iteratively to accomplish your goals.`
+        }),
+        { agentType: this.specializedTemplate.agent.id, iteration, mode: 'react' }
+      );
       const llmDuration = Date.now() - llmStartTime;
       
       // Parse iteration response
@@ -1813,13 +1829,26 @@ Respond with a JSON array of field definitions.
       reason: !this.toolChain ? 'No toolchain available' : 'ReAct disabled'
     });
     
-    // Call LLM with standard approach
-    const llmResult = await this.llmProvider.complete({
-      prompt: fullPrompt,
-      model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
-      temperature: 0.3,
-      systemPrompt: this.specializedTemplate.agent?.mission || 'You are a helpful AI assistant.'
+    // Call LLM with standard approach with performance tracking
+    const taskId = request.taskContext?.contextId || 'unknown';
+    const taskLogger = createTaskLogger(taskId);
+    
+    taskLogger.info(`Starting LLM call (standard mode)`, { 
+      agentType: this.specializedTemplate.agent.id
     });
+    
+    const llmResult = await taskPerformanceTracker.measureOperation(
+      taskId,
+      'llm_call',
+      `${this.specializedTemplate.agent.id}_standard`,
+      async () => await this.llmProvider.complete({
+        prompt: fullPrompt,
+        model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
+        temperature: 0.3,
+        systemPrompt: this.specializedTemplate.agent?.mission || 'You are a helpful AI assistant.'
+      }),
+      { agentType: this.specializedTemplate.agent.id, mode: 'standard' }
+    );
     
     // Parse and validate response
     let llmResponse: any;
@@ -2121,8 +2150,10 @@ What is your decision for iteration ${iteration}?`;
     // we could run them in parallel with Promise.all()
     // Example: searching multiple databases simultaneously
     const { tool, params } = details;
+    const taskId = taskContext.contextId;
+    const taskLogger = createTaskLogger(taskId);
     
-    logger.info('🔧 Executing tool action', {
+    taskLogger.info('🔧 Executing tool action', {
       agentId: this.specializedTemplate.agent.id,
       tool,
       iteration,
@@ -2130,8 +2161,14 @@ What is your decision for iteration ${iteration}?`;
     });
     
     try {
-      // Execute the tool through ToolChain
-      const result = await this.toolChain.executeTool(tool, params || {});
+      // Execute the tool through ToolChain with performance tracking
+      const result = await taskPerformanceTracker.measureOperation(
+        taskId,
+        'tool_call',
+        tool,
+        async () => await this.toolChain.executeTool(tool, params || {}),
+        { agent: this.specializedTemplate.agent.id, iteration }
+      );
       
       // Record successful tool usage as system event
       await this.recordContextEntry(taskContext, {
