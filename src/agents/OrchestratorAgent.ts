@@ -1821,8 +1821,18 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
           const result = subtaskResults[index];
           if (result.status === 'fulfilled') {
             results.push(result.value);
-            if (result.value.uiRequests) {
-              uiRequests.push(...result.value.uiRequests);
+            // MODIFIED: Don't immediately collect UIRequests, queue them for optimization
+            if (result.value.uiRequests && result.value.uiRequests.length > 0) {
+              // Store UIRequests with their source agent for optimization
+              for (const uiRequest of result.value.uiRequests) {
+                uiRequests.push({
+                  ...uiRequest,
+                  semanticData: {
+                    ...uiRequest.semanticData,
+                    sourceAgent: result.value.agent || subtasks[index].agent
+                  }
+                } as UIRequest);
+              }
             }
           } else {
             logger.error(`Subtask ${index + 1} failed`, {
@@ -1873,9 +1883,18 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
               phaseData = { ...phaseData, ...subtaskResult.outputData };
             }
             
-            // Collect UI requests
-            if (subtaskResult.uiRequests) {
-              uiRequests.push(...subtaskResult.uiRequests);
+            // MODIFIED: Don't immediately collect UIRequests, queue them for optimization
+            if (subtaskResult.uiRequests && subtaskResult.uiRequests.length > 0) {
+              // Store UIRequests with their source agent for optimization
+              for (const uiRequest of subtaskResult.uiRequests) {
+                uiRequests.push({
+                  ...uiRequest,
+                  semanticData: {
+                    ...uiRequest.semanticData,
+                    sourceAgent: subtaskResult.agent || subtask.agent
+                  }
+                } as UIRequest);
+              }
             }
             
           } catch (error) {
@@ -2478,6 +2497,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
   /**
    * Handle progressive disclosure of UI requests
    * Engine PRD Lines 50, 83-85
+   * MODIFIED: Delegate to ux_optimization_agent for intelligent merging
    */
   private async handleProgressiveDisclosure(
     context: TaskContext,
@@ -2489,7 +2509,30 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       return;
     }
     
-    // Intelligent batching and reordering
+    // CRITICAL: When multiple UIRequests from different agents, delegate to ux_optimization_agent
+    if (uiRequests.length > 1) {
+      // Check if requests are from different agents
+      const sourceAgents = new Set(
+        uiRequests.map(req => req.semanticData?.sourceAgent).filter(Boolean)
+      );
+      
+      if (sourceAgents.size > 1) {
+        logger.info('🎯 Multiple UIRequests from different agents detected, delegating to ux_optimization_agent', {
+          contextId: context.contextId,
+          requestCount: uiRequests.length,
+          sourceAgents: Array.from(sourceAgents)
+        });
+        
+        // Create optimized UIRequests via ux_optimization_agent
+        const optimizedRequests = await this.delegateUIOptimization(context, uiRequests);
+        
+        // Send the optimized requests
+        await this.sendUIRequests(context, optimizedRequests);
+        return;
+      }
+    }
+    
+    // Original flow for single agent or disabled optimization
     const optimized = await this.optimizeUIRequests(uiRequests);
     
     // Store pending requests
@@ -2501,6 +2544,81 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     if (pending.length >= this.config.progressiveDisclosure.minBatchSize) {
       const batch = pending.splice(0, this.config.progressiveDisclosure.minBatchSize);
       await this.sendUIRequests(context, batch);
+    }
+  }
+  
+  /**
+   * Delegate UIRequest optimization to ux_optimization_agent
+   * This leverages the agent's expertise in UI/UX to merge and optimize forms
+   */
+  private async delegateUIOptimization(
+    context: TaskContext,
+    uiRequests: UIRequest[]
+  ): Promise<UIRequest[]> {
+    logger.info('🎨 Delegating UIRequest optimization to ux_optimization_agent', {
+      contextId: context.contextId,
+      requestCount: uiRequests.length
+    });
+    
+    try {
+      // Create a subtask for ux_optimization_agent
+      const optimizationSubtask = {
+        description: 'Optimize and merge UIRequests for better user experience',
+        agent: 'ux_optimization_agent',
+        specific_instruction: `You have received multiple UIRequests from different agents that may have overlapping or related fields. 
+        Your task is to:
+        1. Analyze the UIRequests and identify duplicate or similar fields
+        2. Merge overlapping fields intelligently (e.g., business_name, legal_business_name, company_name)
+        3. Reorder fields for optimal user flow and progressive disclosure
+        4. Reduce cognitive load by grouping related fields
+        5. Create a single, optimized UIRequest that collects all needed information efficiently
+        
+        Remember: The goal is to minimize user interruption while ensuring all required data is collected.`,
+        input_data: {
+          uiRequests: uiRequests,
+          sourceAgents: [...new Set(uiRequests.map(r => r.semanticData?.sourceAgent).filter(Boolean))],
+          optimization_goals: ['reduce_duplicates', 'improve_flow', 'minimize_interruptions']
+        },
+        expected_output: 'Optimized UIRequest(s) with merged and reordered fields',
+        success_criteria: ['Duplicates removed', 'Fields logically grouped', 'Cognitive load reduced']
+      };
+      
+      // Execute the optimization subtask
+      const optimizationResult = await this.executeSubtask(
+        context,
+        optimizationSubtask,
+        { name: 'UI Optimization', priority: 1, agents: [] } as ExecutionPhase,
+        {},
+        0
+      );
+      
+      // Extract optimized UIRequests from result
+      if (optimizationResult.status === 'completed' && optimizationResult.data?.optimizedUIRequests) {
+        logger.info('✅ UIRequests successfully optimized by ux_optimization_agent', {
+          contextId: context.contextId,
+          originalCount: uiRequests.length,
+          optimizedCount: optimizationResult.data.optimizedUIRequests.length
+        });
+        
+        return optimizationResult.data.optimizedUIRequests;
+      }
+      
+      // Fallback if optimization fails
+      logger.warn('⚠️ ux_optimization_agent optimization failed, using original requests', {
+        contextId: context.contextId,
+        status: optimizationResult.status
+      });
+      
+      return uiRequests;
+      
+    } catch (error) {
+      logger.error('❌ Error delegating to ux_optimization_agent', {
+        contextId: context.contextId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      
+      // Fallback to original requests
+      return uiRequests;
     }
   }
   

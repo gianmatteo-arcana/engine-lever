@@ -211,9 +211,18 @@ export class AgentDiscoveryService {
     }
     
     try {
-      // Create DefaultAgent instance with YAML config path
-      const configFileName = `${agentId}.yaml`;
-      const agent = new DefaultAgent(configFileName, businessId, userId);
+      let agent: DefaultAgent;
+      
+      // Check for specialized agent implementations
+      if (agentId === 'ux_optimization_agent') {
+        // Use the specialized UXOptimizationAgent
+        const { UXOptimizationAgent } = await import('../agents/UXOptimizationAgent');
+        agent = new UXOptimizationAgent(businessId, userId) as any;
+      } else {
+        // Create DefaultAgent instance with YAML config path
+        const configFileName = `${agentId}.yaml`;
+        agent = new DefaultAgent(configFileName, businessId, userId);
+      }
       
       // Store instance
       this.agentInstances.set(cacheKey, agent);
@@ -227,7 +236,8 @@ export class AgentDiscoveryService {
       logger.info(`🤖 Instantiated agent: ${agentId}`, {
         businessId,
         userId,
-        role: config.agent.role
+        role: config.agent.role,
+        implementation: agentId === 'ux_optimization_agent' ? 'specialized' : 'default'
       });
       
       return agent;
