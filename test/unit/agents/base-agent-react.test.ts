@@ -412,18 +412,12 @@ describe('BaseAgent ReAct Pattern', () => {
           thought: 'Cannot find required data, need user input',
           action: 'needs_user_input',
           details: {
+            needed_fields: ['business_name'], // Must explicitly specify fields
             uiRequest: {
               templateType: 'form',
               title: 'Business Information Required',
-              instructions: 'Please provide your business details',
-              fields: [
-                {
-                  name: 'business_name',
-                  type: 'text',
-                  label: 'Business Name',
-                  required: true
-                }
-              ]
+              instructions: 'Please provide your business details'
+              // fields removed - auto-generated from needed_fields
             }
           }
         }));
@@ -445,9 +439,10 @@ describe('BaseAgent ReAct Pattern', () => {
       expect(response.status).toBe('needs_input');
       expect(response.contextUpdate?.data.uiRequest).toBeDefined();
       expect(response.contextUpdate?.data.uiRequest.templateType).toBe('form');
-      // Agent now generates multiple default fields when no specific field is requested
+      // Agent explicitly requested business_name field
       expect(response.contextUpdate?.data.uiRequest.fields).toBeDefined();
-      expect(response.contextUpdate?.data.uiRequest.fields.length).toBeGreaterThan(0);
+      expect(response.contextUpdate?.data.uiRequest.fields).toHaveLength(1);
+      expect(response.contextUpdate?.data.uiRequest.fields[0].id).toBe('business_name');
     });
   });
   

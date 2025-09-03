@@ -1222,41 +1222,6 @@ Respond with JSON:
     }
   }
   
-  /**
-   * Infer needed fields from the agent's reasoning
-   * This is a fallback when the agent doesn't explicitly list needed fields
-   */
-  private inferNeededFieldsFromThought(thought: string): string[] {
-    const commonFields = {
-      'business name': 'business_name',
-      'company name': 'business_name',
-      'business type': 'business_type',
-      'entity type': 'business_type',
-      'ein': 'ein',
-      'tax id': 'ein',
-      'state': 'formation_state',
-      'formation state': 'formation_state',
-      'address': 'business_address',
-      'email': 'email',
-      'phone': 'phone'
-    };
-    
-    const inferredFields: string[] = [];
-    const lowerThought = thought.toLowerCase();
-    
-    for (const [phrase, field] of Object.entries(commonFields)) {
-      if (lowerThought.includes(phrase) && !inferredFields.includes(field)) {
-        inferredFields.push(field);
-      }
-    }
-    
-    // If no fields inferred, return common onboarding fields
-    if (inferredFields.length === 0) {
-      return ['business_name', 'business_type', 'ein', 'formation_state'];
-    }
-    
-    return inferredFields;
-  }
   
   /**
    * Create field definitions for missing data using LLM reasoning
@@ -1634,25 +1599,53 @@ Respond with a JSON array of field definitions.
         });
         
         // Generate proper form fields based on what the agent needs
-        // The agent should specify what data it needs in details.needed_fields
+        // The agent MUST explicitly specify what data it needs in details.needed_fields
         const neededFields = iterationResponse.details?.needed_fields || 
                             iterationResponse.details?.required_data ||
-                            iterationResponse.details?.missing_fields ||
-                            // Fallback: try to infer from the agent's thought
-                            this.inferNeededFieldsFromThought(iterationResponse.thought);
+                            iterationResponse.details?.missing_fields;
         
-        // Generate proper field definitions
-        let fields = [];
-        if (Array.isArray(neededFields) && neededFields.length > 0) {
-          fields = await this.createFieldDefinitionsForMissingData(neededFields, request.taskContext);
-        } else {
-          // Fallback: create basic fields for common onboarding data
-          logger.warn('No specific fields requested, using default onboarding fields');
-          fields = await this.createFieldDefinitionsForMissingData(
-            ['business_name', 'business_type', 'ein', 'formation_state'], 
-            request.taskContext
-          );
+        // Validate that agent explicitly specified fields
+        if (!Array.isArray(neededFields) || neededFields.length === 0) {
+          // Agent failed to specify what fields it needs - this is an error
+          logger.error('❌ Agent requested user input without specifying needed_fields', {
+            agentId: this.specializedTemplate.agent.id,
+            iteration,
+            details: iterationResponse.details
+          });
+          
+          // Return to help state - agent needs guidance
+          return {
+            status: 'needs_input', 
+            contextUpdate: {
+              entryId: this.generateEntryId(),
+              sequenceNumber: iteration,
+              timestamp: new Date().toISOString(),
+              actor: {
+                type: 'agent',
+                id: this.specializedTemplate.agent.id,
+                version: this.specializedTemplate.agent.version
+              },
+              operation: 'agent_error',
+              data: {
+                error: 'missing_field_specification',
+                message: 'Agent must explicitly specify needed_fields when requesting user input',
+                attempted_action: 'needs_user_input',
+                hint: 'Use details.needed_fields array to specify exactly which fields you need from the user'
+              },
+              reasoning: 'Agent requested user input but failed to specify what fields are needed',
+              confidence: 0.2,
+              trigger: {
+                type: 'orchestrator_request',
+                source: 'react_validation_failure',
+                details: { iteration }
+              }
+            },
+            confidence: 0.2
+          };
         }
+        
+        // Generate proper field definitions from explicitly specified fields
+        const fields = await this.createFieldDefinitionsForMissingData(neededFields, request.taskContext);
         
         // Ensure UIRequest is properly structured with user-facing instructions
         let uiRequest = iterationResponse.details?.uiRequest || {};
@@ -1955,15 +1948,31 @@ Only ask users for:
 - Internal preferences or decisions
 - Information tools explicitly couldn't find
 
-Your response must include in details:
-- needed_fields: ["field1", "field2", ...] // ONLY fields NOT findable by tools
+**MANDATORY RESPONSE FORMAT:**
+Your response MUST include in details:
+- needed_fields: ["field1", "field2", ...] // REQUIRED - explicit list of field names
 - uiRequest: {
     templateType: "form",
     title: "Brief title (3-5 words)",
-    instructions: "One short helpful phrase (5-8 words)" // Brief context, not your reasoning!
-    // DO NOT include fields here - they will be generated based on needed_fields
+    instructions: "One short helpful phrase (5-8 words)"
   }
-Example fields: ["ein", "business_email", "phone_number"] // Private data only!
+
+**CRITICAL REQUIREMENTS:**
+- needed_fields is MANDATORY - never omit this array
+- needed_fields must contain explicit field names (e.g., "ein", "business_email", "phone")
+- DO NOT include fields in uiRequest - they are auto-generated from needed_fields
+- If you don't specify needed_fields, your request will ERROR
+
+Example valid response in details:
+{
+  needed_fields: ["ein", "business_email", "phone_number"],
+  uiRequest: {
+    templateType: "form",
+    title: "Tax & Contact Info",
+    instructions: "Private details not in public records"
+  }
+}
+
 CRITICAL: If you haven't tried searchBusinessEntity yet, DO THAT FIRST!
 
 ### 4. REQUEST HELP (action: "help")
