@@ -2633,9 +2633,8 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       contextId: context.contextId
     });
     
-    // Update the context state to completed
     // Status is updated in the database by TaskService
-    context.currentState.completeness = 100;
+    // We don't update in-memory state - TaskService is the single source of truth
     
     // Update task status in database via TaskService
     try {
@@ -2734,7 +2733,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       case 'fail':
       default:
         // Mark task as failed
-        // Status is updated in the database by TaskService
+        await this.updateTaskStatus(context, TASK_STATUS.FAILED);
         break;
     }
   }
