@@ -1283,89 +1283,645 @@ Respond with a JSON array of field definitions.
   }
 
    /**
-   * Internal execution method (core reasoning engine)
-   * This is the heart of agent intelligence - subclasses override for specialized behavior
+   * 🧠 EMERGENT REASONING ENGINE - ReAct Pattern Implementation
+   * 
+   * This method implements the Reasoning + Acting (ReAct) pattern, enabling agents to:
+   * 1. Think about what they need
+   * 2. Act by using tools
+   * 3. Observe results
+   * 4. Think again with new information
+   * 5. Repeat until conclusion
+   * 
+   * The architecture is designed for EMERGENT BEHAVIOR - agents can discover
+   * novel ways to combine tools and solve problems we never explicitly programmed.
    */
   async executeInternal(request: BaseAgentRequest): Promise<BaseAgentResponse> {
-    // Build merged prompt from base + specialized templates
+    // Constants for ReAct loop control
+    const MAX_ITERATIONS = 10; // Generous limit to allow complex reasoning
+    const ENABLE_REACT = true; // Feature flag for ReAct pattern
+    
+    // Check if we should use ReAct pattern or fall back to simple reasoning
+    if (!ENABLE_REACT || !this.toolChain) {
+      return this.executeSinglePassReasoning(request);
+    }
+    
+    // Initialize reasoning context
+    const reasoningContext = {
+      iterations: [] as any[],
+      toolResults: {} as Record<string, any>,
+      accumulatedKnowledge: {} as Record<string, any>,
+      startTime: Date.now()
+    };
+    
+    // Get available tools dynamically
+    const availableTools = await this.toolChain.getAvailableTools();
+    
+    logger.info('🔄 Starting ReAct reasoning loop', {
+      agentId: this.specializedTemplate.agent.id,
+      taskId: request.taskContext?.contextId,
+      availableTools: availableTools.length
+    });
+    
+    // ReAct loop
+    for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
+      // Build iterative prompt with accumulated context
+      const iterativePrompt = this.buildReActPrompt(request, reasoningContext, availableTools, iteration);
+      
+      // Record system-level iteration start
+      await this.recordContextEntry(request.taskContext!, {
+        operation: 'system.reasoning_iteration_start',
+        data: {
+          iteration,
+          hasToolResults: Object.keys(reasoningContext.toolResults).length > 0,
+          elapsedMs: Date.now() - reasoningContext.startTime
+        },
+        reasoning: `Starting reasoning iteration ${iteration}`,
+        confidence: 1.0,
+        trigger: {
+          type: 'system_event',
+          source: 'react_loop',
+          details: { iteration }
+        }
+      });
+      
+      // Call LLM for this iteration
+      const llmStartTime = Date.now();
+      const llmResult = await this.llmProvider.complete({
+        prompt: iterativePrompt,
+        model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
+        temperature: 0.3,
+        systemPrompt: `You are ${this.specializedTemplate.agent.name}, an autonomous agent with the ability to reason and use tools iteratively to accomplish your goals.`
+      });
+      const llmDuration = Date.now() - llmStartTime;
+      
+      // Parse iteration response
+      let iterationResponse: any;
+      try {
+        iterationResponse = this.safeJsonParse(llmResult.content);
+        if (!iterationResponse) {
+          throw new Error('Failed to parse LLM response as JSON');
+        }
+      } catch (error) {
+        logger.error('ReAct iteration parse error', {
+          agentId: this.specializedTemplate.agent.id,
+          iteration,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        // Attempt recovery by asking for clarification
+        continue;
+      }
+      
+      // Record this iteration for context accumulation
+      reasoningContext.iterations.push({
+        number: iteration,
+        thought: iterationResponse.thought,
+        action: iterationResponse.action,
+        details: iterationResponse.details,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Log the reasoning thought
+      logger.info('💭 Agent reasoning', {
+        agentId: this.specializedTemplate.agent.id,
+        iteration,
+        thought: iterationResponse.thought,
+        action: iterationResponse.action
+      });
+      
+      // Handle different actions
+      if (iterationResponse.action === 'tool') {
+        // Agent wants to use a tool
+        const toolResult = await this.executeToolAction(
+          iterationResponse.details,
+          request.taskContext!,
+          iteration
+        );
+        
+        // Store tool result for next iteration
+        const toolKey = `${iterationResponse.details.tool}_${iteration}`;
+        reasoningContext.toolResults[toolKey] = toolResult;
+        
+        // Detect if stuck (circular tool usage)
+        if (this.detectCircularReasoning(reasoningContext)) {
+          logger.warn('⚠️ Circular reasoning detected', {
+            agentId: this.specializedTemplate.agent.id,
+            iteration
+          });
+          iterationResponse.action = 'help';
+          iterationResponse.details = {
+            reason: 'circular_reasoning_detected',
+            pattern: 'Repeating same tool calls without progress'
+          };
+        }
+        
+      } else if (iterationResponse.action === 'answer') {
+        // Agent has reached a conclusion
+        logger.info('✅ Agent reached conclusion', {
+          agentId: this.specializedTemplate.agent.id,
+          iteration,
+          totalDuration: Date.now() - reasoningContext.startTime
+        });
+        
+        // Record semantic conclusion
+        await this.recordContextEntry(request.taskContext!, {
+          operation: iterationResponse.details.operation || 'reasoning_complete',
+          data: iterationResponse.details.data || iterationResponse.details,
+          reasoning: iterationResponse.details.reasoning || iterationResponse.thought,
+          confidence: iterationResponse.details.confidence || 0.8
+        });
+        
+        // Convert to standard response format
+        return this.formatReActResponse(iterationResponse, reasoningContext, request);
+        
+      } else if (iterationResponse.action === 'help') {
+        // Agent is stuck and needs orchestrator help
+        logger.warn('🆘 Agent requesting help', {
+          agentId: this.specializedTemplate.agent.id,
+          iteration,
+          reason: iterationResponse.details?.reason
+        });
+        
+        // Record the blockage
+        await this.recordContextEntry(request.taskContext!, {
+          operation: 'agent_blocked',
+          data: {
+            iteration,
+            blockageReason: iterationResponse.details?.reason || 'unspecified',
+            attempted: reasoningContext.iterations.map(i => ({
+              action: i.action,
+              tool: i.details?.tool
+            })),
+            needed: iterationResponse.details?.needed || []
+          },
+          reasoning: `Agent stuck: ${iterationResponse.thought}`,
+          confidence: 0.5
+        });
+        
+        // Return with needs_input status for orchestrator to handle
+        return {
+          status: 'needs_input',
+          contextUpdate: {
+            entryId: this.generateEntryId(),
+            sequenceNumber: iteration,
+            timestamp: new Date().toISOString(),
+            actor: {
+              type: 'agent',
+              id: this.specializedTemplate.agent.id,
+              version: this.specializedTemplate.agent.version
+            },
+            operation: 'blocked_need_help',
+            data: {
+              blockage: iterationResponse.details,
+              reasoningTrace: reasoningContext.iterations
+            },
+            reasoning: iterationResponse.thought,
+            confidence: 0.5,
+            trigger: {
+              type: 'orchestrator_request',
+              source: 'react_blockage',
+              details: { iteration }
+            }
+          },
+          confidence: 0.5
+        };
+        
+      } else if (iterationResponse.action === 'continue') {
+        // Agent wants to continue reasoning in next iteration
+        logger.debug('↻ Agent continuing to next iteration', {
+          agentId: this.specializedTemplate.agent.id,
+          iteration
+        });
+        
+        // Extract any interim knowledge
+        if (iterationResponse.details?.learned) {
+          Object.assign(reasoningContext.accumulatedKnowledge, iterationResponse.details.learned);
+        }
+        
+      } else if (iterationResponse.action === 'needs_user_input') {
+        // Agent determined it needs user input
+        logger.info('👤 Agent needs user input', {
+          agentId: this.specializedTemplate.agent.id,
+          iteration
+        });
+        
+        // Create UIRequest
+        const uiRequest = iterationResponse.details?.uiRequest || {
+          templateType: 'form',
+          title: 'Information Required',
+          instructions: iterationResponse.thought,
+          fields: iterationResponse.details?.fields || []
+        };
+        
+        return {
+          status: 'needs_input',
+          contextUpdate: {
+            entryId: this.generateEntryId(),
+            sequenceNumber: iteration,
+            timestamp: new Date().toISOString(),
+            actor: {
+              type: 'agent',
+              id: this.specializedTemplate.agent.id,
+              version: this.specializedTemplate.agent.version
+            },
+            operation: 'user_input_required',
+            data: { uiRequest },
+            reasoning: iterationResponse.thought,
+            confidence: 0.9,
+            trigger: {
+              type: 'orchestrator_request',
+              source: 'react_user_need',
+              details: { iteration }
+            }
+          },
+          confidence: 0.9
+        };
+      }
+      
+      // Check if we're at max iterations
+      if (iteration === MAX_ITERATIONS) {
+        logger.error('⚠️ Hit max iterations without conclusion', {
+          agentId: this.specializedTemplate.agent.id,
+          totalDuration: Date.now() - reasoningContext.startTime
+        });
+        
+        // Return what we have with error status
+        return {
+          status: 'error',
+          contextUpdate: {
+            entryId: this.generateEntryId(),
+            sequenceNumber: iteration,
+            timestamp: new Date().toISOString(),
+            actor: {
+              type: 'agent',
+              id: this.specializedTemplate.agent.id,
+              version: this.specializedTemplate.agent.version
+            },
+            operation: 'max_iterations_reached',
+            data: {
+              iterations: MAX_ITERATIONS,
+              reasoningTrace: reasoningContext.iterations,
+              partialResults: reasoningContext.accumulatedKnowledge
+            },
+            reasoning: 'Reached maximum reasoning iterations without conclusion',
+            confidence: 0.3,
+            trigger: {
+              type: 'system_event',
+              source: 'react_limit',
+              details: { maxIterations: MAX_ITERATIONS }
+            }
+          },
+          confidence: 0.3
+        };
+      }
+    }
+    
+    // Should never reach here, but safety fallback
+    return this.executeSinglePassReasoning(request);
+  }
+  
+  /**
+   * Build the ReAct prompt for each iteration
+   * 
+   * This method constructs a focused prompt that includes:
+   * - The original request and context
+   * - Available tools the agent can use
+   * - Results from previous tool calls
+   * - Previous reasoning iterations
+   * - Clear instructions for the JSON response format
+   * 
+   * The prompt is designed to be minimal yet complete, allowing maximum
+   * flexibility for emergent agent behavior while maintaining structure.
+   */
+  private buildReActPrompt(
+    request: BaseAgentRequest,
+    reasoningContext: any,
+    availableTools: any[],
+    iteration: number
+  ): string {
+    // Extract key information from accumulated context
+    const previousThoughts = reasoningContext.iterations
+      .slice(-3) // Only show last 3 iterations to avoid context explosion
+      .map((i: any) => `Iteration ${i.number}: ${i.thought} → Action: ${i.action}`)
+      .join('\n');
+    
+    const toolResultsSummary = Object.entries(reasoningContext.toolResults)
+      .slice(-5) // Show last 5 tool results
+      .map(([key, result]: [string, any]) => `${key}: ${JSON.stringify(result).substring(0, 200)}...`)
+      .join('\n');
+    
+    return `
+# EMERGENT REASONING ITERATION ${iteration}
+
+You are ${this.specializedTemplate.agent.name} with the mission: ${this.specializedTemplate.agent.mission}
+
+## Current Task
+Operation: ${request.operation}
+Parameters: ${JSON.stringify(request.parameters, null, 2)}
+
+## Task Context
+${JSON.stringify(request.taskContext?.currentState?.data || {}, null, 2)}
+
+## Available Tools (${availableTools.length} tools)
+${availableTools.map(t => `- ${t.name}: ${t.description}`).join('\n')}
+
+## Previous Reasoning (Last 3 iterations)
+${previousThoughts || 'This is your first iteration'}
+
+## Tool Results So Far
+${toolResultsSummary || 'No tools used yet'}
+
+## Accumulated Knowledge
+${JSON.stringify(reasoningContext.accumulatedKnowledge, null, 2)}
+
+## Your Response Format (MANDATORY JSON)
+{
+  "iteration": ${iteration},
+  "thought": "Your natural language reasoning about what you need to do",
+  "action": "tool|answer|help|continue|needs_user_input",
+  "details": {
+    // For action="tool":
+    "tool": "tool_name",
+    "params": { },
+    
+    // For action="answer":
+    "operation": "semantic_operation_name",
+    "data": { },
+    "reasoning": "Why this is the answer",
+    "confidence": 0.0-1.0,
+    
+    // For action="help":
+    "reason": "why you're stuck",
+    "needed": ["what would help"],
+    
+    // For action="continue":
+    "learned": { "key": "value" },
+    
+    // For action="needs_user_input":
+    "uiRequest": {
+      "templateType": "form",
+      "title": "What you need",
+      "fields": [...]
+    }
+  }
+}
+
+## Instructions
+1. Think step by step about what you need to accomplish
+2. Decide if you need more information (use tool), can answer now (answer), are stuck (help), or need to continue thinking (continue)
+3. Be creative - you can combine tools in novel ways
+4. If you notice you're repeating actions without progress, ask for help
+5. Your goal is to provide value to the user, not just complete the task
+
+What is your next reasoning step?`;
+  }
+
+  /**
+   * Execute a tool action requested by the agent
+   * 
+   * This method:
+   * 1. Validates the requested tool exists
+   * 2. Executes the tool with provided parameters
+   * 3. Records the tool usage as a system event
+   * 4. Returns the result for the next iteration
+   * 
+   * Tool failures are handled gracefully - the agent can reason about
+   * failures and try alternative approaches.
+   */
+  private async executeToolAction(
+    details: any,
+    taskContext: TaskContext,
+    iteration: number
+  ): Promise<any> {
+    const { tool, params } = details;
+    
+    logger.info('🔧 Executing tool action', {
+      agentId: this.specializedTemplate.agent.id,
+      tool,
+      iteration,
+      hasParams: !!params
+    });
+    
+    try {
+      // Execute the tool through ToolChain
+      const result = await this.toolChain.executeTool(tool, params || {});
+      
+      // Record successful tool usage as system event
+      await this.recordContextEntry(taskContext, {
+        operation: 'system.tool_executed',
+        data: {
+          tool,
+          params,
+          success: result.success,
+          resultPreview: JSON.stringify(result.data).substring(0, 200)
+        },
+        reasoning: `Executed ${tool} in iteration ${iteration}`,
+        confidence: 1.0,
+        trigger: {
+          type: 'system_event',
+          source: 'react_tool_execution',
+          details: { iteration, tool }
+        }
+      });
+      
+      return result;
+      
+    } catch (error) {
+      // Tool execution failed - let agent reason about it
+      logger.error('Tool execution failed', {
+        agentId: this.specializedTemplate.agent.id,
+        tool,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      
+      // Record failure as system event
+      await this.recordContextEntry(taskContext, {
+        operation: 'system.tool_failed',
+        data: {
+          tool,
+          params,
+          error: error instanceof Error ? error.message : String(error)
+        },
+        reasoning: `Tool ${tool} failed in iteration ${iteration}`,
+        confidence: 1.0,
+        trigger: {
+          type: 'system_event',
+          source: 'react_tool_failure',
+          details: { iteration, tool }
+        }
+      });
+      
+      // Return failure for agent to reason about
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Tool execution failed',
+        tool
+      };
+    }
+  }
+
+  /**
+   * Detect circular reasoning patterns
+   * 
+   * This method analyzes the reasoning history to detect if the agent
+   * is stuck in a loop, repeatedly trying the same actions without progress.
+   * 
+   * Detection strategies:
+   * 1. Same tool called 3+ times with same params
+   * 2. Alternating between same 2 tools repeatedly
+   * 3. Same thought appearing multiple times
+   * 
+   * This allows agents to self-correct when stuck rather than spinning.
+   */
+  private detectCircularReasoning(reasoningContext: any): boolean {
+    const iterations = reasoningContext.iterations;
+    
+    if (iterations.length < 3) {
+      return false; // Need at least 3 iterations to detect a pattern
+    }
+    
+    // Check for repeated tool usage with same parameters
+    const toolCalls = iterations
+      .filter((i: any) => i.action === 'tool')
+      .map((i: any) => `${i.details?.tool}:${JSON.stringify(i.details?.params)}`);
+    
+    // Count occurrences of each tool call signature
+    const toolCallCounts = toolCalls.reduce((acc: any, call: string) => {
+      acc[call] = (acc[call] || 0) + 1;
+      return acc;
+    }, {});
+    
+    // If any tool called 3+ times with same params, we're likely stuck
+    const hasRepeatedTool = Object.values(toolCallCounts).some((count: any) => count >= 3);
+    
+    if (hasRepeatedTool) {
+      logger.warn('Circular reasoning detected: repeated tool calls', {
+        agentId: this.specializedTemplate.agent.id,
+        toolCallCounts
+      });
+      return true;
+    }
+    
+    // Check for repeated thoughts (agent thinking same thing repeatedly)
+    const thoughts = iterations.map((i: any) => i.thought?.toLowerCase());
+    const lastThreeThoughts = thoughts.slice(-3);
+    
+    // If last 3 thoughts are very similar, we might be stuck
+    if (lastThreeThoughts.length === 3) {
+      const [t1, t2, t3] = lastThreeThoughts;
+      if (t1 === t2 && t2 === t3) {
+        logger.warn('Circular reasoning detected: repeated thoughts', {
+          agentId: this.specializedTemplate.agent.id,
+          repeatedThought: t1
+        });
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Format ReAct response to standard BaseAgentResponse
+   * 
+   * This method converts the final iteration's answer into the standard
+   * response format expected by the rest of the system.
+   * 
+   * It preserves:
+   * - The semantic conclusion (what the agent discovered/decided)
+   * - The confidence level
+   * - The reasoning trace (for debugging)
+   * - Any accumulated knowledge
+   */
+  private formatReActResponse(
+    iterationResponse: any,
+    reasoningContext: any,
+    request: BaseAgentRequest
+  ): BaseAgentResponse {
+    // Extract the conclusion details
+    const details = iterationResponse.details || {};
+    
+    // Build the context update with semantic meaning
+    const contextUpdate: ContextEntry = {
+      entryId: this.generateEntryId(),
+      sequenceNumber: reasoningContext.iterations.length,
+      timestamp: new Date().toISOString(),
+      actor: {
+        type: 'agent',
+        id: this.specializedTemplate.agent.id,
+        version: this.specializedTemplate.agent.version
+      },
+      operation: details.operation || request.operation,
+      data: {
+        ...details.data,
+        // Include reasoning trace for introspection
+        _reasoningTrace: {
+          iterations: reasoningContext.iterations.length,
+          toolsUsed: Object.keys(reasoningContext.toolResults),
+          totalDuration: Date.now() - reasoningContext.startTime,
+          knowledgeGained: reasoningContext.accumulatedKnowledge
+        }
+      },
+      reasoning: details.reasoning || iterationResponse.thought,
+      confidence: details.confidence || 0.8,
+      trigger: {
+        type: 'orchestrator_request',
+        source: 'react_conclusion',
+        details: {
+          iterations: reasoningContext.iterations.length,
+          requestId: request.parameters?.requestId
+        }
+      }
+    };
+    
+    return {
+      status: 'completed',
+      contextUpdate,
+      confidence: details.confidence || 0.8
+    };
+  }
+
+  /**
+   * Fallback to single-pass reasoning (original behavior)
+   * 
+   * This method preserves the original single-pass reasoning for:
+   * 1. When ReAct is disabled
+   * 2. When ToolChain is not available
+   * 3. As a safety fallback
+   * 
+   * This ensures backward compatibility while we test the new ReAct pattern.
+   */
+  private async executeSinglePassReasoning(request: BaseAgentRequest): Promise<BaseAgentResponse> {
+    // Original implementation - single LLM call
     const fullPrompt = this.buildInheritedPrompt(request);
     
-    // Log agent reasoning request
-    logger.info('🤖 AGENT LLM REQUEST', {
-      agentRole: this.specializedTemplate.agent?.role || 'unknown',
-      agentId: this.specializedTemplate.agent?.id || 'unknown',
-      taskId: request.taskContext?.contextId,
-      promptLength: fullPrompt.length,
-      model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
-      promptPreview: fullPrompt.substring(0, 500)
+    logger.info('📝 Using single-pass reasoning (ReAct disabled or unavailable)', {
+      agentId: this.specializedTemplate.agent.id,
+      taskId: request.taskContext?.contextId
     });
     
-    // DEBUG: Log full prompt
-    logger.debug('📝 Full agent prompt', {
-      agentId: this.specializedTemplate.agent?.id,
-      fullPrompt
-    });
-    
-    const llmStartTime = Date.now();
-    
-    // Call LLM with merged prompt
     const llmResult = await this.llmProvider.complete({
       prompt: fullPrompt,
       model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
       temperature: 0.3,
-      systemPrompt: this.specializedTemplate.agent?.mission || 'You are a helpful AI assistant that follows instructions precisely.'
+      systemPrompt: this.specializedTemplate.agent?.mission || 'You are a helpful AI assistant.'
     });
     
-    const llmDuration = Date.now() - llmStartTime;
-    
-    // Log agent reasoning response
-    logger.info('🧠 AGENT LLM RESPONSE', {
-      agentRole: this.specializedTemplate.agent?.role || 'unknown',
-      agentId: this.specializedTemplate.agent?.id || 'unknown',
-      taskId: request.taskContext?.contextId,
-      responseLength: llmResult.content.length,
-      duration: `${llmDuration}ms`,
-      responsePreview: llmResult.content.substring(0, 500)
-    });
-    
-    // DEBUG: Log full response
-    logger.debug('📄 Full agent response', {
-      agentId: this.specializedTemplate.agent?.id,
-      fullResponse: llmResult.content
-    });
-    
-    // Parse LLM response as JSON
+    // Parse and validate response
     let llmResponse: any;
     try {
-      if (typeof llmResult.content === 'string') {
-        llmResponse = JSON.parse(llmResult.content);
-      } else {
-        llmResponse = llmResult.content;
-      }
-    } catch (parseError) {
-      logger.error('Failed to parse LLM response as JSON', {
+      llmResponse = this.safeJsonParse(llmResult.content);
+    } catch (error) {
+      logger.error('Failed to parse single-pass response', {
         agentId: this.specializedTemplate.agent.id,
-        rawResponse: llmResult.content,
-        parseError: parseError instanceof Error ? parseError.message : String(parseError)
+        error: error instanceof Error ? error.message : String(error)
       });
-      throw new Error(`LLM returned invalid JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+      throw new Error('Invalid LLM response format');
     }
     
-    // Log parsed reasoning
-    if (llmResponse.reasoning) {
-      logger.info('🎯 AGENT REASONING', {
-        agentId: this.specializedTemplate.agent?.id,
-        taskId: request.taskContext?.contextId,
-        reasoning: llmResponse.reasoning
-      });
-    }
-    
-    // Validate and enforce standard schema
-    const validatedResponse = this.enforceStandardSchema(llmResponse, request);
-    
-    return validatedResponse;
+    // Use existing validation
+    return this.enforceStandardSchema(llmResponse, request);
   }
-  
+
   /**
    * Publish agent response as A2A events
    */
