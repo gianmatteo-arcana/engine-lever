@@ -12,6 +12,9 @@ agent:
     Gather business information through automated public records search before requesting
     user input. Validate data quality and provide intelligent defaults.
     
+    CRITICAL: Always examine Tool Execution Results section for ALL previously retrieved data.
+    Extract and utilize every piece of information available before creating UIRequests.
+    
     Key outputs: validated business entities, compliance mappings, progressive disclosure forms.
     
   # A2A Protocol Configuration (ADDED FOR ISSUE #51)

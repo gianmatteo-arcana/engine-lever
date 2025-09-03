@@ -328,6 +328,27 @@ Check the error message above for specific configuration issues.
     const contextData = request.taskContext?.currentState?.data || {};
     const taskHistory = request.taskContext?.history || [];
     
+    // Extract ALL tool results and data from task history
+    const toolResults = taskHistory
+      .filter((entry: any) => entry.operation === 'system.tool_executed' && entry.data?.success)
+      .map((entry: any) => ({
+        tool: entry.data.tool,
+        params: entry.data.params,
+        // Include full result if available, not just preview
+        result: entry.data.result || entry.data.resultPreview,
+        resultPreview: entry.data.resultPreview,
+        // Extract any additional metadata
+        metadata: entry.metadata,
+        timestamp: entry.timestamp
+      }));
+    
+    // Also extract any accumulated data from context updates
+    const accumulatedData = taskHistory
+      .filter((entry: any) => entry.data && entry.operation !== 'system.tool_executed')
+      .reduce((acc: any, entry: any) => {
+        return { ...acc, ...entry.data };
+      }, {});
+    
     return `
 # Base Agent Principles (ALWAYS APPLY)
 
@@ -378,6 +399,22 @@ ${JSON.stringify(request.taskContext, null, 2)}
 
 ## Task History (Last 5 Entries)
 ${taskHistory.slice(-5).map((entry: any) => `- ${entry.operation}: ${entry.reasoning}`).join('\n')}
+
+## Previously Retrieved Data
+${toolResults.length > 0 ? `The following information has already been retrieved by tools:
+${toolResults.map((result: any) => `
+### Tool: ${result.tool}
+Parameters: ${JSON.stringify(result.params)}
+Full Result:
+${typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2)}
+${result.timestamp ? `Timestamp: ${result.timestamp}` : ''}
+`).join('\n---\n')}
+
+CRITICAL: Extract and utilize ALL information from the above results. Do not request data that already exists.
+` : 'No tool results available yet.'}
+
+## Accumulated Context Data
+${Object.keys(accumulatedData).length > 0 ? JSON.stringify(accumulatedData, null, 2) : 'No accumulated data yet.'}
 
 ## Operation Requested
 ${request.operation}

@@ -41,6 +41,7 @@ export enum BusinessEntityStatus {
 
 export interface BusinessEntity {
   name: string;
+  entityNumber?: string;         // CA entity number (e.g., C0806592, 201919710409)
   entityType: string;           // Raw entity type from source
   entityTypeNormalized?: BusinessEntityType; // Canonical form when recognizable
   formationDate: string;
@@ -136,6 +137,7 @@ export class ToolChain implements IToolChain {
         
         return {
           name: result.entityName,
+          entityNumber: result.entityNumber,  // Include CA entity number
           entityType: result.entityType,  // Keep raw value
           entityTypeNormalized: this.normalizeEntityType(result.entityType),
           formationDate: result.registrationDate || '',
