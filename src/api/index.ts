@@ -4,6 +4,7 @@ import { OrchestratorAgent } from '../agents/OrchestratorAgent';
 // TemplateExecutor removed - orchestration handled by OrchestratorAgent
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import tasksRoutes from './tasks';
+import metricsRoutes from './metrics';
 
 const router = Router();
 // TemplateExecutor removed - orchestration handled by OrchestratorAgent
@@ -299,5 +300,7 @@ router.get('/queues/status', async (req, res) => {
 // Generic tasks endpoints (ENGINE PRD compliant)
 router.use('/tasks', tasksRoutes);
 
+// Performance metrics endpoints
+router.use('/metrics', metricsRoutes);
 
 export { router as apiRoutes };

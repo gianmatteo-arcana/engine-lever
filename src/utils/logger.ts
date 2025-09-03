@@ -19,9 +19,23 @@ if (process.env.NODE_ENV !== 'production') {
   logger.add(new winston.transports.Console({
     format: winston.format.combine(
       winston.format.colorize(),
-      winston.format.simple()
+      winston.format.printf((info) => {
+        // Include taskId prominently in console logs when present
+        const taskId = info.taskId ? `[Task:${info.taskId}] ` : '';
+        const message = typeof info.message === 'object' 
+          ? JSON.stringify(info.message) 
+          : info.message;
+        return `${info.level}: ${taskId}${message}`;
+      })
     )
   }));
+}
+
+/**
+ * Create a child logger with taskId context for searchable logging
+ */
+export function createTaskLogger(taskId: string) {
+  return logger.child({ taskId });
 }
 
 export { logger };
