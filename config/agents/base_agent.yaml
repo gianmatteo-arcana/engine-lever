@@ -54,6 +54,69 @@ agent_template:
       instruction: "Document everything for complete traceability"
       output: "Context entry with operation, data, and reasoning"
   
+  # ReAct Pattern Configuration - OPTIONAL iterative reasoning
+  react_pattern:
+    enabled: true
+    description: |
+      ReAct (Reasoning + Acting) enables agents to:
+      1. Think about what they need
+      2. Act by using tools
+      3. Observe results  
+      4. Think again with new information
+      5. Repeat until conclusion
+      
+      This pattern enables EMERGENT BEHAVIOR - agents can discover
+      novel ways to combine tools and solve problems never explicitly programmed.
+    
+    configuration:
+      max_iterations: 10  # Generous limit for complex reasoning chains
+      enable_for_agents: ["all"]  # Can be ["all"] or specific agent IDs
+      fallback_to_simple: true  # Use simple reasoning when tools unavailable
+    
+    iteration_actions:
+      tool:
+        description: "Use a tool to gather information"
+        when_to_use: "Need data from external systems or services"
+        response_includes: ["tool_name", "parameters"]
+      
+      answer:
+        description: "Provide final answer in standard format"
+        when_to_use: "Have sufficient information to complete task"
+        response_includes: ["status", "contextUpdate", "confidence"]
+      
+      needs_user_input:
+        description: "Request information from user"
+        when_to_use: "Tools cannot provide required information"
+        response_includes: ["uiRequest in contextUpdate.data"]
+      
+      help:
+        description: "Request orchestrator assistance"
+        when_to_use: "Stuck, circular reasoning detected, or need guidance"
+        response_includes: ["reason", "attempted", "needed"]
+      
+      continue:
+        description: "Continue to next iteration"
+        when_to_use: "Need to accumulate knowledge or process results"
+        response_includes: ["learned knowledge to carry forward"]
+    
+    circular_reasoning_detection:
+      enabled: true
+      strategies:
+        - "Detect repeated tool calls with same parameters (3+ times)"
+        - "Detect identical thoughts across iterations"
+        - "Detect alternating between same actions without progress"
+      action_on_detection: "Switch to help action automatically"
+    
+    context_management:
+      preserve_inheritance: true  # Keep base + specialized templates
+      include_in_prompt: ["tool_results", "previous_thoughts", "accumulated_knowledge"]
+      max_context_items: 5  # Limit shown history to prevent explosion
+    
+    traceability:
+      system_events: true  # Log iteration starts, tool calls, etc.
+      semantic_events: true  # Log business-meaningful conclusions
+      reasoning_trace: true  # Include full trace in final response
+  
   # Data Acquisition Protocol - MANDATORY for all agents
   data_acquisition_protocol:
     strategy: "toolchain_first_ui_fallback"

@@ -1294,6 +1294,9 @@ Respond with a JSON array of field definitions.
    * 
    * The architecture is designed for EMERGENT BEHAVIOR - agents can discover
    * novel ways to combine tools and solve problems we never explicitly programmed.
+   * 
+   * IMPORTANT: This implementation preserves the base agent inheritance model,
+   * integrating ReAct as an enhancement rather than a replacement.
    */
   async executeInternal(request: BaseAgentRequest): Promise<BaseAgentResponse> {
     // Constants for ReAct loop control
@@ -1301,8 +1304,9 @@ Respond with a JSON array of field definitions.
     const ENABLE_REACT = true; // Feature flag for ReAct pattern
     
     // Check if we should use ReAct pattern or fall back to simple reasoning
+    // ReAct is only enabled when tools are available
     if (!ENABLE_REACT || !this.toolChain) {
-      return this.executeSinglePassReasoning(request);
+      return this.executeSimpleReasoning(request);
     }
     
     // Initialize reasoning context
@@ -1499,12 +1503,14 @@ Respond with a JSON array of field definitions.
         
       } else if (iterationResponse.action === 'needs_user_input') {
         // Agent determined it needs user input
+        // CRITICAL: Must follow established UIRequest pattern from base_agent.yaml
         logger.info('👤 Agent needs user input', {
           agentId: this.specializedTemplate.agent.id,
           iteration
         });
         
-        // Create UIRequest
+        // Ensure UIRequest is properly structured
+        // The agent should have provided this in details.uiRequest
         const uiRequest = iterationResponse.details?.uiRequest || {
           templateType: 'form',
           title: 'Information Required',
@@ -1512,8 +1518,19 @@ Respond with a JSON array of field definitions.
           fields: iterationResponse.details?.fields || []
         };
         
+        // Validate UIRequest has required fields
+        if (!uiRequest.templateType || !uiRequest.title || !uiRequest.instructions) {
+          logger.warn('⚠️ Incomplete UIRequest generated', {
+            agentId: this.specializedTemplate.agent.id,
+            iteration,
+            uiRequest
+          });
+        }
+        
+        // Return in standard format with UIRequest in correct location
+        // Per base_agent.yaml: uiRequest MUST be in contextUpdate.data.uiRequest
         return {
-          status: 'needs_input',
+          status: 'needs_input', // Standard status enum value
           contextUpdate: {
             entryId: this.generateEntryId(),
             sequenceNumber: iteration,
@@ -1524,7 +1541,15 @@ Respond with a JSON array of field definitions.
               version: this.specializedTemplate.agent.version
             },
             operation: 'user_input_required',
-            data: { uiRequest },
+            data: { 
+              // CRITICAL: uiRequest goes in data.uiRequest per base_agent.yaml
+              uiRequest,
+              // Include context about why input is needed
+              reason: iterationResponse.thought,
+              attemptedTools: reasoningContext.iterations
+                .filter((i: any) => i.action === 'tool')
+                .map((i: any) => i.details?.tool)
+            },
             reasoning: iterationResponse.thought,
             confidence: 0.9,
             trigger: {
@@ -1576,21 +1601,63 @@ Respond with a JSON array of field definitions.
     }
     
     // Should never reach here, but safety fallback
-    return this.executeSinglePassReasoning(request);
+    return this.executeSimpleReasoning(request);
   }
   
   /**
+   * Execute simple single-pass reasoning (original behavior)
+   * 
+   * This is the fallback when ReAct is disabled or tools are unavailable.
+   * It uses the standard inherited prompt structure without iteration.
+   */
+  private async executeSimpleReasoning(request: BaseAgentRequest): Promise<BaseAgentResponse> {
+    // Build standard inherited prompt (base + specialized)
+    const fullPrompt = this.buildInheritedPrompt(request);
+    
+    logger.info('📝 Using simple single-pass reasoning', {
+      agentId: this.specializedTemplate.agent.id,
+      taskId: request.taskContext?.contextId,
+      reason: !this.toolChain ? 'No toolchain available' : 'ReAct disabled'
+    });
+    
+    // Call LLM with standard approach
+    const llmResult = await this.llmProvider.complete({
+      prompt: fullPrompt,
+      model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
+      temperature: 0.3,
+      systemPrompt: this.specializedTemplate.agent?.mission || 'You are a helpful AI assistant.'
+    });
+    
+    // Parse and validate response
+    let llmResponse: any;
+    try {
+      llmResponse = this.safeJsonParse(llmResult.content);
+      if (!llmResponse) {
+        throw new Error('Failed to parse LLM response as JSON');
+      }
+    } catch (error) {
+      logger.error('Failed to parse simple reasoning response', {
+        agentId: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw new Error('Invalid LLM response format');
+    }
+    
+    // Use existing validation
+    return this.enforceStandardSchema(llmResponse, request);
+  }
+
+  /**
    * Build the ReAct prompt for each iteration
    * 
-   * This method constructs a focused prompt that includes:
-   * - The original request and context
-   * - Available tools the agent can use
-   * - Results from previous tool calls
-   * - Previous reasoning iterations
-   * - Clear instructions for the JSON response format
+   * This method integrates the base agent inheritance model with ReAct enhancements.
+   * It preserves all base principles while adding iterative reasoning capabilities.
    * 
-   * The prompt is designed to be minimal yet complete, allowing maximum
-   * flexibility for emergent agent behavior while maintaining structure.
+   * Key design decisions:
+   * - Starts with full inherited prompt structure
+   * - Adds ReAct-specific instructions as an enhancement layer
+   * - Maintains standard response schema from base_agent.yaml
+   * - Preserves ethical boundaries and decision frameworks
    */
   private buildReActPrompt(
     request: BaseAgentRequest,
@@ -1598,81 +1665,96 @@ Respond with a JSON array of field definitions.
     availableTools: any[],
     iteration: number
   ): string {
-    // Extract key information from accumulated context
+    // Start with the full inherited prompt (base + specialized)
+    // This ensures we maintain all principles, ethics, and specialized capabilities
+    const basePrompt = this.buildInheritedPrompt(request);
+    
+    // Extract iteration context for ReAct enhancement
     const previousThoughts = reasoningContext.iterations
-      .slice(-3) // Only show last 3 iterations to avoid context explosion
+      .slice(-3) // Show last 3 iterations to maintain context without explosion
       .map((i: any) => `Iteration ${i.number}: ${i.thought} → Action: ${i.action}`)
       .join('\n');
     
     const toolResultsSummary = Object.entries(reasoningContext.toolResults)
       .slice(-5) // Show last 5 tool results
-      .map(([key, result]: [string, any]) => `${key}: ${JSON.stringify(result).substring(0, 200)}...`)
+      .map(([key, result]: [string, any]) => {
+        const resultStr = JSON.stringify(result.data || result);
+        return `${key}: ${result.success === false ? '[FAILED] ' : ''}${resultStr.substring(0, 200)}...`;
+      })
       .join('\n');
     
-    return `
-# EMERGENT REASONING ITERATION ${iteration}
+    // Append ReAct enhancement to the inherited prompt
+    return `${basePrompt}
 
-You are ${this.specializedTemplate.agent.name} with the mission: ${this.specializedTemplate.agent.mission}
+# 🔄 ReAct Pattern Enhancement (ITERATION ${iteration})
 
-## Current Task
-Operation: ${request.operation}
-Parameters: ${JSON.stringify(request.parameters, null, 2)}
+You are now reasoning iteratively with tool access. This is iteration ${iteration} of maximum ${10}.
 
-## Task Context
-${JSON.stringify(request.taskContext?.currentState?.data || {}, null, 2)}
+## Available Tools for This Task
+${availableTools.map(t => `- ${t.name}: ${t.description}`).join('\n') || 'No tools available'}
 
-## Available Tools (${availableTools.length} tools)
-${availableTools.map(t => `- ${t.name}: ${t.description}`).join('\n')}
+## Previous Iterations Context
+${previousThoughts || 'This is your first iteration - no previous context'}
 
-## Previous Reasoning (Last 3 iterations)
-${previousThoughts || 'This is your first iteration'}
-
-## Tool Results So Far
-${toolResultsSummary || 'No tools used yet'}
+## Tool Results From Previous Iterations
+${toolResultsSummary || 'No tools have been used yet'}
 
 ## Accumulated Knowledge
-${JSON.stringify(reasoningContext.accumulatedKnowledge, null, 2)}
+${JSON.stringify(reasoningContext.accumulatedKnowledge, null, 2) || '{}'}
 
-## Your Response Format (MANDATORY JSON)
+## ReAct Decision Framework
+
+For this iteration, you must decide on ONE of these actions:
+
+### 1. USE A TOOL (action: "tool")
+Choose this when you need information from external systems.
+Your response must include in details:
+- tool: "exact_tool_name"
+- params: { /* tool-specific parameters */ }
+
+### 2. PROVIDE ANSWER (action: "answer")
+Choose this when you have sufficient information to complete the task.
+Return the STANDARD RESPONSE FORMAT from above with:
+- status: "completed"
+- Full contextUpdate with operation, data, reasoning, confidence
+
+### 3. REQUEST USER INPUT (action: "needs_user_input")
+Choose this when tools cannot provide needed information.
+Return the STANDARD RESPONSE FORMAT with:
+- status: "needs_input"
+- contextUpdate.data.uiRequest with proper structure
+
+### 4. REQUEST HELP (action: "help")
+Choose this when you're stuck or detecting circular reasoning.
+Your response must include in details:
+- reason: "why you're stuck"
+- attempted: ["what you've tried"]
+- needed: ["what would help"]
+
+### 5. CONTINUE REASONING (action: "continue")
+Choose this to accumulate knowledge for next iteration.
+Your response must include in details:
+- learned: { /* key insights to carry forward */ }
+
+## CRITICAL: Response Format for This Iteration
+
+You must respond with VALID JSON:
 {
   "iteration": ${iteration},
-  "thought": "Your natural language reasoning about what you need to do",
-  "action": "tool|answer|help|continue|needs_user_input",
+  "thought": "Your reasoning about what to do next",
+  "action": "tool|answer|needs_user_input|help|continue",
   "details": {
-    // For action="tool":
-    "tool": "tool_name",
-    "params": { },
-    
-    // For action="answer":
-    "operation": "semantic_operation_name",
-    "data": { },
-    "reasoning": "Why this is the answer",
-    "confidence": 0.0-1.0,
-    
-    // For action="help":
-    "reason": "why you're stuck",
-    "needed": ["what would help"],
-    
-    // For action="continue":
-    "learned": { "key": "value" },
-    
-    // For action="needs_user_input":
-    "uiRequest": {
-      "templateType": "form",
-      "title": "What you need",
-      "fields": [...]
-    }
+    /* Action-specific details as described above */
   }
 }
 
-## Instructions
-1. Think step by step about what you need to accomplish
-2. Decide if you need more information (use tool), can answer now (answer), are stuck (help), or need to continue thinking (continue)
-3. Be creative - you can combine tools in novel ways
-4. If you notice you're repeating actions without progress, ask for help
-5. Your goal is to provide value to the user, not just complete the task
+## Anti-Patterns to Avoid
+- Don't repeat the same tool call with identical parameters
+- Don't continue if you have the answer
+- Don't skip user input requests when tools can't help
+- Don't violate the base principles in your reasoning
 
-What is your next reasoning step?`;
+What is your decision for iteration ${iteration}?`;
   }
 
   /**
@@ -1826,21 +1908,52 @@ What is your next reasoning step?`;
    * This method converts the final iteration's answer into the standard
    * response format expected by the rest of the system.
    * 
-   * It preserves:
-   * - The semantic conclusion (what the agent discovered/decided)
-   * - The confidence level
-   * - The reasoning trace (for debugging)
-   * - Any accumulated knowledge
+   * CRITICAL: This must return the exact schema defined in base_agent.yaml
+   * The agent's "answer" action should already provide standard format,
+   * but we ensure compliance here.
    */
   private formatReActResponse(
     iterationResponse: any,
     reasoningContext: any,
     request: BaseAgentRequest
   ): BaseAgentResponse {
-    // Extract the conclusion details
+    // The agent should have provided standard format in details when action="answer"
+    // We expect details to contain the full response structure
     const details = iterationResponse.details || {};
     
-    // Build the context update with semantic meaning
+    // If agent provided full standard format, use it
+    if (details.status && details.contextUpdate) {
+      // Agent provided complete standard response
+      return {
+        status: details.status,
+        contextUpdate: {
+          ...details.contextUpdate,
+          // Ensure required fields are present
+          entryId: details.contextUpdate.entryId || this.generateEntryId(),
+          sequenceNumber: details.contextUpdate.sequenceNumber || reasoningContext.iterations.length,
+          timestamp: details.contextUpdate.timestamp || new Date().toISOString(),
+          actor: details.contextUpdate.actor || {
+            type: 'agent',
+            id: this.specializedTemplate.agent.id,
+            version: this.specializedTemplate.agent.version
+          },
+          // Add reasoning trace as debug info
+          data: {
+            ...details.contextUpdate.data,
+            _reasoningTrace: {
+              iterations: reasoningContext.iterations.length,
+              toolsUsed: Object.keys(reasoningContext.toolResults),
+              totalDuration: Date.now() - reasoningContext.startTime,
+              knowledgeGained: reasoningContext.accumulatedKnowledge
+            }
+          }
+        },
+        confidence: details.confidence || details.contextUpdate?.confidence || 0.8
+      };
+    }
+    
+    // Fallback: construct standard format from partial details
+    // This handles agents that return partial format
     const contextUpdate: ContextEntry = {
       entryId: this.generateEntryId(),
       sequenceNumber: reasoningContext.iterations.length,
@@ -1874,53 +1987,12 @@ What is your next reasoning step?`;
     };
     
     return {
-      status: 'completed',
+      status: 'completed', // Default to completed for answer action
       contextUpdate,
       confidence: details.confidence || 0.8
     };
   }
 
-  /**
-   * Fallback to single-pass reasoning (original behavior)
-   * 
-   * This method preserves the original single-pass reasoning for:
-   * 1. When ReAct is disabled
-   * 2. When ToolChain is not available
-   * 3. As a safety fallback
-   * 
-   * This ensures backward compatibility while we test the new ReAct pattern.
-   */
-  private async executeSinglePassReasoning(request: BaseAgentRequest): Promise<BaseAgentResponse> {
-    // Original implementation - single LLM call
-    const fullPrompt = this.buildInheritedPrompt(request);
-    
-    logger.info('📝 Using single-pass reasoning (ReAct disabled or unavailable)', {
-      agentId: this.specializedTemplate.agent.id,
-      taskId: request.taskContext?.contextId
-    });
-    
-    const llmResult = await this.llmProvider.complete({
-      prompt: fullPrompt,
-      model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
-      temperature: 0.3,
-      systemPrompt: this.specializedTemplate.agent?.mission || 'You are a helpful AI assistant.'
-    });
-    
-    // Parse and validate response
-    let llmResponse: any;
-    try {
-      llmResponse = this.safeJsonParse(llmResult.content);
-    } catch (error) {
-      logger.error('Failed to parse single-pass response', {
-        agentId: this.specializedTemplate.agent.id,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      throw new Error('Invalid LLM response format');
-    }
-    
-    // Use existing validation
-    return this.enforceStandardSchema(llmResponse, request);
-  }
 
   /**
    * Publish agent response as A2A events
