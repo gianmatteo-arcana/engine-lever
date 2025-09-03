@@ -1878,12 +1878,31 @@ Respond with a JSON array of field definitions.
       })
       .join('\n\n');
     
+    // Extract available data from request for agent awareness
+    const availableData = request.parameters || {};
+    const hasBusinessName = availableData.business_name || 
+                           availableData.businessName || 
+                           availableData.company_name ||
+                           availableData.companyName;
+    
     // Append ReAct enhancement to the inherited prompt
     return `${basePrompt}
 
 # 🔄 ReAct Pattern Enhancement (ITERATION ${iteration})
 
 You are now reasoning iteratively with tool access. This is iteration ${iteration} of maximum ${10}.
+
+## 📊 Available Data from Request
+${Object.keys(availableData).length > 0 ? 
+  `You have access to the following data:
+${JSON.stringify(availableData, null, 2)}
+
+**CRITICAL**: Only use data that actually exists! 
+- Business name: ${hasBusinessName ? `"${hasBusinessName}"` : 'NOT PROVIDED YET'}
+- If business name is NOT PROVIDED, you must request it from the user first
+- NEVER search for "undefined" or "null" - these are not business names!` 
+  : 
+  'No data provided yet - you may need to request user input first'}
 
 ## 🛠️ Available Tools for This Task (USE THESE FIRST!)
 ${availableTools.map(t => {
@@ -1911,28 +1930,51 @@ ${JSON.stringify(reasoningContext.accumulatedKnowledge, null, 2) || '{}'}
 
 For this iteration, you must decide on ONE of these actions:
 
-### 🔍 PRIORITY 1: CHECK TOOLS FIRST (action: "tool")
-**ALWAYS TRY TOOLS BEFORE ASKING USERS!**
-If you need business information and haven't searched yet:
-- Use searchBusinessEntity for California businesses FIRST
-- The tool can find: addresses, entity numbers, status, officers, agent info
-- Example: searchBusinessEntity("ARCANA DWELL, LLC", "CA") returns full business details
+### 🎯 DECISION TREE:
+1. **Do I have the basic data I need?** (e.g., business name)
+   - NO → Go to "REQUEST USER INPUT" 
+   - YES → Continue to step 2
+
+2. **Can tools provide additional information?**
+   - YES → Go to "USE TOOL" (with valid parameters)
+   - NO → Continue to step 3
+
+3. **Do I have enough to complete the task?**
+   - YES → Go to "PROVIDE ANSWER"
+   - NO → Go to "REQUEST USER INPUT" for missing pieces
+
+### 🔍 ACTION: USE TOOL (action: "tool")
+**ONLY use when you have valid required parameters!**
+
+Before calling any tool:
+- Verify you have the required data (not undefined/null/empty)
+- Use real values from Available Data section above
+- Example: searchBusinessEntity("ARCANA DWELL, LLC", "CA")
+
+**NEVER call a tool with:**
+- undefined, null, or empty strings as parameters
+- Placeholder text like "business_name" instead of actual values
 
 Your response must include in details:
 - tool: "exact_tool_name"
-- params: { /* tool-specific parameters */ }
+- params: { /* actual values, not undefined */ }
 
-### ✅ PRIORITY 2: PROVIDE ANSWER (action: "answer")
+### ✅ ACTION: PROVIDE ANSWER (action: "answer")
 Choose this when you have sufficient information to complete the task.
 Return the STANDARD RESPONSE FORMAT from above with:
 - status: "completed"
 - Full contextUpdate with operation, data, reasoning, confidence
 
-### 👤 PRIORITY 3: REQUEST USER INPUT (action: "needs_user_input")
-**ONLY use this AFTER trying relevant tools!**
-Check your iteration history:
-- Did you try searchBusinessEntity for the business name? 
-- Did you check searchBusinessMemory for stored data?
+### 👤 ACTION: REQUEST USER INPUT (action: "needs_user_input")
+**Use when you need data that you don't have!**
+
+Two valid scenarios:
+1. **Missing basic data** - You need fundamental info to start (e.g., business name)
+2. **Tools exhausted** - You tried tools but need additional private data
+
+Check before requesting:
+- Is this data in "Available Data" section above? Don't ask again!
+- Could a tool find this? Only if you have params to call it
 - If tools found partial data, ONLY ask for missing pieces
 
 NEVER ask for information that tools can find:
