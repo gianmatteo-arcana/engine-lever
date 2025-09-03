@@ -10,6 +10,13 @@ import { CredentialVault } from './credential-vault';
 import { californiaBusinessSearch } from '../tools/california-business-search';
 import { BusinessMemoryTool, BusinessMemorySearchParams, BusinessKnowledge } from '../tools/business-memory';
 import type { Tool, ToolExecutionResult, ToolChain as IToolChain } from '../toolchain/ToolChain';
+import { 
+  validateRequiredParams, 
+  sanitizeObject, 
+  logUndefinedStringDetected,
+  safeString 
+} from '../utils/validation-guards';
+import { logger } from '../utils/logger';
 
 // Canonical business entity types that we recognize across jurisdictions
 export enum BusinessEntityType {
@@ -748,12 +755,27 @@ Available Tools:
    */
   async executeTool(toolId: string, params: Record<string, unknown>): Promise<ToolExecutionResult> {
     try {
+      // 🚨 UNIVERSAL GUARD: Sanitize all parameters and detect undefined/null strings
+      const sanitizedParams = sanitizeObject(params);
+      
+      // Log any undefined string conversions for debugging
+      Object.entries(params).forEach(([key, value]) => {
+        logUndefinedStringDetected(value, `tool execution ${toolId}.${key}`, logger);
+      });
+      
       switch (toolId) {
         case 'searchBusinessEntity': {
-          const entities = await this.searchBusinessEntity(
-            params.businessName as string,
-            params.state as string || 'CA'
-          );
+          // Validate required parameters universally
+          validateRequiredParams(sanitizedParams, ['businessName'], `tool ${toolId}`);
+          
+          const businessName = safeString(sanitizedParams.businessName);
+          const state = safeString(sanitizedParams.state) || 'CA';
+          
+          if (!businessName) {
+            throw new Error('Business name cannot be empty, null, undefined, or the literal string "undefined"');
+          }
+          
+          const entities = await this.searchBusinessEntity(businessName, state);
           return {
             success: true,
             data: entities,
@@ -762,10 +784,16 @@ Available Tools:
         }
 
         case 'searchByEntityNumber': {
-          const entity = await this.searchByEntityNumber(
-            params.entityNumber as string,
-            params.state as string || 'CA'
-          );
+          validateRequiredParams(sanitizedParams, ['entityNumber'], `tool ${toolId}`);
+          
+          const entityNumber = safeString(sanitizedParams.entityNumber);
+          const state = safeString(sanitizedParams.state) || 'CA';
+          
+          if (!entityNumber) {
+            throw new Error('Entity number cannot be empty, null, undefined, or the literal string "undefined"');
+          }
+          
+          const entity = await this.searchByEntityNumber(entityNumber, state);
           return {
             success: true,
             data: entity,
@@ -774,11 +802,13 @@ Available Tools:
         }
 
         case 'searchBusinessMemory': {
-          const knowledge = await this.searchBusinessMemory(
-            params.businessId as string,
-            params.categories as string[] | undefined,
-            params.minConfidence as number || 0.7
-          );
+          const categories = sanitizedParams.categories as string[] | undefined;
+          const minConfidence = (sanitizedParams.minConfidence as number) || 0.7;
+          
+          // BusinessMemory requires a businessId, so if none provided, we use a wildcard search
+          const businessId = safeString(sanitizedParams.businessId) || '*'; // Use wildcard for all businesses
+          
+          const knowledge = await this.searchBusinessMemory(businessId, categories, minConfidence);
           return {
             success: true,
             data: knowledge,
@@ -787,7 +817,15 @@ Available Tools:
         }
 
         case 'validateEmail': {
-          const emailValid = this.validateEmail(params.email as string);
+          validateRequiredParams(sanitizedParams, ['email'], `tool ${toolId}`);
+          
+          const email = safeString(sanitizedParams.email);
+          
+          if (!email) {
+            throw new Error('Email cannot be empty, null, undefined, or the literal string "undefined"');
+          }
+          
+          const emailValid = this.validateEmail(email);
           return {
             success: true,
             data: { valid: emailValid },
@@ -796,7 +834,15 @@ Available Tools:
         }
 
         case 'validateEIN': {
-          const einValid = this.validateEIN(params.ein as string);
+          validateRequiredParams(sanitizedParams, ['ein'], `tool ${toolId}`);
+          
+          const ein = safeString(sanitizedParams.ein);
+          
+          if (!ein) {
+            throw new Error('EIN cannot be empty, null, undefined, or the literal string "undefined"');
+          }
+          
+          const einValid = this.validateEIN(ein);
           return {
             success: true,
             data: { valid: einValid },

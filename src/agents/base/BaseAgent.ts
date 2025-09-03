@@ -108,6 +108,10 @@ export abstract class BaseAgent implements AgentExecutor {
   protected userId?: string;
   protected taskContext?: any; // Will be injected via dependency injection
   
+  // SSE subscription management for real-time context updates
+  private sseUnsubscribe?: () => void;
+  private dynamicContextData: Record<string, any> = {};
+  
   constructor(
     specializedConfigPath: string,
     businessId: string,
@@ -1222,6 +1226,7 @@ Respond with JSON:
     }
   }
   
+  
   /**
    * Create field definitions for missing data using LLM reasoning
    */
@@ -1240,13 +1245,27 @@ Task context:
 ${JSON.stringify(taskContext.currentState?.data || {}, null, 2)}
 
 For each field, generate an appropriate form field definition with:
-- id: field identifier
-- label: human-readable label
+- id: field identifier (use the field name from the missing fields list)
+- label: human-readable label (concise, 1-3 words)
 - type: appropriate input type (text, email, tel, select, textarea, etc.)
 - required: whether the field is required
-- placeholder: helpful placeholder text
-- help: brief help text
+- placeholder: example value (for text fields only, e.g., "name@company.com" for email)
+- help: "" (leave empty - good UI needs no explanation)
 - options: (for select fields only) array of {value, label} options
+
+IMPORTANT RULES:
+1. For "entity_type" field, ALWAYS use type "select" with these options:
+   - {value: "llc", label: "Limited Liability Company (LLC)"}
+   - {value: "corporation", label: "Corporation"}
+   - {value: "partnership", label: "Partnership"}
+   - {value: "sole_proprietorship", label: "Sole Proprietorship"}
+   - {value: "nonprofit", label: "Non-Profit Organization"}
+
+2. For "formation_state" or "state" fields, use type "select" with US state options
+
+3. For email fields (containing "email"), use type "email"
+
+4. For phone fields (containing "phone" or "tel"), use type "tel"
 
 Respond with a JSON array of field definitions.
 `;
@@ -1272,100 +1291,1055 @@ Respond with a JSON array of field definitions.
     }
     
     // Fallback to generic field definitions if LLM fails
-    return missingFields.map(field => ({
-      id: field,
-      label: field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-      type: 'text',
-      required: true,
-      placeholder: `Enter ${field.replace(/_/g, ' ')}`,
-      help: `Please provide the ${field.replace(/_/g, ' ')}`
-    }));
+    return missingFields.map(field => {
+      const fieldLower = field.toLowerCase();
+      const label = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      
+      // Determine field type based on field name
+      let type: string = 'text';
+      let options: any[] | undefined;
+      
+      if (fieldLower === 'entity_type' || fieldLower === 'business_type') {
+        type = 'select';
+        options = [
+          { value: 'llc', label: 'Limited Liability Company (LLC)' },
+          { value: 'corporation', label: 'Corporation' },
+          { value: 'partnership', label: 'Partnership' },
+          { value: 'sole_proprietorship', label: 'Sole Proprietorship' },
+          { value: 'nonprofit', label: 'Non-Profit Organization' }
+        ];
+      } else if (fieldLower.includes('email')) {
+        type = 'email';
+      } else if (fieldLower.includes('phone') || fieldLower.includes('tel')) {
+        type = 'tel';
+      } else if (fieldLower.includes('state') && !fieldLower.includes('statement')) {
+        type = 'select';
+        options = [
+          { value: 'CA', label: 'California' },
+          { value: 'TX', label: 'Texas' },
+          { value: 'NY', label: 'New York' },
+          { value: 'FL', label: 'Florida' },
+          { value: 'IL', label: 'Illinois' },
+          { value: 'PA', label: 'Pennsylvania' },
+          { value: 'OH', label: 'Ohio' },
+          { value: 'GA', label: 'Georgia' },
+          { value: 'NC', label: 'North Carolina' },
+          { value: 'MI', label: 'Michigan' }
+          // Add more states as needed
+        ];
+      } else if (fieldLower.includes('description') || fieldLower.includes('notes')) {
+        type = 'textarea';
+      }
+      
+      // Create helpful placeholder examples
+      let placeholder: string | undefined = '';
+      
+      if (type === 'select') {
+        placeholder = undefined; // Selects use their first option as placeholder
+      } else if (type === 'email') {
+        placeholder = 'name@company.com';
+      } else if (type === 'tel') {
+        placeholder = '(555) 123-4567';
+      } else if (fieldLower.includes('ein')) {
+        placeholder = '12-3456789';
+      } else if (fieldLower.includes('business') && fieldLower.includes('name')) {
+        placeholder = 'Acme Corporation';
+      } else if (fieldLower.includes('address')) {
+        placeholder = '123 Main Street';
+      } else if (fieldLower.includes('city')) {
+        placeholder = 'San Francisco';
+      } else if (fieldLower.includes('zip')) {
+        placeholder = '94105';
+      } else {
+        // Default to empty - let the label guide the user
+        placeholder = '';
+      }
+      
+      const fieldDef: any = {
+        id: field,
+        label,
+        type,
+        required: true,
+        placeholder,
+        help: '' // No help text - let the UI be self-explanatory
+      };
+      
+      if (options) {
+        fieldDef.options = options;
+      }
+      
+      return fieldDef;
+    });
   }
 
    /**
-   * Internal execution method (core reasoning engine)
-   * This is the heart of agent intelligence - subclasses override for specialized behavior
+   * 🧠 EMERGENT REASONING ENGINE - ReAct Pattern Implementation
+   * 
+   * This method implements the Reasoning + Acting (ReAct) pattern, enabling agents to:
+   * 1. Think about what they need
+   * 2. Act by using tools
+   * 3. Observe results
+   * 4. Think again with new information
+   * 5. Repeat until conclusion
+   * 
+   * The architecture is designed for EMERGENT BEHAVIOR - agents can discover
+   * novel ways to combine tools and solve problems we never explicitly programmed.
+   * 
+   * IMPORTANT: This implementation preserves the base agent inheritance model,
+   * integrating ReAct as an enhancement rather than a replacement.
    */
   async executeInternal(request: BaseAgentRequest): Promise<BaseAgentResponse> {
-    // Build merged prompt from base + specialized templates
+    // Constants for ReAct loop control
+    // TODO: Simple optimization - Make MAX_ITERATIONS configurable per task complexity
+    // Easy win: onboarding might need 5, complex business discovery might need 15
+    // Could read from task template: template.configuration?.maxReActIterations || 10
+    const MAX_ITERATIONS = 10; // Generous limit to allow complex reasoning
+    const ENABLE_REACT = true; // Feature flag for ReAct pattern
+    
+    // Check if we should use ReAct pattern or fall back to simple reasoning
+    // ReAct is only enabled when tools are available
+    if (!ENABLE_REACT || !this.toolChain) {
+      return this.executeSimpleReasoning(request);
+    }
+    
+    // Initialize reasoning context
+    const reasoningContext = {
+      iterations: [] as any[],
+      toolResults: {} as Record<string, any>,
+      accumulatedKnowledge: {} as Record<string, any>,
+      startTime: Date.now()
+    };
+
+    // Subscribe to real-time context updates via SSE
+    // This allows agents to receive UI responses and other agent updates during execution
+    if (request.taskContext?.contextId) {
+      await this.subscribeToContextUpdates(request.taskContext.contextId);
+    }
+    
+    // Get available tools dynamically
+    const availableTools = await this.toolChain.getAvailableTools();
+    
+    logger.info('🔄 Starting ReAct reasoning loop', {
+      agentId: this.specializedTemplate.agent.id,
+      taskId: request.taskContext?.contextId,
+      availableTools: availableTools.length
+    });
+    
+    // ReAct loop
+    for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
+      // Build iterative prompt with accumulated context
+      const iterativePrompt = await this.buildReActPrompt(request, reasoningContext, availableTools, iteration);
+      
+      // Record system-level iteration start
+      await this.recordContextEntry(request.taskContext!, {
+        operation: 'system.reasoning_iteration_start',
+        data: {
+          iteration,
+          hasToolResults: Object.keys(reasoningContext.toolResults).length > 0,
+          elapsedMs: Date.now() - reasoningContext.startTime
+        },
+        reasoning: `Starting reasoning iteration ${iteration}`,
+        confidence: 1.0,
+        trigger: {
+          type: 'system_event',
+          source: 'react_loop',
+          details: { iteration }
+        }
+      });
+      
+      // Call LLM for this iteration
+      const llmStartTime = Date.now();
+      const llmResult = await this.llmProvider.complete({
+        prompt: iterativePrompt,
+        model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
+        temperature: 0.3,
+        systemPrompt: `You are ${this.specializedTemplate.agent.name}, an autonomous agent with the ability to reason and use tools iteratively to accomplish your goals.`
+      });
+      const llmDuration = Date.now() - llmStartTime;
+      
+      // Parse iteration response
+      let iterationResponse: any;
+      try {
+        iterationResponse = this.safeJsonParse(llmResult.content);
+        if (!iterationResponse) {
+          throw new Error('Failed to parse LLM response as JSON');
+        }
+      } catch (error) {
+        logger.error('ReAct iteration parse error', {
+          agentId: this.specializedTemplate.agent.id,
+          iteration,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        // Attempt recovery by asking for clarification
+        continue;
+      }
+      
+      // Record this iteration for context accumulation
+      reasoningContext.iterations.push({
+        number: iteration,
+        thought: iterationResponse.thought,
+        action: iterationResponse.action,
+        details: iterationResponse.details,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Log the reasoning thought
+      logger.info('💭 Agent reasoning', {
+        agentId: this.specializedTemplate.agent.id,
+        iteration,
+        thought: iterationResponse.thought,
+        action: iterationResponse.action
+      });
+      
+      // Handle different actions
+      if (iterationResponse.action === 'tool') {
+        // Agent wants to use a tool
+        const toolResult = await this.executeToolAction(
+          iterationResponse.details,
+          request.taskContext!,
+          iteration
+        );
+        
+        // Store tool result for next iteration
+        const toolKey = `${iterationResponse.details.tool}_${iteration}`;
+        reasoningContext.toolResults[toolKey] = toolResult;
+        
+        // Detect if stuck (circular tool usage)
+        if (this.detectCircularReasoning(reasoningContext)) {
+          logger.warn('⚠️ Circular reasoning detected', {
+            agentId: this.specializedTemplate.agent.id,
+            iteration
+          });
+          iterationResponse.action = 'help';
+          iterationResponse.details = {
+            reason: 'circular_reasoning_detected',
+            pattern: 'Repeating same tool calls without progress'
+          };
+        }
+        
+      } else if (iterationResponse.action === 'answer') {
+        // Agent has reached a conclusion
+        logger.info('✅ Agent reached conclusion', {
+          agentId: this.specializedTemplate.agent.id,
+          iteration,
+          totalDuration: Date.now() - reasoningContext.startTime
+        });
+        
+        // Record semantic conclusion
+        await this.recordContextEntry(request.taskContext!, {
+          operation: iterationResponse.details.operation || 'reasoning_complete',
+          data: iterationResponse.details.data || iterationResponse.details,
+          reasoning: iterationResponse.details.reasoning || iterationResponse.thought,
+          confidence: iterationResponse.details.confidence || 0.8
+        });
+        
+        // Convert to standard response format
+        return this.formatReActResponse(iterationResponse, reasoningContext, request);
+        
+      } else if (iterationResponse.action === 'help') {
+        // Agent is stuck and needs orchestrator help
+        logger.warn('🆘 Agent requesting help', {
+          agentId: this.specializedTemplate.agent.id,
+          iteration,
+          reason: iterationResponse.details?.reason
+        });
+        
+        // Record the blockage
+        await this.recordContextEntry(request.taskContext!, {
+          operation: 'agent_blocked',
+          data: {
+            iteration,
+            blockageReason: iterationResponse.details?.reason || 'unspecified',
+            attempted: reasoningContext.iterations.map(i => ({
+              action: i.action,
+              tool: i.details?.tool
+            })),
+            needed: iterationResponse.details?.needed || []
+          },
+          reasoning: `Agent stuck: ${iterationResponse.thought}`,
+          confidence: 0.5
+        });
+        
+        // Clean up SSE subscription before returning
+        this.unsubscribeFromContextUpdates();
+        
+        // Return with needs_input status for orchestrator to handle
+        return {
+          status: 'needs_input',
+          contextUpdate: {
+            entryId: this.generateEntryId(),
+            sequenceNumber: iteration,
+            timestamp: new Date().toISOString(),
+            actor: {
+              type: 'agent',
+              id: this.specializedTemplate.agent.id,
+              version: this.specializedTemplate.agent.version
+            },
+            operation: 'blocked_need_help',
+            data: {
+              blockage: iterationResponse.details,
+              reasoningTrace: reasoningContext.iterations
+            },
+            reasoning: iterationResponse.thought,
+            confidence: 0.5,
+            trigger: {
+              type: 'orchestrator_request',
+              source: 'react_blockage',
+              details: { iteration }
+            }
+          },
+          confidence: 0.5
+        };
+        
+      } else if (iterationResponse.action === 'continue') {
+        // Agent wants to continue reasoning in next iteration
+        logger.debug('↻ Agent continuing to next iteration', {
+          agentId: this.specializedTemplate.agent.id,
+          iteration
+        });
+        
+        // Extract any interim knowledge
+        if (iterationResponse.details?.learned) {
+          Object.assign(reasoningContext.accumulatedKnowledge, iterationResponse.details.learned);
+        }
+        
+      } else if (iterationResponse.action === 'needs_user_input') {
+        // Agent determined it needs user input
+        // CRITICAL: Must follow established UIRequest pattern from base_agent.yaml
+        logger.info('👤 Agent needs user input', {
+          agentId: this.specializedTemplate.agent.id,
+          iteration
+        });
+        
+        // Generate proper form fields based on what the agent needs
+        // The agent MUST explicitly specify what data it needs in details.needed_fields
+        const neededFields = iterationResponse.details?.needed_fields || 
+                            iterationResponse.details?.required_data ||
+                            iterationResponse.details?.missing_fields;
+        
+        // Validate that agent explicitly specified fields
+        if (!Array.isArray(neededFields) || neededFields.length === 0) {
+          // Agent failed to specify what fields it needs - this is an error
+          logger.error('❌ Agent requested user input without specifying needed_fields', {
+            agentId: this.specializedTemplate.agent.id,
+            iteration,
+            details: iterationResponse.details
+          });
+          
+          // Clean up SSE subscription before returning
+          this.unsubscribeFromContextUpdates();
+          
+          // Return to help state - agent needs guidance
+          return {
+            status: 'needs_input', 
+            contextUpdate: {
+              entryId: this.generateEntryId(),
+              sequenceNumber: iteration,
+              timestamp: new Date().toISOString(),
+              actor: {
+                type: 'agent',
+                id: this.specializedTemplate.agent.id,
+                version: this.specializedTemplate.agent.version
+              },
+              operation: 'agent_error',
+              data: {
+                error: 'missing_field_specification',
+                message: 'Agent must explicitly specify needed_fields when requesting user input',
+                attempted_action: 'needs_user_input',
+                hint: 'Use details.needed_fields array to specify exactly which fields you need from the user'
+              },
+              reasoning: 'Agent requested user input but failed to specify what fields are needed',
+              confidence: 0.2,
+              trigger: {
+                type: 'orchestrator_request',
+                source: 'react_validation_failure',
+                details: { iteration }
+              }
+            },
+            confidence: 0.2
+          };
+        }
+        
+        // Generate proper field definitions from explicitly specified fields
+        const fields = await this.createFieldDefinitionsForMissingData(neededFields, request.taskContext);
+        
+        // Ensure UIRequest is properly structured with user-facing instructions
+        let uiRequest = iterationResponse.details?.uiRequest || {};
+        
+        // Always ensure we have proper user-facing content
+        if (!uiRequest.templateType) {
+          uiRequest.templateType = 'form';
+        }
+        
+        if (!uiRequest.title || uiRequest.title === 'Information Required') {
+          uiRequest.title = 'Business Information Required';
+        }
+        
+        // Check if instructions look like agent reasoning (contains "I should", "I need", etc.)
+        const agentReasoningPatterns = /\b(I should|I need|I must|I will|task to|following.*principles|reviewing.*context|check if we have)\b/i;
+        
+        if (uiRequest.instructions && 
+            (uiRequest.instructions.length > 100 || agentReasoningPatterns.test(uiRequest.instructions))) {
+          // Remove verbose or agent-facing instructions
+          uiRequest.instructions = undefined;
+        }
+        
+        // Provide minimal but helpful context when needed
+        if (!uiRequest.instructions || uiRequest.instructions.trim() === '') {
+          // Context-aware brief instructions based on what we're collecting
+          if (fields.some(f => f.id === 'entity_type' || f.id === 'business_type')) {
+            uiRequest.instructions = 'Tell us about your business.';
+          } else if (fields.some(f => f.id === 'ein' || f.id === 'tax_id')) {
+            uiRequest.instructions = 'Tax and registration details.';
+          } else if (fields.length === 1) {
+            // Single field doesn't need instructions
+            uiRequest.instructions = '';
+          } else {
+            uiRequest.instructions = 'Complete these details to proceed.';
+          }
+        }
+        
+        // Always add the fields we generated
+        uiRequest.fields = fields;
+        
+        // Validate UIRequest has required fields
+        if (!uiRequest.templateType || !uiRequest.title || !uiRequest.instructions) {
+          logger.warn('⚠️ Incomplete UIRequest generated', {
+            agentId: this.specializedTemplate.agent.id,
+            iteration,
+            uiRequest
+          });
+        }
+        
+        // Clean up SSE subscription before returning
+        this.unsubscribeFromContextUpdates();
+        
+        // Return in standard format with UIRequest in correct location
+        // Per base_agent.yaml: uiRequest MUST be in contextUpdate.data.uiRequest
+        return {
+          status: 'needs_input', // Standard status enum value
+          contextUpdate: {
+            entryId: this.generateEntryId(),
+            sequenceNumber: iteration,
+            timestamp: new Date().toISOString(),
+            actor: {
+              type: 'agent',
+              id: this.specializedTemplate.agent.id,
+              version: this.specializedTemplate.agent.version
+            },
+            operation: 'user_input_required',
+            data: { 
+              // CRITICAL: uiRequest goes in data.uiRequest per base_agent.yaml
+              uiRequest,
+              // Include context about why input is needed
+              reason: iterationResponse.thought,
+              attemptedTools: reasoningContext.iterations
+                .filter((i: any) => i.action === 'tool')
+                .map((i: any) => i.details?.tool)
+            },
+            reasoning: iterationResponse.thought,
+            confidence: 0.9,
+            trigger: {
+              type: 'orchestrator_request',
+              source: 'react_user_need',
+              details: { iteration }
+            }
+          },
+          confidence: 0.9
+        };
+      }
+      
+      // Check if we're at max iterations
+      if (iteration === MAX_ITERATIONS) {
+        logger.error('⚠️ Hit max iterations without conclusion', {
+          agentId: this.specializedTemplate.agent.id,
+          totalDuration: Date.now() - reasoningContext.startTime
+        });
+        
+        // Return what we have with error status
+        // Clean up SSE subscription before returning error
+        this.unsubscribeFromContextUpdates();
+        
+        return {
+          status: 'error',
+          contextUpdate: {
+            entryId: this.generateEntryId(),
+            sequenceNumber: iteration,
+            timestamp: new Date().toISOString(),
+            actor: {
+              type: 'agent',
+              id: this.specializedTemplate.agent.id,
+              version: this.specializedTemplate.agent.version
+            },
+            operation: 'max_iterations_reached',
+            data: {
+              iterations: MAX_ITERATIONS,
+              reasoningTrace: reasoningContext.iterations,
+              partialResults: reasoningContext.accumulatedKnowledge
+            },
+            reasoning: 'Reached maximum reasoning iterations without conclusion',
+            confidence: 0.3,
+            trigger: {
+              type: 'system_event',
+              source: 'react_limit',
+              details: { maxIterations: MAX_ITERATIONS }
+            }
+          },
+          confidence: 0.3
+        };
+      }
+    }
+    
+    // Clean up SSE subscription at the end of successful execution
+    this.unsubscribeFromContextUpdates();
+    
+    // Should never reach here, but safety fallback
+    return this.executeSimpleReasoning(request);
+  }
+  
+  /**
+   * Execute simple single-pass reasoning (original behavior)
+   * 
+   * This is the fallback when ReAct is disabled or tools are unavailable.
+   * It uses the standard inherited prompt structure without iteration.
+   */
+  private async executeSimpleReasoning(request: BaseAgentRequest): Promise<BaseAgentResponse> {
+    // Build standard inherited prompt (base + specialized)
     const fullPrompt = this.buildInheritedPrompt(request);
     
-    // Log agent reasoning request
-    logger.info('🤖 AGENT LLM REQUEST', {
-      agentRole: this.specializedTemplate.agent?.role || 'unknown',
-      agentId: this.specializedTemplate.agent?.id || 'unknown',
+    logger.info('📝 Using simple single-pass reasoning', {
+      agentId: this.specializedTemplate.agent.id,
       taskId: request.taskContext?.contextId,
-      promptLength: fullPrompt.length,
-      model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
-      promptPreview: fullPrompt.substring(0, 500)
+      reason: !this.toolChain ? 'No toolchain available' : 'ReAct disabled'
     });
     
-    // DEBUG: Log full prompt
-    logger.debug('📝 Full agent prompt', {
-      agentId: this.specializedTemplate.agent?.id,
-      fullPrompt
-    });
-    
-    const llmStartTime = Date.now();
-    
-    // Call LLM with merged prompt
+    // Call LLM with standard approach
     const llmResult = await this.llmProvider.complete({
       prompt: fullPrompt,
       model: request.llmModel || process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
       temperature: 0.3,
-      systemPrompt: this.specializedTemplate.agent?.mission || 'You are a helpful AI assistant that follows instructions precisely.'
+      systemPrompt: this.specializedTemplate.agent?.mission || 'You are a helpful AI assistant.'
     });
     
-    const llmDuration = Date.now() - llmStartTime;
-    
-    // Log agent reasoning response
-    logger.info('🧠 AGENT LLM RESPONSE', {
-      agentRole: this.specializedTemplate.agent?.role || 'unknown',
-      agentId: this.specializedTemplate.agent?.id || 'unknown',
-      taskId: request.taskContext?.contextId,
-      responseLength: llmResult.content.length,
-      duration: `${llmDuration}ms`,
-      responsePreview: llmResult.content.substring(0, 500)
-    });
-    
-    // DEBUG: Log full response
-    logger.debug('📄 Full agent response', {
-      agentId: this.specializedTemplate.agent?.id,
-      fullResponse: llmResult.content
-    });
-    
-    // Parse LLM response as JSON
+    // Parse and validate response
     let llmResponse: any;
     try {
-      if (typeof llmResult.content === 'string') {
-        llmResponse = JSON.parse(llmResult.content);
-      } else {
-        llmResponse = llmResult.content;
+      llmResponse = this.safeJsonParse(llmResult.content);
+      if (!llmResponse) {
+        throw new Error('Failed to parse LLM response as JSON');
       }
-    } catch (parseError) {
-      logger.error('Failed to parse LLM response as JSON', {
+    } catch (error) {
+      logger.error('Failed to parse simple reasoning response', {
         agentId: this.specializedTemplate.agent.id,
-        rawResponse: llmResult.content,
-        parseError: parseError instanceof Error ? parseError.message : String(parseError)
+        error: error instanceof Error ? error.message : String(error)
       });
-      throw new Error(`LLM returned invalid JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+      throw new Error('Invalid LLM response format');
     }
     
-    // Log parsed reasoning
-    if (llmResponse.reasoning) {
-      logger.info('🎯 AGENT REASONING', {
-        agentId: this.specializedTemplate.agent?.id,
-        taskId: request.taskContext?.contextId,
-        reasoning: llmResponse.reasoning
-      });
-    }
-    
-    // Validate and enforce standard schema
-    const validatedResponse = this.enforceStandardSchema(llmResponse, request);
-    
-    return validatedResponse;
+    // Use existing validation
+    return this.enforceStandardSchema(llmResponse, request);
   }
-  
+
+  /**
+   * Build the ReAct prompt for each iteration
+   * 
+   * This method integrates the base agent inheritance model with ReAct enhancements.
+   * It preserves all base principles while adding iterative reasoning capabilities.
+   * 
+   * Key design decisions:
+   * - Starts with full inherited prompt structure
+   * - Adds ReAct-specific instructions as an enhancement layer
+   * - Maintains standard response schema from base_agent.yaml
+   * - Preserves ethical boundaries and decision frameworks
+   */
+  private async buildReActPrompt(
+    request: BaseAgentRequest,
+    reasoningContext: any,
+    availableTools: any[],
+    iteration: number
+  ): Promise<string> {
+    // Start with the full inherited prompt (base + specialized)
+    // This ensures we maintain all principles, ethics, and specialized capabilities
+    const basePrompt = this.buildInheritedPrompt(request);
+    
+    // Extract iteration context for ReAct enhancement
+    const previousThoughts = reasoningContext.iterations
+      .slice(-3) // Show last 3 iterations to maintain context without explosion
+      .map((i: any) => `Iteration ${i.number}: ${i.thought} → Action: ${i.action}`)
+      .join('\n');
+    
+    const toolResultsSummary = Object.entries(reasoningContext.toolResults)
+      .slice(-5) // Show last 5 tool results
+      .map(([key, result]: [string, any]) => {
+        // Don't truncate tool results - agents need full data to make decisions
+        const resultData = result.data || result;
+        
+        // For California business search, ensure we show all key fields
+        if (key.includes('california_business_search') && resultData) {
+          // Extract and format key business information
+          if (Array.isArray(resultData) && resultData.length > 0) {
+            const business = resultData[0];
+            return `${key}: [SUCCESS] Found business:
+  - Entity Name: ${business.entityName}
+  - Entity Number: ${business.entityNumber}
+  - EIN: ${business.ein || 'Not found'}
+  - Status: ${business.status}
+  - Principal Address: ${business.principalAddress || business.streetAddress || 'Not found'}
+  - Mailing Address: ${business.mailingAddress || 'Not found'}
+  - Registered Agent: ${business.agentName || 'Not found'}
+  - Agent Address: ${business.agentAddress || 'Not found'}
+  - CEO/President: ${business.ceoName || business.presidentName || 'Not found'}
+  - Full Data Available: Yes`;
+          }
+        }
+        
+        // For other tools, show more data but with reasonable limits
+        const resultStr = JSON.stringify(resultData);
+        if (resultStr.length > 1000) {
+          // For very large results, show key fields and indicate more is available
+          return `${key}: ${result.success === false ? '[FAILED] ' : '[SUCCESS] '}${resultStr.substring(0, 800)}... [${resultStr.length} chars total]`;
+        }
+        return `${key}: ${result.success === false ? '[FAILED] ' : '[SUCCESS] '}${resultStr}`;
+      })
+      .join('\n\n');
+    
+    // Extract available data by combining multiple sources in order of precedence:
+    // 1. Fresh context from database (base data)
+    // 2. Dynamic context from SSE updates (real-time data) 
+    // 3. Request parameters (highest precedence)
+    let availableData = {};
+    
+    // 1. If we have a contextId, fetch fresh context and extract all available data
+    if (request.taskContext?.contextId) {
+      const freshContext = await this.fetchFreshTaskContext(request.taskContext.contextId);
+      if (freshContext) {
+        const contextData = this.extractAvailableDataFromContext(freshContext);
+        Object.assign(availableData, contextData);
+        
+        logger.debug('📚 Enhanced availableData with fresh context', {
+          agentId: this.specializedTemplate.agent.id,
+          contextId: request.taskContext.contextId,
+          contextDataKeys: Object.keys(contextData)
+        });
+      }
+    }
+
+    // 2. Add dynamic context data from SSE updates (real-time updates)
+    const dynamicData = this.getDynamicContextData();
+    if (Object.keys(dynamicData).length > 0) {
+      Object.assign(availableData, dynamicData);
+      
+      logger.debug('🔄 Enhanced availableData with dynamic SSE updates', {
+        agentId: this.specializedTemplate.agent.id,
+        dynamicDataKeys: Object.keys(dynamicData)
+      });
+    }
+
+    // 3. Request parameters take highest precedence (can override everything)
+    Object.assign(availableData, request.parameters || {});
+    
+    logger.debug('📊 Final availableData composition', {
+      agentId: this.specializedTemplate.agent.id,
+      totalKeys: Object.keys(availableData).length,
+      keys: Object.keys(availableData).slice(0, 10) // Show first 10 to avoid log spam
+    });
+    
+    // Append ReAct enhancement to the inherited prompt
+    return `${basePrompt}
+
+# 🔄 ReAct Pattern Enhancement (ITERATION ${iteration})
+
+You are now reasoning iteratively with tool access. This is iteration ${iteration} of maximum ${10}.
+
+## 📊 Available Data from Request
+${Object.keys(availableData).length > 0 ? 
+  `You have access to the following data:
+${JSON.stringify(availableData, null, 2)}
+
+Note: Tool execution layer has universal guards against invalid parameters.` 
+  : 
+  'No data provided yet - you may need to request user input first'}
+
+## 🛠️ Available Tools for This Task (USE THESE FIRST!)
+${availableTools.map(t => {
+  // Highlight the California Business Search tool
+  if (t.name === 'searchBusinessEntity') {
+    return `⭐ **${t.name}**: ${t.description}
+     Can find: addresses, entity numbers, status, officers, agent info
+     Example: searchBusinessEntity("ARCANA DWELL, LLC", "CA")`;
+  }
+  return `- ${t.name}: ${t.description}`;
+}).join('\n') || 'No tools available'}
+
+**IMPORTANT: Always check if a tool can provide the information before asking the user!**
+
+## Previous Iterations Context
+${previousThoughts || 'This is your first iteration - no previous context'}
+
+## Tool Results From Previous Iterations
+${toolResultsSummary || 'No tools have been used yet'}
+
+## Accumulated Knowledge
+${JSON.stringify(reasoningContext.accumulatedKnowledge, null, 2) || '{}'}
+
+## ReAct Decision Framework
+
+For this iteration, you must decide on ONE of these actions:
+
+### 🎯 DECISION TREE:
+1. **Do I have the basic data I need?** (e.g., business name)
+   - NO → Go to "REQUEST USER INPUT" 
+   - YES → Continue to step 2
+
+2. **Can tools provide additional information?**
+   - YES → Go to "USE TOOL" (with valid parameters)
+   - NO → Continue to step 3
+
+3. **Do I have enough to complete the task?**
+   - YES → Go to "PROVIDE ANSWER"
+   - NO → Go to "REQUEST USER INPUT" for missing pieces
+
+### 🔍 ACTION: USE TOOL (action: "tool")
+Use when you need information from external systems.
+
+Your response must include in details:
+- tool: "exact_tool_name"  
+- params: { /* tool-specific parameters */ }
+
+Note: Universal validation guards will prevent invalid parameters and provide clear error messages.
+
+### ✅ ACTION: PROVIDE ANSWER (action: "answer")
+Choose this when you have sufficient information to complete the task.
+Return the STANDARD RESPONSE FORMAT from above with:
+- status: "completed"
+- Full contextUpdate with operation, data, reasoning, confidence
+
+### 👤 ACTION: REQUEST USER INPUT (action: "needs_user_input")
+**Use when you need data that you don't have!**
+
+Two valid scenarios:
+1. **Missing basic data** - You need fundamental info to start (e.g., business name)
+2. **Tools exhausted** - You tried tools but need additional private data
+
+Check before requesting:
+- Is this data in "Available Data" section above? Don't ask again!
+- Could a tool find this? Only if you have params to call it
+- If tools found partial data, ONLY ask for missing pieces
+
+NEVER ask for information that tools can find:
+- Business addresses (searchable via California SOS)
+- Entity numbers (searchable via California SOS)
+- Business status (searchable via California SOS)
+- Officer names (searchable via California SOS)
+- Agent information (searchable via California SOS)
+
+Only ask users for:
+- EIN/Tax ID (not in public records)
+- Private contact info (emails, phone numbers)
+- Internal preferences or decisions
+- Information tools explicitly couldn't find
+
+**MANDATORY RESPONSE FORMAT:**
+Your response MUST include in details:
+- needed_fields: ["field1", "field2", ...] // REQUIRED - explicit list of field names
+- uiRequest: {
+    templateType: "form",
+    title: "Brief title (3-5 words)",
+    instructions: "One short helpful phrase (5-8 words)"
+  }
+
+**CRITICAL REQUIREMENTS:**
+- needed_fields is MANDATORY - never omit this array
+- needed_fields must contain explicit field names (e.g., "ein", "business_email", "phone")
+- DO NOT include fields in uiRequest - they are auto-generated from needed_fields
+- If you don't specify needed_fields, your request will ERROR
+
+Example valid response in details:
+{
+  needed_fields: ["ein", "business_email", "phone_number"],
+  uiRequest: {
+    templateType: "form",
+    title: "Tax & Contact Info",
+    instructions: "Private details not in public records"
+  }
+}
+
+CRITICAL: If you haven't tried searchBusinessEntity yet, DO THAT FIRST!
+
+### 4. REQUEST HELP (action: "help")
+Choose this when you're stuck or detecting circular reasoning.
+Your response must include in details:
+- reason: "why you're stuck"
+- attempted: ["what you've tried"]
+- needed: ["what would help"]
+
+### 5. CONTINUE REASONING (action: "continue")
+Choose this to accumulate knowledge for next iteration.
+Your response must include in details:
+- learned: { /* key insights to carry forward */ }
+
+## CRITICAL: Response Format for This Iteration
+
+You must respond with VALID JSON:
+{
+  "iteration": ${iteration},
+  "thought": "Your reasoning about what to do next",
+  "action": "tool|answer|needs_user_input|help|continue",
+  "details": {
+    /* Action-specific details as described above */
+  }
+}
+
+## Anti-Patterns to Avoid
+- Don't repeat the same tool call with identical parameters
+- Don't continue if you have the answer
+- Don't skip user input requests when tools can't help
+- Don't violate the base principles in your reasoning
+
+What is your decision for iteration ${iteration}?`;
+  }
+
+  /**
+   * Execute a tool action requested by the agent
+   * 
+   * This method:
+   * 1. Validates the requested tool exists
+   * 2. Executes the tool with provided parameters
+   * 3. Records the tool usage as a system event
+   * 4. Returns the result for the next iteration
+   * 
+   * Tool failures are handled gracefully - the agent can reason about
+   * failures and try alternative approaches.
+   */
+  private async executeToolAction(
+    details: any,
+    taskContext: TaskContext,
+    iteration: number
+  ): Promise<any> {
+    // TODO: Future optimization - Support parallel tool execution
+    // When agent identifies multiple independent tools to call,
+    // we could run them in parallel with Promise.all()
+    // Example: searching multiple databases simultaneously
+    const { tool, params } = details;
+    
+    logger.info('🔧 Executing tool action', {
+      agentId: this.specializedTemplate.agent.id,
+      tool,
+      iteration,
+      hasParams: !!params
+    });
+    
+    try {
+      // Execute the tool through ToolChain
+      const result = await this.toolChain.executeTool(tool, params || {});
+      
+      // Record successful tool usage as system event
+      await this.recordContextEntry(taskContext, {
+        operation: 'system.tool_executed',
+        data: {
+          tool,
+          params,
+          success: result.success,
+          resultPreview: JSON.stringify(result.data).substring(0, 200)
+        },
+        reasoning: `Executed ${tool} in iteration ${iteration}`,
+        confidence: 1.0,
+        trigger: {
+          type: 'system_event',
+          source: 'react_tool_execution',
+          details: { iteration, tool }
+        }
+      });
+      
+      return result;
+      
+    } catch (error) {
+      // Tool execution failed - let agent reason about it
+      logger.error('Tool execution failed', {
+        agentId: this.specializedTemplate.agent.id,
+        tool,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      
+      // Record failure as system event
+      await this.recordContextEntry(taskContext, {
+        operation: 'system.tool_failed',
+        data: {
+          tool,
+          params,
+          error: error instanceof Error ? error.message : String(error)
+        },
+        reasoning: `Tool ${tool} failed in iteration ${iteration}`,
+        confidence: 1.0,
+        trigger: {
+          type: 'system_event',
+          source: 'react_tool_failure',
+          details: { iteration, tool }
+        }
+      });
+      
+      // Return failure for agent to reason about
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Tool execution failed',
+        tool
+      };
+    }
+  }
+
+  /**
+   * Detect circular reasoning patterns
+   * 
+   * This method analyzes the reasoning history to detect if the agent
+   * is stuck in a loop, repeatedly trying the same actions without progress.
+   * 
+   * Detection strategies:
+   * 1. Same tool called 3+ times with same params
+   * 2. Alternating between same 2 tools repeatedly
+   * 3. Same thought appearing multiple times
+   * 
+   * This allows agents to self-correct when stuck rather than spinning.
+   */
+  private detectCircularReasoning(reasoningContext: any): boolean {
+    const iterations = reasoningContext.iterations;
+    
+    if (iterations.length < 3) {
+      return false; // Need at least 3 iterations to detect a pattern
+    }
+    
+    // Check for repeated tool usage with same parameters
+    const toolCalls = iterations
+      .filter((i: any) => i.action === 'tool')
+      .map((i: any) => `${i.details?.tool}:${JSON.stringify(i.details?.params)}`);
+    
+    // Count occurrences of each tool call signature
+    const toolCallCounts = toolCalls.reduce((acc: any, call: string) => {
+      acc[call] = (acc[call] || 0) + 1;
+      return acc;
+    }, {});
+    
+    // If any tool called 3+ times with same params, we're likely stuck
+    const hasRepeatedTool = Object.values(toolCallCounts).some((count: any) => count >= 3);
+    
+    if (hasRepeatedTool) {
+      logger.warn('Circular reasoning detected: repeated tool calls', {
+        agentId: this.specializedTemplate.agent.id,
+        toolCallCounts
+      });
+      return true;
+    }
+    
+    // Check for repeated thoughts (agent thinking same thing repeatedly)
+    const thoughts = iterations.map((i: any) => i.thought?.toLowerCase());
+    const lastThreeThoughts = thoughts.slice(-3);
+    
+    // If last 3 thoughts are very similar, we might be stuck
+    if (lastThreeThoughts.length === 3) {
+      const [t1, t2, t3] = lastThreeThoughts;
+      if (t1 === t2 && t2 === t3) {
+        logger.warn('Circular reasoning detected: repeated thoughts', {
+          agentId: this.specializedTemplate.agent.id,
+          repeatedThought: t1
+        });
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Format ReAct response to standard BaseAgentResponse
+   * 
+   * This method converts the final iteration's answer into the standard
+   * response format expected by the rest of the system.
+   * 
+   * CRITICAL: This must return the exact schema defined in base_agent.yaml
+   * The agent's "answer" action should already provide standard format,
+   * but we ensure compliance here.
+   */
+  private formatReActResponse(
+    iterationResponse: any,
+    reasoningContext: any,
+    request: BaseAgentRequest
+  ): BaseAgentResponse {
+    // The agent should have provided standard format in details when action="answer"
+    // We expect details to contain the full response structure
+    const details = iterationResponse.details || {};
+    
+    // If agent provided full standard format, use it
+    if (details.status && details.contextUpdate) {
+      // Agent provided complete standard response
+      return {
+        status: details.status,
+        contextUpdate: {
+          ...details.contextUpdate,
+          // Ensure required fields are present
+          entryId: details.contextUpdate.entryId || this.generateEntryId(),
+          sequenceNumber: details.contextUpdate.sequenceNumber || reasoningContext.iterations.length,
+          timestamp: details.contextUpdate.timestamp || new Date().toISOString(),
+          actor: details.contextUpdate.actor || {
+            type: 'agent',
+            id: this.specializedTemplate.agent.id,
+            version: this.specializedTemplate.agent.version
+          },
+          // Add reasoning trace as debug info
+          data: {
+            ...details.contextUpdate.data,
+            _reasoningTrace: {
+              iterations: reasoningContext.iterations.length,
+              toolsUsed: Object.keys(reasoningContext.toolResults),
+              totalDuration: Date.now() - reasoningContext.startTime,
+              knowledgeGained: reasoningContext.accumulatedKnowledge
+            }
+          }
+        },
+        confidence: details.confidence || details.contextUpdate?.confidence || 0.8
+      };
+    }
+    
+    // Fallback: construct standard format from partial details
+    // This handles agents that return partial format
+    const contextUpdate: ContextEntry = {
+      entryId: this.generateEntryId(),
+      sequenceNumber: reasoningContext.iterations.length,
+      timestamp: new Date().toISOString(),
+      actor: {
+        type: 'agent',
+        id: this.specializedTemplate.agent.id,
+        version: this.specializedTemplate.agent.version
+      },
+      operation: details.operation || request.operation,
+      data: {
+        ...details.data,
+        // Include reasoning trace for introspection
+        _reasoningTrace: {
+          iterations: reasoningContext.iterations.length,
+          toolsUsed: Object.keys(reasoningContext.toolResults),
+          totalDuration: Date.now() - reasoningContext.startTime,
+          knowledgeGained: reasoningContext.accumulatedKnowledge
+        }
+      },
+      reasoning: details.reasoning || iterationResponse.thought,
+      confidence: details.confidence || 0.8,
+      trigger: {
+        type: 'orchestrator_request',
+        source: 'react_conclusion',
+        details: {
+          iterations: reasoningContext.iterations.length,
+          requestId: request.parameters?.requestId
+        }
+      }
+    };
+    
+    return {
+      status: 'completed', // Default to completed for answer action
+      contextUpdate,
+      confidence: details.confidence || 0.8
+    };
+  }
+
+
   /**
    * Publish agent response as A2A events
    */
@@ -1898,6 +2872,104 @@ Respond with a JSON array of field definitions.
   }
 
   /**
+   * Fetch fresh task context from database
+   * This ensures agents have access to all previously collected data
+   * when they are instantiated mid-task or need to refresh their context
+   * 
+   * @param contextId - The task context ID to fetch
+   * @returns Fresh task context with complete history
+   * @protected
+   */
+  protected async fetchFreshTaskContext(contextId: string): Promise<TaskContext | null> {
+    try {
+      const { TaskService } = await import('../../services/task-service');
+      const taskService = TaskService.getInstance();
+      
+      const freshContext = await taskService.getTask(contextId);
+      
+      if (freshContext) {
+        logger.debug('📋 Fetched fresh task context from database', {
+          contextId,
+          agentId: this.specializedTemplate.agent.id,
+          historyEvents: freshContext.history?.length || 0,
+          currentState: freshContext.currentState?.status
+        });
+      } else {
+        logger.warn('⚠️ Task context not found in database', {
+          contextId,
+          agentId: this.specializedTemplate.agent.id
+        });
+      }
+      
+      return freshContext;
+    } catch (error) {
+      logger.error('❌ Failed to fetch fresh task context', {
+        contextId,
+        agentId: this.specializedTemplate.agent.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Extract all available data from task context history
+   * This aggregates both UI responses and agent execution results
+   * to provide complete context to the agent
+   * 
+   * @param context - The task context to extract data from
+   * @returns Aggregated data from all sources
+   * @protected
+   */
+  protected extractAvailableDataFromContext(context: TaskContext): Record<string, any> {
+    const aggregatedData: Record<string, any> = {};
+    
+    // Extract data from task history
+    for (const event of context.history || []) {
+      // UI responses (user-provided data)
+      if (event.operation === 'UI_RESPONSE_SUBMITTED' && event.data?.response) {
+        Object.assign(aggregatedData, event.data.response);
+        
+        logger.debug('📝 Found UI response data', {
+          contextId: context.contextId,
+          dataKeys: Object.keys(event.data.response),
+          timestamp: event.timestamp
+        });
+      }
+      
+      // Agent execution results (tool results, contextUpdate.data)
+      if (event.operation?.includes('agent.') && event.data?.contextUpdate?.data) {
+        Object.assign(aggregatedData, event.data.contextUpdate.data);
+        
+        logger.debug('🤖 Found agent execution data', {
+          contextId: context.contextId,
+          operation: event.operation,
+          dataKeys: Object.keys(event.data.contextUpdate.data),
+          timestamp: event.timestamp
+        });
+      }
+    }
+    
+    // Also check current state data
+    if (context.currentState?.data) {
+      Object.assign(aggregatedData, context.currentState.data);
+      
+      logger.debug('📊 Found current state data', {
+        contextId: context.contextId,
+        dataKeys: Object.keys(context.currentState.data)
+      });
+    }
+    
+    logger.debug('🔄 Extracted available data from context', {
+      contextId: context.contextId,
+      totalKeys: Object.keys(aggregatedData).length,
+      keys: Object.keys(aggregatedData).slice(0, 10) // Log first 10 keys to avoid spam
+    });
+    
+    return aggregatedData;
+  }
+
+  /**
    * Announce that this agent is blocked and needs something
    * Other agents listen for these announcements to provide help
    * 
@@ -2340,6 +3412,95 @@ Respond with a JSON array of field definitions.
     });
 
     return requestId;
+  }
+
+  /**
+   * Subscribe to SSE events for real-time task context updates
+   * This enables agents to receive and incorporate new data while executing
+   */
+  protected async subscribeToContextUpdates(contextId: string): Promise<void> {
+    if (this.sseUnsubscribe) {
+      // Clean up existing subscription
+      this.sseUnsubscribe();
+    }
+
+    // Import A2A Event Bus
+    const { a2aEventBus } = await import('../../services/a2a-event-bus');
+    
+    const subscriberId = `${this.specializedTemplate.agent.id}-${Date.now()}`;
+    
+    logger.info('🔄 Subscribing to context updates', {
+      agentId: this.specializedTemplate.agent.id,
+      contextId,
+      subscriberId
+    });
+
+    // Subscribe to task-specific events with skip history since we fetch fresh context separately
+    this.sseUnsubscribe = a2aEventBus.subscribe(
+      contextId,
+      (event) => this.handleContextUpdateEvent(event),
+      subscriberId,
+      true // Skip history - we get fresh context via fetchFreshTaskContext
+    );
+  }
+
+  /**
+   * Handle incoming SSE context update events
+   * Updates the dynamic context data that gets merged during prompt building
+   */
+  private handleContextUpdateEvent(event: any): void {
+    logger.debug('📥 Received context update event', {
+      agentId: this.specializedTemplate.agent.id,
+      eventType: event.type,
+      operation: event.operation,
+      hasData: !!event.data
+    });
+
+    // Extract data from UI responses and agent executions
+    if (event.type === 'UI_REQUEST_RESPONSE' && event.data) {
+      // Merge UI response data into dynamic context
+      Object.assign(this.dynamicContextData, event.data);
+      
+      logger.debug('🖥️ Updated context with UI response', {
+        agentId: this.specializedTemplate.agent.id,
+        newDataKeys: Object.keys(event.data),
+        totalContextKeys: Object.keys(this.dynamicContextData).length
+      });
+    } else if (event.operation?.includes('agent.') && event.data?.contextUpdate?.data) {
+      // Merge agent execution data into dynamic context
+      Object.assign(this.dynamicContextData, event.data.contextUpdate.data);
+      
+      logger.debug('🤖 Updated context with agent execution data', {
+        agentId: this.specializedTemplate.agent.id,
+        sourceOperation: event.operation,
+        newDataKeys: Object.keys(event.data.contextUpdate.data),
+        totalContextKeys: Object.keys(this.dynamicContextData).length
+      });
+    }
+  }
+
+  /**
+   * Get current dynamic context data accumulated from SSE events
+   * This is used during prompt building to include real-time updates
+   */
+  protected getDynamicContextData(): Record<string, any> {
+    return { ...this.dynamicContextData };
+  }
+
+  /**
+   * Clean up SSE subscription when agent execution completes
+   */
+  protected unsubscribeFromContextUpdates(): void {
+    if (this.sseUnsubscribe) {
+      logger.info('👋 Unsubscribing from context updates', {
+        agentId: this.specializedTemplate.agent.id
+      });
+      this.sseUnsubscribe();
+      this.sseUnsubscribe = undefined;
+    }
+    
+    // Clear dynamic context data
+    this.dynamicContextData = {};
   }
 
 }

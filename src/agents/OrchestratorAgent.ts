@@ -225,10 +225,18 @@ export class OrchestratorAgent extends BaseAgent {
       // Subscribe to the global channel for UI response events
       // We use global channel because we want to hear about ALL UI responses
       a2aEventBus.on('global:event', async (event: any) => {
-        // Only process UI_RESPONSE_SUBMITTED events
+        // Process UI_RESPONSE_SUBMITTED events
         if (event.operation === ORCHESTRATOR_OPS.UI_RESPONSE_SUBMITTED || 
             event.type === ORCHESTRATOR_OPS.UI_RESPONSE_SUBMITTED) {
           await this.handleUIResponseEvent(event);
+        }
+        
+        // Process AGENT_EXECUTION_FAILED events
+        // Monitor subagent failures and decide how to proceed
+        if (event.type === 'AGENT_EXECUTION_FAILED' || 
+            event.operation === 'AGENT_EXECUTION_FAILED' ||
+            (event.data && event.data.type === 'AGENT_EXECUTION_FAILED')) {
+          await this.handleAgentExecutionFailed(event);
         }
       });
       
@@ -345,6 +353,487 @@ export class OrchestratorAgent extends BaseAgent {
       // Don't throw - we don't want to crash the orchestrator
     }
   }
+
+  /**
+   * Handle AGENT_EXECUTION_FAILED events
+   * Intelligent failure handling - determine if failure is recoverable or terminal
+   * 
+   * FAILURE CATEGORIES:
+   * - RATE_LIMITED: Temporary, should retry with backoff
+   * - TIMEOUT: May retry once or twice
+   * - VALIDATION_ERROR: Terminal, needs user correction
+   * - SYSTEM_ERROR: Terminal, infrastructure issue
+   * - NON_CRITICAL: Log but continue (e.g., celebration_agent failure)
+   */
+  private async handleAgentExecutionFailed(event: any): Promise<void> {
+    try {
+      // Log that we're handling a failure
+      logger.info('🚨 OrchestratorAgent handling agent failure event', { 
+        eventType: 'AGENT_EXECUTION_FAILED',
+        eventData: event 
+      });
+      
+      // Extract failure details from event
+      const taskId = event.taskId || event.data?.taskId;
+      const agentId = event.agentId || event.data?.agentId;
+      const error = event.error || event.data?.error || 'Unknown error';
+      const requestId = event.requestId || event.data?.requestId;
+      
+      if (!taskId || !agentId) {
+        logger.warn('⚠️ Received AGENT_EXECUTION_FAILED without taskId or agentId', { event });
+        return;
+      }
+      
+      logger.warn('🔴 Agent execution failed', {
+        taskId,
+        agentId,
+        error,
+        requestId
+      });
+      
+      // Categorize the failure
+      const failureCategory = this.categorizeFailure(error, agentId);
+      
+      // Determine action based on failure category and agent criticality
+      const action = await this.determineFailureAction(taskId, agentId, failureCategory, error);
+      
+      logger.info('📊 Failure analysis complete', {
+        taskId,
+        agentId,
+        failureCategory,
+        action: action.type,
+        willRetry: action.retry,
+        newStatus: action.newTaskStatus
+      });
+      
+      // Execute the determined action
+      await this.executeFailureAction(taskId, agentId, action, error);
+      
+    } catch (error) {
+      logger.error('❌ Error handling agent failure event', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't throw - we don't want failure handling to crash the orchestrator
+    }
+  }
+  
+  /**
+   * Categorize the type of failure for intelligent handling
+   */
+  private categorizeFailure(error: string, _agentId: string): string {
+    const errorLower = error.toLowerCase();
+    
+    // Rate limiting errors - always recoverable
+    if (errorLower.includes('rate limit') || 
+        errorLower.includes('429') ||
+        errorLower.includes('too many requests')) {
+      return 'RATE_LIMITED';
+    }
+    
+    // Timeout errors - sometimes recoverable
+    if (errorLower.includes('timeout') || 
+        errorLower.includes('timed out') ||
+        errorLower.includes('deadline exceeded')) {
+      return 'TIMEOUT';
+    }
+    
+    // Validation errors - not recoverable, need user input
+    if (errorLower.includes('validation') || 
+        errorLower.includes('invalid') ||
+        errorLower.includes('missing required')) {
+      return 'VALIDATION_ERROR';
+    }
+    
+    // Network errors - might be recoverable
+    if (errorLower.includes('network') || 
+        errorLower.includes('connection') ||
+        errorLower.includes('econnrefused')) {
+      return 'NETWORK_ERROR';
+    }
+    
+    // Tool not found - configuration error
+    if (errorLower.includes('unknown tool') || 
+        errorLower.includes('tool not found') ||
+        errorLower.includes('undefined') && errorLower.includes('substring')) {
+      return 'CONFIGURATION_ERROR';
+    }
+    
+    // Default to system error
+    return 'SYSTEM_ERROR';
+  }
+  
+  /**
+   * Determine what action to take based on failure type and agent
+   */
+  private async determineFailureAction(
+    taskId: string, 
+    agentId: string, 
+    failureCategory: string,
+    error: string
+  ): Promise<{
+    type: 'retry' | 'continue' | 'fail' | 'pause';
+    retry?: { delay: number; maxAttempts: number };
+    newTaskStatus?: string;
+    statusReason?: string;
+  }> {
+    // Check if agent is critical for task completion
+    const isAgentCritical = this.isAgentCritical(agentId);
+    
+    // Get retry attempts for this agent if any
+    const retryKey = `${taskId}-${agentId}`;
+    const currentAttempts = this.retryAttempts.get(retryKey) || 0;
+    
+    switch (failureCategory) {
+      case 'RATE_LIMITED':
+        // Always retry rate limited requests with exponential backoff
+        if (currentAttempts < 3) {
+          const delay = Math.min(1000 * Math.pow(2, currentAttempts), 30000); // Max 30s
+          return {
+            type: 'retry',
+            retry: { delay, maxAttempts: 3 }
+          };
+        } else {
+          // Max retries reached, pause task for manual intervention
+          return {
+            type: 'pause',
+            newTaskStatus: 'waiting_for_input',
+            statusReason: `Agent ${agentId} rate limited after ${currentAttempts} attempts. Please wait and retry.`
+          };
+        }
+        
+      case 'TIMEOUT':
+        // Retry once for timeouts
+        if (currentAttempts < 1) {
+          return {
+            type: 'retry',
+            retry: { delay: 2000, maxAttempts: 1 }
+          };
+        } else if (!isAgentCritical) {
+          // Non-critical agent timeout - continue without it
+          return {
+            type: 'continue',
+            statusReason: `Non-critical agent ${agentId} timed out, continuing without it`
+          };
+        } else {
+          return {
+            type: 'fail',
+            newTaskStatus: 'failed',
+            statusReason: `Critical agent ${agentId} timed out: ${error}`
+          };
+        }
+        
+      case 'VALIDATION_ERROR':
+        // Validation errors need user input to fix
+        return {
+          type: 'pause',
+          newTaskStatus: 'waiting_for_input',
+          statusReason: `Agent ${agentId} validation error: ${error}`
+        };
+        
+      case 'CONFIGURATION_ERROR':
+        // Configuration errors are not recoverable but might not be critical
+        if (!isAgentCritical || agentId === 'celebration_agent') {
+          return {
+            type: 'continue',
+            statusReason: `Non-critical agent ${agentId} has configuration issues, skipping`
+          };
+        } else {
+          return {
+            type: 'fail',
+            newTaskStatus: 'failed',
+            statusReason: `Critical agent ${agentId} configuration error: ${error}`
+          };
+        }
+        
+      case 'NETWORK_ERROR':
+        // Retry network errors once
+        if (currentAttempts < 1) {
+          return {
+            type: 'retry',
+            retry: { delay: 3000, maxAttempts: 1 }
+          };
+        } else {
+          return {
+            type: 'fail',
+            newTaskStatus: 'failed',
+            statusReason: `Network error for agent ${agentId}: ${error}`
+          };
+        }
+        
+      default:
+        // Unknown errors - fail if critical, continue if not
+        if (!isAgentCritical) {
+          return {
+            type: 'continue',
+            statusReason: `Non-critical agent ${agentId} failed: ${error}`
+          };
+        } else {
+          return {
+            type: 'fail',
+            newTaskStatus: 'failed',
+            statusReason: `Agent ${agentId} system error: ${error}`
+          };
+        }
+    }
+  }
+  
+  /**
+   * Execute the determined failure action
+   */
+  private async executeFailureAction(
+    taskId: string,
+    agentId: string,
+    action: any,
+    error: string
+  ): Promise<void> {
+    const execution: any = this.activeExecutions.get(taskId);
+    
+    switch (action.type) {
+      case 'retry': {
+        // Schedule retry with delay
+        const retryKey = `${taskId}-${agentId}`;
+        const attempts = (this.retryAttempts.get(retryKey) || 0) + 1;
+        this.retryAttempts.set(retryKey, attempts);
+        
+        logger.info(`⏰ Scheduling retry for ${agentId}`, {
+          taskId,
+          delay: action.retry.delay,
+          attempt: attempts
+        });
+        
+        setTimeout(async () => {
+          logger.info(`🔁 Retrying ${agentId} execution`, { taskId, attempt: attempts });
+          
+          // Find the failed subtask and retry it
+          if (execution && execution.subtasks) {
+            const failedSubtask = execution.subtasks.find((st: any) => 
+              st.agentId === agentId && st.status === 'failed'
+            );
+            
+            if (failedSubtask) {
+              failedSubtask.status = 'pending';
+              await this.continueExecution(taskId);
+            }
+          } else {
+            logger.error('Cannot retry - execution or subtasks not found', { taskId, agentId });
+          }
+        }, action.retry.delay);
+        break;
+      }
+        
+      case 'continue':
+        // Log and continue with remaining agents
+        logger.info(`➡️ Continuing without ${agentId}`, {
+          taskId,
+          reason: action.statusReason
+        });
+        
+        // Mark subtask as skipped and continue
+        if (execution) {
+          const failedSubtask = execution.subtasks.find((st: any) => 
+            st.agentId === agentId
+          );
+          
+          if (failedSubtask) {
+            failedSubtask.status = 'skipped';
+            failedSubtask.result = { skipped: true, reason: action.statusReason };
+          }
+          
+          await this.continueExecution(taskId);
+        }
+        break;
+        
+      case 'pause':
+        // Update task status to waiting_for_input
+        logger.info(`⏸️ Pausing task for manual intervention`, {
+          taskId,
+          reason: action.statusReason
+        });
+        
+        await this.updateTaskStatusWithMetadata(taskId, action.newTaskStatus || 'waiting_for_input', {
+          reason: action.statusReason,
+          failedAgent: agentId,
+          requiresIntervention: true
+        });
+        break;
+        
+      case 'fail':
+        // Update task status to failed
+        logger.error(`❌ Failing task due to critical agent failure`, {
+          taskId,
+          agentId,
+          reason: action.statusReason
+        });
+        
+        await this.updateTaskStatusWithMetadata(taskId, action.newTaskStatus || 'failed', {
+          reason: action.statusReason,
+          failedAgent: agentId,
+          error
+        });
+        
+        // Clean up execution
+        if (execution) {
+          execution.status = 'failed';
+          this.activeExecutions.delete(taskId);
+        }
+        break;
+    }
+  }
+  
+  /**
+   * Determine if an agent is critical for task completion
+   */
+  private isAgentCritical(agentId: string): boolean {
+    // Non-critical agents that can fail without stopping the task
+    const nonCriticalAgents = [
+      'celebration_agent',
+      'monitoring_agent',
+      'ux_optimization_agent',
+      'communication_agent'  // Can fail for notifications
+    ];
+    
+    return !nonCriticalAgents.includes(agentId);
+  }
+  
+  /**
+   * Update task status in the database with metadata
+   */
+  private async updateTaskStatusWithMetadata(taskId: string, status: string, metadata?: any): Promise<void> {
+    try {
+      const taskService = TaskService.getInstance();
+      
+      // Update the task status
+      await taskService.updateTaskStatus(taskId, status as any);
+      
+      // If we have metadata, add it via a context entry
+      if (metadata) {
+        const task = await taskService.getTask(taskId);
+        if (task) {
+          const _contextEntry = {
+            entryId: `status-update-${Date.now()}`,
+            sequenceNumber: task.history.length + 1,
+            timestamp: new Date().toISOString(),
+            actor: {
+              type: 'agent' as const,
+              id: 'orchestrator_agent',
+              version: '1.0.0'
+            },
+            operation: 'status_update',
+            data: {
+              newStatus: status,
+              metadata,
+              statusReason: metadata.reason || metadata.statusReason
+            },
+            reasoning: metadata.reason || metadata.statusReason || `Status changed to ${status}`
+          };
+          
+          // TODO: Add context entry when method is available
+          // await taskService.addContextEntry(taskId, contextEntry);
+        }
+      }
+      
+      logger.info('📝 Updated task status', {
+        taskId,
+        newStatus: status,
+        metadata
+      });
+    } catch (error) {
+      logger.error('Failed to update task status', {
+        taskId,
+        status,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+  
+  /**
+   * Continue execution of a task after handling a failure
+   */
+  private async continueExecution(taskId: string): Promise<void> {
+    const execution: any = this.activeExecutions.get(taskId);
+    
+    if (!execution) {
+      logger.warn('No active execution found for task', { taskId });
+      return;
+    }
+    
+    // Find next pending subtask
+    const nextSubtask = execution.subtasks.find((st: any) => st.status === 'pending');
+    
+    if (nextSubtask) {
+      logger.info('📋 Continuing with next subtask', {
+        taskId,
+        agentId: nextSubtask.agentId
+      });
+      
+      // Get fresh task context
+      const taskService = TaskService.getInstance();
+      const context = await taskService.getTask(taskId);
+      
+      if (context) {
+        // Execute the next subtask
+        try {
+          nextSubtask.status = 'in_progress';
+          const result = await this.executeSubtask(
+            context,
+            nextSubtask,
+            execution.currentPhase || { name: 'continuation', priority: 1 },
+            {},
+            execution.subtasks.indexOf(nextSubtask)
+          );
+          
+          nextSubtask.status = 'completed';
+          nextSubtask.result = result;
+          
+          // Continue with remaining subtasks
+          await this.continueExecution(taskId);
+        } catch (error) {
+          nextSubtask.status = 'failed';
+          nextSubtask.error = error instanceof Error ? error.message : String(error);
+          
+          // Let the failure handler deal with it
+          logger.error('Subtask failed during continuation', {
+            taskId,
+            agentId: nextSubtask.agentId,
+            error: nextSubtask.error
+          });
+        }
+      }
+    } else {
+      // No more subtasks - check if we can complete the task
+      const failedSubtasks = execution.subtasks.filter((st: any) => st.status === 'failed');
+      const skippedSubtasks = execution.subtasks.filter((st: any) => st.status === 'skipped');
+      const completedSubtasks = execution.subtasks.filter((st: any) => st.status === 'completed');
+      
+      if (failedSubtasks.length === 0 || failedSubtasks.every((st: any) => !this.isAgentCritical(st.agentId))) {
+        // All critical tasks completed successfully
+        logger.info('✅ Task execution completed with partial success', {
+          taskId,
+          completed: completedSubtasks.length,
+          skipped: skippedSubtasks.length,
+          failed: failedSubtasks.length
+        });
+        
+        await this.updateTaskStatusWithMetadata(taskId, 'completed', {
+          partialSuccess: failedSubtasks.length > 0 || skippedSubtasks.length > 0,
+          skippedAgents: skippedSubtasks.map((st: any) => st.agentId),
+          failedAgents: failedSubtasks.map((st: any) => st.agentId)
+        });
+        
+        execution.status = 'completed';
+        this.activeExecutions.delete(taskId);
+      } else {
+        // Critical failures exist
+        logger.error('❌ Task cannot continue due to critical failures', {
+          taskId,
+          criticalFailures: failedSubtasks.filter((st: any) => this.isAgentCritical(st.agentId))
+        });
+      }
+    }
+  }
+  
+  // Add retry attempts tracker
+  private retryAttempts: Map<string, number> = new Map();
   
   /**
    * 🔑 SINGLETON PATTERN - Critical for system initialization
@@ -773,8 +1262,7 @@ export class OrchestratorAgent extends BaseAgent {
           // The task is NOT failed, NOT completed, just waiting
           await this.updateTaskStatus(context, TASK_STATUS.WAITING_FOR_INPUT);
           
-          // Also update the context state to reflect this
-          context.currentState.status = TASK_STATUS.WAITING_FOR_INPUT;
+          // TaskService will handle the status update in the database
           
           // Don't mark as complete, exit orchestration loop
           allPhasesCompleted = false;
@@ -1350,6 +1838,18 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
         // Execute subtasks sequentially, passing data between them
         let phaseData = {};
         
+        // CRITICAL FIX: Extract all UI response data from context history
+        // This ensures that data collected via UIRequests is available to subsequent agents
+        const uiResponseData = this.extractUIResponseData(context);
+        if (Object.keys(uiResponseData).length > 0) {
+          logger.info('📊 Extracted UI response data from context history', {
+            contextId: context.contextId,
+            dataKeys: Object.keys(uiResponseData),
+            sampleData: JSON.stringify(uiResponseData).substring(0, 200)
+          });
+          phaseData = { ...phaseData, ...uiResponseData };
+        }
+        
         for (let index = 0; index < subtasks.length; index++) {
           const subtask = subtasks[index];
           try {
@@ -1536,6 +2036,25 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       throw new Error(`Agent ${subtask.agent} is not available (${agent.availability})`);
     }
     
+    // CRITICAL: Extract both UI response data and agent execution data 
+    // This ensures agents have access to all previously collected information
+    const allUIResponseData = this.extractUIResponseData(context);
+    const allAgentExecutionData = this.extractAgentExecutionData(context);
+    
+    // Combine all available data, with agent execution data taking precedence over UI data
+    const combinedData = {
+      ...allUIResponseData,
+      ...allAgentExecutionData // Agent execution data (like CA search results) takes precedence
+    };
+    
+    logger.debug('📋 Preparing agent request with combined data', {
+      contextId: context.contextId,
+      agentRole: agent.role,
+      uiDataKeys: Object.keys(allUIResponseData),
+      agentDataKeys: Object.keys(allAgentExecutionData),
+      combinedDataKeys: Object.keys(combinedData)
+    });
+    
     // Create comprehensive agent request with specific instructions
     const request: AgentRequest = {
       requestId: `subtask_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -1545,6 +2064,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
         // Combine expected input data structure with actual input data
         ...subtask.input_data,
         ...inputData,
+        ...combinedData, // Include all UI response data AND agent execution data
         taskContext: {
           contextId: context.contextId,
           taskType: context.currentState?.task_type,
@@ -1692,6 +2212,104 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       uiRequests: [errorUIRequest],
       reasoning: `Subtask failed, requesting manual user input as fallback`
     };
+  }
+  
+  /**
+   * Extract all UI response data from the task context history
+   * This method aggregates all user-submitted data from UI_RESPONSE_SUBMITTED events
+   * to ensure data persistence across agent transitions
+   * 
+   * @param context - The task context containing history
+   * @returns Aggregated data from all UI responses
+   */
+  private extractUIResponseData(context: TaskContext): Record<string, any> {
+    const aggregatedData: Record<string, any> = {};
+    
+    // Iterate through history to find all UI_RESPONSE_SUBMITTED events
+    for (const event of context.history) {
+      if (event.operation === 'UI_RESPONSE_SUBMITTED' && event.data?.response) {
+        // Merge the response data into our aggregated data
+        Object.assign(aggregatedData, event.data.response);
+        
+        logger.debug('📝 Found UI response data in history', {
+          contextId: context.contextId,
+          requestId: event.data.requestId,
+          dataKeys: Object.keys(event.data.response),
+          timestamp: event.timestamp
+        });
+      }
+    }
+    
+    // Also check for any user-provided data in the current state
+    if (context.currentState?.data) {
+      // Extract business-relevant data from current state
+      const stateData = context.currentState.data;
+      const businessData: Record<string, any> = {};
+      
+      // Extract known business fields
+      const businessFields = [
+        'business_name', 'businessName', 'entity_type', 'entityType',
+        'formation_state', 'formationState', 'ein', 'address',
+        'city', 'state', 'zip', 'phone', 'email', 'website'
+      ];
+      
+      for (const field of businessFields) {
+        if (stateData[field]) {
+          // Normalize field names to snake_case for consistency
+          const normalizedField = field.replace(/([A-Z])/g, '_$1').toLowerCase()
+            .replace(/^_/, '').replace(/__/g, '_');
+          businessData[normalizedField] = stateData[field];
+        }
+      }
+      
+      if (Object.keys(businessData).length > 0) {
+        Object.assign(aggregatedData, businessData);
+        logger.debug('📝 Extracted business data from current state', {
+          contextId: context.contextId,
+          dataKeys: Object.keys(businessData)
+        });
+      }
+    }
+    
+    return aggregatedData;
+  }
+
+  /**
+   * Extract all agent execution data from task context history
+   * This method aggregates all data from agent responses (contextUpdate.data)
+   * to ensure tool results and agent findings are available to subsequent agents
+   * 
+   * @param context - The task context containing history
+   * @returns Aggregated data from all agent execution results
+   */
+  private extractAgentExecutionData(context: TaskContext): Record<string, any> {
+    const aggregatedData: Record<string, any> = {};
+    
+    // Iterate through history to find agent execution results
+    for (const event of context.history) {
+      // Look for agent responses with contextUpdate.data
+      if (event.operation?.includes('agent.') && event.data?.contextUpdate?.data) {
+        const agentData = event.data.contextUpdate.data;
+        
+        // Merge agent execution data, prioritizing more recent results
+        Object.assign(aggregatedData, agentData);
+        
+        logger.debug('📋 Found agent execution data in history', {
+          contextId: context.contextId,
+          operation: event.operation,
+          dataKeys: Object.keys(agentData),
+          timestamp: event.timestamp
+        });
+      }
+    }
+    
+    logger.debug('📊 Aggregated agent execution data', {
+      contextId: context.contextId,
+      totalKeys: Object.keys(aggregatedData).length,
+      keys: Object.keys(aggregatedData)
+    });
+    
+    return aggregatedData;
   }
 
   /**
@@ -2015,9 +2633,8 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       contextId: context.contextId
     });
     
-    // Update the context state to completed
-    context.currentState.status = TASK_STATUS.COMPLETED;
-    context.currentState.completeness = 100;
+    // Status is updated in the database by TaskService
+    // We don't update in-memory state - TaskService is the single source of truth
     
     // Update task status in database via TaskService
     try {
@@ -2078,6 +2695,30 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       reasoning: 'Orchestration encountered an error, applying recovery strategy'
     });
     
+    // CRITICAL: Announce that we're pausing the orchestration
+    // This was missing - the orchestrator should communicate its state
+    await this.recordContextEntry(context, {
+      operation: ORCHESTRATOR_OPS.AGENT_EXECUTION_PAUSED,
+      data: {
+        agentId: 'orchestrator_agent',
+        reason: 'automation_failure',
+        error: error.message,
+        nextStep: 'switching_to_manual_mode'
+      },
+      reasoning: 'I am pausing orchestration due to an error. Switching to manual mode to continue with user assistance.',
+      confidence: 1.0,
+      trigger: {
+        type: 'system_event',
+        source: 'orchestration_failure',
+        details: { error: error.message }
+      }
+    });
+    
+    logger.info('⏸️ ORCHESTRATOR: I am pausing - switching to manual mode', {
+      contextId: context.contextId,
+      error: error.message
+    });
+    
     switch (this.config.resilience.fallbackStrategy) {
       case 'degrade':
         // Switch to manual mode
@@ -2092,7 +2733,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       case 'fail':
       default:
         // Mark task as failed
-        context.currentState.status = 'failed';
+        await this.updateTaskStatus(context, TASK_STATUS.FAILED);
         break;
     }
   }
@@ -2117,6 +2758,15 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     };
     
     await this.sendUIRequests(context, [manualGuide]);
+    
+    // CRITICAL: Update task status to waiting_for_input
+    // This was missing, causing tasks to remain in limbo after failures
+    await this.updateTaskStatus(context, TASK_STATUS.WAITING_FOR_INPUT);
+    
+    logger.info('⏸️ Task paused - switched to manual mode due to automation failure', {
+      contextId: context.contextId,
+      status: TASK_STATUS.WAITING_FOR_INPUT
+    });
   }
   
   /**
@@ -2144,6 +2794,14 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     };
     
     await this.sendUIRequests(context, [guideRequest]);
+    
+    // Update task status when providing guidance
+    await this.updateTaskStatus(context, TASK_STATUS.WAITING_FOR_INPUT);
+    
+    logger.info('⏸️ Task paused - providing manual guidance', {
+      contextId: context.contextId,
+      status: TASK_STATUS.WAITING_FOR_INPUT
+    });
   }
   
   /**
