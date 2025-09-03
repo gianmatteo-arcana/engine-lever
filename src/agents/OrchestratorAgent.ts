@@ -905,8 +905,12 @@ export class OrchestratorAgent extends BaseAgent {
   private async createExecutionPlan(context: TaskContext): Promise<ExecutionPlan> {
     logger.info('🧠 createExecutionPlan() starting', {
       contextId: context.contextId,
-      hasAgentRegistry: this.agentRegistry.size > 0
+      hasAgentRegistry: this.agentRegistry.size > 0,
+      businessId: context.businessId
     });
+    
+    // NOTE: Business memory search is handled by the orchestrator's LLM reasoning
+    // based on instructions in orchestrator.yaml - not hardcoded here
     
     // CRITICAL: Check for missing business data using toolchain-first approach
     const taskType = context.currentState?.data?.taskType || 'general';
@@ -2044,6 +2048,9 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       reasoning: 'All phases executed successfully'
     });
     
+    // NOTE: Knowledge extraction is handled as a phase in the execution plan
+    // as instructed in orchestrator.yaml - not triggered here
+    
     // Clean up
     this.activeExecutions.delete(context.contextId);
     this.pendingUIRequests.delete(context.contextId);
@@ -2661,6 +2668,7 @@ Respond with JSON only:
       contextId: taskId,
       taskTemplateId: state.metadata?.templateId || 'unknown',
       tenantId: state.metadata?.userId || 'system',
+      businessId: state.metadata?.businessId || state.data?.businessId,
       createdAt: state.metadata?.createdAt || new Date().toISOString(),
       currentState: state,
       history: state.history || [],
@@ -2677,6 +2685,7 @@ Respond with JSON only:
       contextId: `ctx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       taskTemplateId: taskRequest.templateId,
       tenantId: taskRequest.userId,
+      businessId: taskRequest.businessId,
       createdAt: new Date().toISOString(),
       currentState: {
         status: 'pending',
