@@ -12,12 +12,24 @@ import type {
   BaseAgentRequest, 
   BaseAgentResponse 
 } from '../types/base-agent-types';
-import type { UIRequest, UIRequestField } from '../types/ui-types';
+import type { 
+  UIRequest, 
+  TaskContext, 
+  ContextEntry
+} from '../types/task-engine.types';
+import { UITemplateType } from '../types/task-engine.types';
 import type { AgentCapability } from '../services/agent-discovery';
+import { DatabaseService } from '../services/database';
+import { EventEmitter } from 'events';
 
 export class UXOptimizationAgent extends BaseAgent {
+  private eventListener: EventEmitter | null = null;
+  private dbService: DatabaseService;
+  private activeContexts: Set<string> = new Set();
+  
   constructor(tenantId?: string, userId?: string) {
     super('ux_optimization_agent', tenantId || 'system', userId);
+    this.dbService = DatabaseService.getInstance();
     logger.info('🎨 UX Optimization Agent initialized', { tenantId, userId });
   }
 
@@ -33,7 +45,13 @@ export class UXOptimizationAgent extends BaseAgent {
     });
 
     try {
-      // Extract UIRequests from input data
+      // Handle different operations
+      if (request.operation === 'start_listening') {
+        // Start listening for UIRequests in background
+        return await this.startListening(request.taskContext!, request.parameters?.mode);
+      }
+      
+      // Legacy operation - optimize provided UIRequests
       const uiRequests = request.parameters?.uiRequests as UIRequest[];
       const sourceAgents = request.parameters?.sourceAgents as string[];
       
@@ -46,7 +64,7 @@ export class UXOptimizationAgent extends BaseAgent {
       taskLogger.info('📊 Analyzing UIRequests for optimization', {
         requestCount: uiRequests.length,
         sourceAgents,
-        totalFields: uiRequests.reduce((sum, req) => sum + (req.fields?.length || 0), 0)
+        totalData: uiRequests.reduce((sum, req) => sum + Object.keys(req.semanticData || {}).length, 0)
       });
 
       // Perform intelligent UIRequest optimization
@@ -84,6 +102,178 @@ export class UXOptimizationAgent extends BaseAgent {
   }
 
   /**
+   * Start listening for UIRequest events
+   */
+  private async startListening(
+    context: TaskContext,
+    mode: string = 'background'
+  ): Promise<BaseAgentResponse> {
+    const contextId = context.contextId;
+    const taskLogger = createTaskLogger(contextId);
+    
+    try {
+      // Mark this context as active
+      this.activeContexts.add(contextId);
+      
+      // Step 1: Read existing UIRequests from context history
+      const existingUIRequests = await this.readUIRequestsFromHistory(context);
+      
+      taskLogger.info('📚 Read existing UIRequests from context history', {
+        contextId,
+        requestCount: existingUIRequests.length
+      });
+      
+      // Step 2: Optimize existing requests if any
+      if (existingUIRequests.length > 1) {
+        await this.processAndOptimizeUIRequests(context, existingUIRequests);
+      }
+      
+      // Step 3: Set up SSE listener for new UIRequests
+      this.setupSSEListener(context);
+      
+      taskLogger.info('✅ UXOptimizationAgent listening for UIRequests', {
+        contextId,
+        mode,
+        existingRequests: existingUIRequests.length
+      });
+      
+      return this.createResponse('completed', {
+        status: 'listening',
+        contextId,
+        mode,
+        processedRequests: existingUIRequests.length
+      }, 'UXOptimizationAgent started listening for UIRequests');
+      
+    } catch (error) {
+      taskLogger.error('❌ Failed to start listening', {
+        contextId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      
+      return this.createResponse('error', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }, 'Failed to start listening for UIRequests');
+    }
+  }
+  
+  /**
+   * Read UIRequests from context history
+   */
+  private async readUIRequestsFromHistory(context: TaskContext): Promise<UIRequest[]> {
+    const uiRequests: UIRequest[] = [];
+    
+    // Scan context history for UI_REQUEST_CREATED events
+    for (const entry of context.history) {
+      if (entry.operation === 'UI_REQUEST_CREATED' && entry.data?.uiRequest) {
+        uiRequests.push(entry.data.uiRequest);
+      }
+    }
+    
+    return uiRequests;
+  }
+  
+  /**
+   * Set up SSE listener for new UIRequest events
+   */
+  private setupSSEListener(context: TaskContext): void {
+    const taskLogger = createTaskLogger(context.contextId);
+    
+    // Subscribe to context events for this specific context
+    // This would integrate with the UnifiedEventBus
+    const contextId = context.contextId;
+    
+    taskLogger.info('🎧 Setting up SSE listener for context', { contextId });
+    
+    // TODO: Integrate with actual SSE/EventBus infrastructure
+    // For now, this is a placeholder showing the intended pattern
+    // The actual implementation would:
+    // 1. Subscribe to the UnifiedEventBus for this context
+    // 2. Listen for UI_REQUEST_CREATED events
+    // 3. Call processAndOptimizeUIRequests when multiple requests accumulate
+  }
+  
+  /**
+   * Process and optimize UIRequests
+   */
+  private async processAndOptimizeUIRequests(
+    context: TaskContext,
+    uiRequests: UIRequest[]
+  ): Promise<void> {
+    const taskLogger = createTaskLogger(context.contextId);
+    
+    try {
+      // Extract source agents from UIRequest metadata
+      const sourceAgents = [...new Set(
+        uiRequests
+          .map(r => r.semanticData?.sourceAgent)
+          .filter(Boolean)
+      )];
+      
+      // Optimize the UIRequests
+      const optimizedRequests = await this.optimizeUIRequests(
+        uiRequests,
+        sourceAgents,
+        context.contextId
+      );
+      
+      // Create a new UI_REQUEST_CREATED event with the optimized request
+      // This replaces the original multiple requests
+      await this.emitOptimizedUIRequest(context, optimizedRequests);
+      
+      taskLogger.info('✅ UIRequests optimized and emitted', {
+        contextId: context.contextId,
+        originalCount: uiRequests.length,
+        optimizedCount: optimizedRequests.length
+      });
+      
+    } catch (error) {
+      taskLogger.error('❌ Failed to optimize UIRequests', {
+        contextId: context.contextId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+  
+  /**
+   * Emit optimized UIRequest event
+   */
+  private async emitOptimizedUIRequest(
+    context: TaskContext,
+    optimizedRequests: UIRequest[]
+  ): Promise<void> {
+    // Create context entry for the optimized UIRequest
+    const contextEntry: ContextEntry = {
+      entryId: `ux_opt_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      sequenceNumber: context.history.length,
+      actor: {
+        type: 'agent',
+        id: 'ux_optimization_agent',
+        version: '1.0.0'
+      },
+      operation: 'UI_REQUEST_OPTIMIZED',
+      data: {
+        optimizedUIRequests: optimizedRequests,
+        optimization_metrics: {
+          original_count: context.history.filter(e => e.operation === 'UI_REQUEST_CREATED').length,
+          optimized_count: optimizedRequests.length
+        }
+      },
+      reasoning: 'UIRequests optimized for better user experience'
+    };
+    
+    // Add to context via database
+    await this.dbService.addContextEvent({
+      context_id: context.contextId,
+      actor_type: 'agent',
+      actor_id: 'ux_optimization_agent',
+      operation: 'UI_REQUEST_OPTIMIZED',
+      data: contextEntry.data,
+      reasoning: contextEntry.reasoning
+    });
+  }
+  
+  /**
    * Optimize UIRequests by merging duplicates and improving flow
    */
   private async optimizeUIRequests(
@@ -93,81 +283,89 @@ export class UXOptimizationAgent extends BaseAgent {
   ): Promise<UIRequest[]> {
     const taskLogger = createTaskLogger(contextId || 'unknown');
     
-    // Step 1: Extract all fields from all requests
-    const allFields: Array<{ field: UIRequestField; source: string }> = [];
+    // Step 1: Extract semantic data from all requests
+    const allSemanticData: Array<{ data: Record<string, any>; source: string; template: UITemplateType }> = [];
     
     for (const request of requests) {
-      if (request.fields) {
-        for (const field of request.fields) {
-          allFields.push({
-            field,
-            source: (request.metadata as any)?.sourceAgent || 'unknown'
-          });
-        }
-      }
+      allSemanticData.push({
+        data: request.semanticData || {},
+        source: request.semanticData?.sourceAgent || 'unknown',
+        template: request.templateType
+      });
     }
 
-    taskLogger.debug('📋 Extracted fields from all UIRequests', {
-      totalFields: allFields.length,
-      fieldIds: allFields.map(f => f.field.id)
+    taskLogger.debug('📋 Extracted semantic data from all UIRequests', {
+      totalRequests: allSemanticData.length,
+      templates: allSemanticData.map(d => d.template)
     });
 
-    // Step 2: Identify and merge duplicate/similar fields
-    const mergedFields = this.mergeEquivalentFields(allFields);
+    // Step 2: Identify and merge duplicate/similar data
+    const mergedData = this.mergeEquivalentData(allSemanticData);
     
-    // Step 3: Reorder fields for optimal user flow
-    const orderedFields = await this.reorderFieldsForFlow(mergedFields, contextId);
+    // Step 3: Reorder data for optimal user flow
+    const optimizedData = await this.optimizeDataFlow(mergedData, contextId);
     
-    // Step 4: Group fields into logical sections
-    const groupedRequests = this.groupFieldsIntoRequests(orderedFields, sourceAgents);
+    // Step 4: Create optimized UIRequest(s)
+    const groupedRequests = this.createOptimizedRequests(optimizedData, sourceAgents);
     
     taskLogger.info('📦 Created optimized UIRequest structure', {
-      originalFieldCount: allFields.length,
-      mergedFieldCount: orderedFields.length,
-      requestCount: groupedRequests.length
+      originalCount: requests.length,
+      optimizedCount: groupedRequests.length
     });
 
     return groupedRequests;
   }
 
   /**
-   * Merge fields that are semantically equivalent
+   * Merge semantically equivalent data
    */
-  private mergeEquivalentFields(
-    fields: Array<{ field: UIRequestField; source: string }>
-  ): UIRequestField[] {
-    const merged: Map<string, UIRequestField> = new Map();
+  private mergeEquivalentData(
+    dataArray: Array<{ data: Record<string, any>; source: string; template: UITemplateType }>
+  ): Record<string, any> {
+    const merged: Record<string, any> = {};
     const equivalenceMap = this.getFieldEquivalenceMap();
     
-    for (const { field } of fields) {
-      // Check if this field or an equivalent already exists
-      let mergedKey = field.id;
-      
-      // Check for equivalents
-      for (const [key, equivalents] of equivalenceMap.entries()) {
-        if (equivalents.includes(field.id)) {
-          // Check if we already have this equivalent
-          for (const eq of [key, ...equivalents]) {
-            if (merged.has(eq)) {
-              mergedKey = eq;
+    // Merge all data, handling equivalences
+    for (const { data } of dataArray) {
+      for (const [key, value] of Object.entries(data)) {
+        // Check if this key has an equivalent already in merged
+        let targetKey = key;
+        
+        // Check for equivalents
+        for (const [primaryKey, equivalents] of equivalenceMap.entries()) {
+          if (equivalents.includes(key)) {
+            // Check if we already have this equivalent
+            if (merged[primaryKey]) {
+              targetKey = primaryKey;
               break;
             }
+            for (const eq of equivalents) {
+              if (merged[eq]) {
+                targetKey = eq;
+                break;
+              }
+            }
+            break;
           }
-          break;
         }
-      }
-      
-      if (merged.has(mergedKey)) {
-        // Merge field properties (take most specific/complete)
-        const existing = merged.get(mergedKey)!;
-        this.mergeFieldProperties(existing, field);
-      } else {
-        // Add new field
-        merged.set(field.id, { ...field });
+        
+        // Merge the value
+        if (merged[targetKey]) {
+          // If both are objects, merge deeply
+          if (typeof merged[targetKey] === 'object' && typeof value === 'object') {
+            merged[targetKey] = { ...merged[targetKey], ...value };
+          }
+          // Otherwise keep the more complete value
+          else if (!merged[targetKey] && value) {
+            merged[targetKey] = value;
+          }
+        } else {
+          merged[targetKey] = value;
+        }
       }
     }
     
-    return Array.from(merged.values());
+    return merged;
   }
 
   /**
@@ -187,200 +385,172 @@ export class UXOptimizationAgent extends BaseAgent {
   }
 
   /**
-   * Merge properties from two equivalent fields
+   * Optimize data flow for better UX
    */
-  private mergeFieldProperties(existing: UIRequestField, incoming: UIRequestField): void {
-    // Use more descriptive label
-    if (incoming.label && incoming.label.length > existing.label.length) {
-      existing.label = incoming.label;
-    }
-    
-    // Merge placeholder
-    if (!existing.placeholder && incoming.placeholder) {
-      existing.placeholder = incoming.placeholder;
-    }
-    
-    // Use stricter validation
-    if (!existing.required && incoming.required) {
-      existing.required = true;
-    }
-    
-    // Merge help text
-    if (!existing.help && incoming.help) {
-      existing.help = incoming.help;
-    } else if (existing.help && incoming.help && existing.help !== incoming.help) {
-      existing.help = `${existing.help}. ${incoming.help}`;
-    }
-    
-    // For select fields, merge options
-    if (existing.type === 'select' && incoming.type === 'select') {
-      const existingValues = new Set((existing.options || []).map(o => o.value));
-      const newOptions = (incoming.options || []).filter(o => !existingValues.has(o.value));
-      if (newOptions.length > 0) {
-        existing.options = [...(existing.options || []), ...newOptions];
-      }
-    }
-  }
-
-  /**
-   * Reorder fields for optimal user flow using LLM
-   */
-  private async reorderFieldsForFlow(
-    fields: UIRequestField[],
+  private async optimizeDataFlow(
+    mergedData: Record<string, any>,
     contextId?: string
-  ): Promise<UIRequestField[]> {
+  ): Promise<Record<string, any>> {
     const taskLogger = createTaskLogger(contextId || 'unknown');
     
     try {
-      // Use LLM to intelligently order fields
-      const reorderPrompt = `
-        You are a UX expert optimizing a business form. Reorder these fields to:
+      // Use LLM to intelligently optimize data presentation order
+      const optimizationPrompt = `
+        You are a UX expert optimizing a business form. Reorder these data fields to:
         1. Start with basic identifying information (business name, type)
         2. Group related fields together (all address fields, all contact fields)
         3. Put optional fields at the end
         4. Minimize cognitive load by logical progression
         
-        Fields to reorder:
-        ${JSON.stringify(fields.map(f => ({ id: f.id, label: f.label, required: f.required })))}
+        Data fields to optimize:
+        ${JSON.stringify(Object.keys(mergedData))}
         
-        Return ONLY a JSON array of field IDs in the optimal order.
+        Return ONLY a JSON array of field names in the optimal order.
         Example: ["business_name", "entity_type", "business_email", ...]
       `;
       
       const response = await this.llmProvider.complete({
-        prompt: reorderPrompt,
+        prompt: optimizationPrompt,
         model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
         temperature: 0.3,
         systemPrompt: 'You are a UX optimization expert focused on form design and user flow.'
       });
       
-      const orderedIds = JSON.parse(response.content) as string[];
+      const orderedKeys = JSON.parse(response.content) as string[];
       
-      // Reorder fields based on LLM recommendation
-      const orderedFields: UIRequestField[] = [];
-      const fieldMap = new Map(fields.map(f => [f.id, f]));
-      
-      for (const id of orderedIds) {
-        const field = fieldMap.get(id);
-        if (field) {
-          orderedFields.push(field);
-          fieldMap.delete(id);
+      // Reorder the data based on LLM recommendation
+      const optimizedData: Record<string, any> = {};
+      for (const key of orderedKeys) {
+        if (mergedData[key] !== undefined) {
+          optimizedData[key] = mergedData[key];
         }
       }
       
       // Add any fields not included in the ordering
-      orderedFields.push(...fieldMap.values());
+      for (const [key, value] of Object.entries(mergedData)) {
+        if (optimizedData[key] === undefined) {
+          optimizedData[key] = value;
+        }
+      }
       
-      taskLogger.debug('✅ Fields reordered for optimal flow', {
-        originalOrder: fields.map(f => f.id),
-        optimizedOrder: orderedFields.map(f => f.id)
+      taskLogger.debug('✅ Data optimized for flow', {
+        originalOrder: Object.keys(mergedData),
+        optimizedOrder: Object.keys(optimizedData)
       });
       
-      return orderedFields;
+      return optimizedData;
       
     } catch (error) {
-      taskLogger.warn('⚠️ Failed to reorder fields with LLM, using default order', {
+      taskLogger.warn('⚠️ Failed to optimize data flow with LLM, using original order', {
         error: error instanceof Error ? error.message : String(error)
       });
       
-      // Fallback: Simple ordering by required status and type
-      return fields.sort((a, b) => {
-        // Required fields first
-        if (a.required && !b.required) return -1;
-        if (!a.required && b.required) return 1;
-        
-        // Then by type priority
-        const typePriority: Record<string, number> = {
-          'text': 1,
-          'select': 2,
-          'email': 3,
-          'tel': 4,
-          'textarea': 5
-        };
-        
-        return (typePriority[a.type] || 99) - (typePriority[b.type] || 99);
-      });
+      // Fallback: Return data as-is
+      return mergedData;
     }
   }
 
   /**
-   * Group fields into logical UIRequest sections
+   * Create optimized UIRequests from merged data
    */
-  private groupFieldsIntoRequests(
-    fields: UIRequestField[],
+  private createOptimizedRequests(
+    optimizedData: Record<string, any>,
     sourceAgents: string[]
   ): UIRequest[] {
-    // For now, create a single optimized request
-    // In future, could split into multiple requests for wizard-style flow
+    // Determine the best template type based on data
+    const templateType = this.determineOptimalTemplate(optimizedData);
     
+    // Create an optimized UIRequest with merged data
     const optimizedRequest: UIRequest = {
       requestId: `optimized_${Date.now()}`,
-      title: 'Complete Your Business Information',
-      instructions: 'Please provide the following information to continue with your business setup. We\'ve streamlined this form to collect everything we need in one place.',
-      templateType: 'form' as const,
-      fields: fields,
-      metadata: {
-        optimized: true,
-        sourceAgents: sourceAgents,
-        optimizedAt: new Date().toISOString()
-      },
+      templateType,
       semanticData: {
-        sections: this.identifyLogicalSections(fields)
-      }
+        ...optimizedData,
+        optimized: true,
+        sourceAgents,
+        optimizedAt: new Date().toISOString(),
+        sections: this.identifyLogicalSections(optimizedData)
+      },
+      context: {
+        urgency: 'medium' as const,
+        userProgress: 50
+      },
+      priority: 'high' as const
     };
     
     return [optimizedRequest];
   }
 
   /**
-   * Identify logical sections within fields for better UX
+   * Determine the optimal template type for the data
    */
-  private identifyLogicalSections(fields: UIRequestField[]): any[] {
-    const sections: any[] = [];
-    const businessFields: UIRequestField[] = [];
-    const contactFields: UIRequestField[] = [];
-    const addressFields: UIRequestField[] = [];
-    const otherFields: UIRequestField[] = [];
+  private determineOptimalTemplate(data: Record<string, any>): UITemplateType {
+    // Analyze the data to determine the best template
+    const dataKeys = Object.keys(data);
     
-    // Categorize fields
-    for (const field of fields) {
-      if (['business_name', 'legal_business_name', 'entity_type', 'business_type'].some(id => field.id.includes(id))) {
-        businessFields.push(field);
-      } else if (['email', 'phone', 'contact'].some(id => field.id.includes(id))) {
-        contactFields.push(field);
-      } else if (['address', 'city', 'state', 'zip'].some(id => field.id.includes(id))) {
-        addressFields.push(field);
+    // If we have many fields, use SmartTextInput for form collection
+    if (dataKeys.length > 5) {
+      return UITemplateType.SmartTextInput;
+    }
+    
+    // If we have business info, use FoundYouCard
+    if (data.business_name || data.businessInfo) {
+      return UITemplateType.FoundYouCard;
+    }
+    
+    // Default to SmartTextInput for general data collection
+    return UITemplateType.SmartTextInput;
+  }
+  
+  /**
+   * Identify logical sections within data for better UX
+   */
+  private identifyLogicalSections(data: Record<string, any>): any[] {
+    const sections: any[] = [];
+    const businessKeys: string[] = [];
+    const contactKeys: string[] = [];
+    const addressKeys: string[] = [];
+    const otherKeys: string[] = [];
+    
+    // Categorize data keys
+    for (const key of Object.keys(data)) {
+      if (['business_name', 'legal_business_name', 'entity_type', 'business_type'].some(id => key.includes(id))) {
+        businessKeys.push(key);
+      } else if (['email', 'phone', 'contact'].some(id => key.includes(id))) {
+        contactKeys.push(key);
+      } else if (['address', 'city', 'state', 'zip'].some(id => key.includes(id))) {
+        addressKeys.push(key);
       } else {
-        otherFields.push(field);
+        otherKeys.push(key);
       }
     }
     
     // Create sections
-    if (businessFields.length > 0) {
+    if (businessKeys.length > 0) {
       sections.push({
         title: 'Business Information',
-        fields: businessFields.map(f => f.id)
+        fields: businessKeys
       });
     }
     
-    if (contactFields.length > 0) {
+    if (contactKeys.length > 0) {
       sections.push({
         title: 'Contact Details',
-        fields: contactFields.map(f => f.id)
+        fields: contactKeys
       });
     }
     
-    if (addressFields.length > 0) {
+    if (addressKeys.length > 0) {
       sections.push({
         title: 'Business Address',
-        fields: addressFields.map(f => f.id)
+        fields: addressKeys
       });
     }
     
-    if (otherFields.length > 0) {
+    if (otherKeys.length > 0) {
       sections.push({
         title: 'Additional Information',
-        fields: otherFields.map(f => f.id)
+        fields: otherKeys
       });
     }
     
@@ -391,8 +561,11 @@ export class UXOptimizationAgent extends BaseAgent {
    * Calculate field reduction metrics
    */
   private calculateFieldReduction(original: UIRequest[], optimized: UIRequest[]): number {
-    const originalCount = original.reduce((sum, req) => sum + (req.fields?.length || 0), 0);
-    const optimizedCount = optimized.reduce((sum, req) => sum + (req.fields?.length || 0), 0);
+    // Count semantic data keys as proxy for fields
+    const originalCount = original.reduce((sum, req) => 
+      sum + Object.keys(req.semanticData || {}).length, 0);
+    const optimizedCount = optimized.reduce((sum, req) => 
+      sum + Object.keys(req.semanticData || {}).length, 0);
     return originalCount - optimizedCount;
   }
 
@@ -400,18 +573,18 @@ export class UXOptimizationAgent extends BaseAgent {
    * Calculate duplicates removed
    */
   private calculateDuplicatesRemoved(original: UIRequest[], optimized: UIRequest[]): number {
-    const originalFields = new Set<string>();
-    const optimizedFields = new Set<string>();
+    const originalKeys = new Set<string>();
+    const optimizedKeys = new Set<string>();
     
     for (const req of original) {
-      req.fields?.forEach(f => originalFields.add(f.id));
+      Object.keys(req.semanticData || {}).forEach(k => originalKeys.add(k));
     }
     
     for (const req of optimized) {
-      req.fields?.forEach(f => optimizedFields.add(f.id));
+      Object.keys(req.semanticData || {}).forEach(k => optimizedKeys.add(k));
     }
     
-    return originalFields.size - optimizedFields.size;
+    return originalKeys.size - optimizedKeys.size;
   }
 
   /**
@@ -421,10 +594,10 @@ export class UXOptimizationAgent extends BaseAgent {
     // Simple heuristic: Each duplicate field adds 20% cognitive load
     // Each additional request adds 30% cognitive load
     const originalScore = original.length * 30 + 
-      original.reduce((sum, req) => sum + (req.fields?.length || 0), 0) * 10;
+      original.reduce((sum, req) => sum + Object.keys(req.semanticData || {}).length, 0) * 10;
     
     const optimizedScore = optimized.length * 30 + 
-      optimized.reduce((sum, req) => sum + (req.fields?.length || 0), 0) * 10;
+      optimized.reduce((sum, req) => sum + Object.keys(req.semanticData || {}).length, 0) * 10;
     
     const reduction = ((originalScore - optimizedScore) / originalScore) * 100;
     return Math.round(Math.max(0, Math.min(100, reduction)));

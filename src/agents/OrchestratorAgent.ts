@@ -161,6 +161,7 @@ export class OrchestratorAgent extends BaseAgent {
   private agentRegistry: Map<string, AgentCapability>;
   private activeExecutions: Map<string, ExecutionPlan>;
   private pendingUIRequests: Map<string, UIRequest[]>;
+  private activeAgents: Set<string>;
   
   // Pure A2A System - Agent Lifecycle Management via DI
   // NO AGENT INSTANCES STORED - Using DI and task-centered message bus
@@ -185,6 +186,7 @@ export class OrchestratorAgent extends BaseAgent {
       this.agentRegistry = new Map();
       this.activeExecutions = new Map();
       this.pendingUIRequests = new Map();
+      this.activeAgents = new Set();
       logger.info('✅ Data structures initialized');
       
       // Lazy initialization to avoid startup crashes
@@ -1821,18 +1823,9 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
           const result = subtaskResults[index];
           if (result.status === 'fulfilled') {
             results.push(result.value);
-            // MODIFIED: Don't immediately collect UIRequests, queue them for optimization
+            // Collect UIRequests as-is (no modification)
             if (result.value.uiRequests && result.value.uiRequests.length > 0) {
-              // Store UIRequests with their source agent for optimization
-              for (const uiRequest of result.value.uiRequests) {
-                uiRequests.push({
-                  ...uiRequest,
-                  semanticData: {
-                    ...uiRequest.semanticData,
-                    sourceAgent: result.value.agent || subtasks[index].agent
-                  }
-                } as UIRequest);
-              }
+              uiRequests.push(...result.value.uiRequests);
             }
           } else {
             logger.error(`Subtask ${index + 1} failed`, {
@@ -2509,116 +2502,93 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       return;
     }
     
-    // CRITICAL: When multiple UIRequests from different agents, delegate to ux_optimization_agent
+    // When multiple UIRequests detected, ensure UXOptimizationAgent is running
     if (uiRequests.length > 1) {
-      // Check if requests are from different agents
-      const sourceAgents = new Set(
-        uiRequests.map(req => req.semanticData?.sourceAgent).filter(Boolean)
-      );
+      logger.info('🎯 Multiple UIRequests detected, ensuring UXOptimizationAgent is active', {
+        contextId: context.contextId,
+        requestCount: uiRequests.length
+      });
       
-      if (sourceAgents.size > 1) {
-        logger.info('🎯 Multiple UIRequests from different agents detected, delegating to ux_optimization_agent', {
-          contextId: context.contextId,
-          requestCount: uiRequests.length,
-          sourceAgents: Array.from(sourceAgents)
-        });
-        
-        // Create optimized UIRequests via ux_optimization_agent
-        const optimizedRequests = await this.delegateUIOptimization(context, uiRequests);
-        
-        // Send the optimized requests
-        await this.sendUIRequests(context, optimizedRequests);
-        return;
-      }
+      // Ensure UXOptimizationAgent is instantiated and listening
+      // It will read UIRequests from context history and optimize them
+      await this.ensureUXOptimizationAgent(context);
     }
     
-    // Original flow for single agent or disabled optimization
-    const optimized = await this.optimizeUIRequests(uiRequests);
-    
-    // Store pending requests
-    const pending = this.pendingUIRequests.get(context.contextId) || [];
-    pending.push(...optimized);
-    this.pendingUIRequests.set(context.contextId, pending);
-    
-    // Send batch if threshold reached
-    if (pending.length >= this.config.progressiveDisclosure.minBatchSize) {
-      const batch = pending.splice(0, this.config.progressiveDisclosure.minBatchSize);
-      await this.sendUIRequests(context, batch);
-    }
+    // Send all UIRequests as-is
+    // UXOptimizationAgent will intercept via SSE if running
+    await this.sendUIRequests(context, uiRequests);
   }
   
   /**
-   * Delegate UIRequest optimization to ux_optimization_agent
-   * This leverages the agent's expertise in UI/UX to merge and optimize forms
+   * Ensure UXOptimizationAgent is running for this context
+   * The agent will listen for UIRequest events and optimize them automatically
    */
-  private async delegateUIOptimization(
-    context: TaskContext,
-    uiRequests: UIRequest[]
-  ): Promise<UIRequest[]> {
-    logger.info('🎨 Delegating UIRequest optimization to ux_optimization_agent', {
-      contextId: context.contextId,
-      requestCount: uiRequests.length
+  private async ensureUXOptimizationAgent(
+    context: TaskContext
+  ): Promise<void> {
+    logger.info('🎨 Ensuring UXOptimizationAgent is active', {
+      contextId: context.contextId
     });
     
     try {
-      // Create a subtask for ux_optimization_agent
-      const optimizationSubtask = {
-        description: 'Optimize and merge UIRequests for better user experience',
-        agent: 'ux_optimization_agent',
-        specific_instruction: `You have received multiple UIRequests from different agents that may have overlapping or related fields. 
-        Your task is to:
-        1. Analyze the UIRequests and identify duplicate or similar fields
-        2. Merge overlapping fields intelligently (e.g., business_name, legal_business_name, company_name)
-        3. Reorder fields for optimal user flow and progressive disclosure
-        4. Reduce cognitive load by grouping related fields
-        5. Create a single, optimized UIRequest that collects all needed information efficiently
-        
-        Remember: The goal is to minimize user interruption while ensuring all required data is collected.`,
-        input_data: {
-          uiRequests: uiRequests,
-          sourceAgents: [...new Set(uiRequests.map(r => r.semanticData?.sourceAgent).filter(Boolean))],
-          optimization_goals: ['reduce_duplicates', 'improve_flow', 'minimize_interruptions']
-        },
-        expected_output: 'Optimized UIRequest(s) with merged and reordered fields',
-        success_criteria: ['Duplicates removed', 'Fields logically grouped', 'Cognitive load reduced']
-      };
-      
-      // Execute the optimization subtask
-      const optimizationResult = await this.executeSubtask(
-        context,
-        optimizationSubtask,
-        { name: 'UI Optimization', priority: 1, agents: [] } as ExecutionPhase,
-        {},
-        0
-      );
-      
-      // Extract optimized UIRequests from result
-      if (optimizationResult.status === 'completed' && optimizationResult.data?.optimizedUIRequests) {
-        logger.info('✅ UIRequests successfully optimized by ux_optimization_agent', {
-          contextId: context.contextId,
-          originalCount: uiRequests.length,
-          optimizedCount: optimizationResult.data.optimizedUIRequests.length
+      // Check if UXOptimizationAgent is already running for this context
+      const agentKey = `ux_optimization_${context.contextId}`;
+      if (this.activeAgents.has(agentKey)) {
+        logger.debug('UXOptimizationAgent already active for context', {
+          contextId: context.contextId
         });
-        
-        return optimizationResult.data.optimizedUIRequests;
+        return;
       }
       
-      // Fallback if optimization fails
-      logger.warn('⚠️ ux_optimization_agent optimization failed, using original requests', {
-        contextId: context.contextId,
-        status: optimizationResult.status
+      // Instantiate UXOptimizationAgent for this context
+      const { agentDiscovery } = await import('../services/agent-discovery');
+      const uxAgent = await agentDiscovery.instantiateAgent(
+        'ux_optimization_agent',
+        context.tenantId,
+        context.metadata?.userId
+      );
+      
+      // Start the agent listening for UIRequest events
+      // The agent will:
+      // 1. Read existing UIRequests from context history
+      // 2. Listen for new UI_REQUEST_CREATED events via SSE
+      // 3. Optimize and merge UIRequests automatically
+      const agentRequest = {
+        taskContext: context,
+        operation: 'start_listening',
+        parameters: {
+          contextId: context.contextId,
+          mode: 'background'
+        }
+      };
+      
+      // Start the agent in background mode
+      (uxAgent as any).process(agentRequest).then((result: any) => {
+        if (result.status === 'completed') {
+          logger.info('✅ UXOptimizationAgent started successfully', {
+            contextId: context.contextId
+          });
+        } else {
+          logger.warn('⚠️ UXOptimizationAgent failed to start', {
+            contextId: context.contextId,
+            status: result.status
+          });
+        }
+      }).catch((error: any) => {
+        logger.error('❌ Error starting UXOptimizationAgent', {
+          contextId: context.contextId,
+          error: error instanceof Error ? error.message : String(error)
+        });
       });
       
-      return uiRequests;
+      // Mark agent as active
+      this.activeAgents.add(agentKey);
       
     } catch (error) {
-      logger.error('❌ Error delegating to ux_optimization_agent', {
+      logger.error('❌ Failed to ensure UXOptimizationAgent', {
         contextId: context.contextId,
         error: error instanceof Error ? error.message : String(error)
       });
-      
-      // Fallback to original requests
-      return uiRequests;
     }
   }
   
