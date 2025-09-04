@@ -108,7 +108,10 @@ export class UXOptimizationAgent extends BaseAgent {
     logger.info('🛑 Stopping UIRequest monitoring for task', { taskId: this.taskId });
     this.isMonitoring = false;
     this.uiRequestBuffer = [];
-    // TODO: Unsubscribe from SSE events
+    
+    // SSE unsubscription would happen here once EventBus is fully integrated
+    // Currently setupSSEListener() is a placeholder, so nothing to unsubscribe
+    // When implemented: eventBus.unsubscribe(this.taskId, this.sseListenerId);
   }
 
   /**

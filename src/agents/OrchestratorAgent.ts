@@ -161,7 +161,8 @@ export class OrchestratorAgent extends BaseAgent {
   private agentRegistry: Map<string, AgentCapability>;
   private activeExecutions: Map<string, ExecutionPlan>;
   private pendingUIRequests: Map<string, UIRequest[]>;
-  private activeAgents: Set<string>;
+  // NO agent tracking - use factory pattern for all agent instantiation
+  // Factory handles lifecycle - we just notify when task completes/fails
   
   // Pure A2A System - Agent Lifecycle Management via DI
   // NO AGENT INSTANCES STORED - Using DI and task-centered message bus
@@ -186,7 +187,6 @@ export class OrchestratorAgent extends BaseAgent {
       this.agentRegistry = new Map();
       this.activeExecutions = new Map();
       this.pendingUIRequests = new Map();
-      this.activeAgents = new Set();
       logger.info('✅ Data structures initialized');
       
       // Lazy initialization to avoid startup crashes

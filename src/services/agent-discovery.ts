@@ -42,17 +42,11 @@ export interface AgentCapability {
  */
 export class AgentDiscoveryService {
   private agentConfigs: Map<string, any> = new Map();
-  private agentInstances: Map<string, DefaultAgent> = new Map();
   private capabilityRegistry: Map<string, AgentCapability> = new Map();
   private routingTable: Map<string, Set<string>> = new Map(); // who can send to whom
   
-  // Agents that should NOT be cached (ephemeral, per-task instances)
-  private readonly EPHEMERAL_AGENTS = new Set([
-    'ux_optimization_agent',  // Per-task UI optimization
-    'celebration_agent',       // Per-task celebration
-    'monitoring_agent',        // Per-task monitoring
-    // Add more ephemeral agents here as needed
-  ]);
+  // NO CACHING - All agents are ephemeral to ensure proper garbage collection
+  // Agents are instantiated per-task and garbage collected when done
   
   constructor(private configPath: string = 'config/agents') {
     this.configPath = path.join(process.cwd(), configPath);
@@ -204,18 +198,10 @@ export class AgentDiscoveryService {
   
   /**
    * Instantiate an agent from its configuration
-   * Uses DefaultAgent for all agents except OrchestratorAgent
-   * Ephemeral agents are NOT cached to allow garbage collection
+   * ALL agents are ephemeral - created fresh per-task and garbage collected when done
+   * This ensures optimal memory management and prevents stale state
    */
   async instantiateAgent(agentId: string, businessId: string = 'system', userId?: string): Promise<DefaultAgent> {
-    const cacheKey = `${agentId}:${businessId}`;
-    
-    // Check cache only for non-ephemeral agents
-    if (!this.EPHEMERAL_AGENTS.has(agentId) && this.agentInstances.has(cacheKey)) {
-      logger.debug(`📦 Returning cached agent instance: ${agentId}`, { businessId });
-      return this.agentInstances.get(cacheKey)!;
-    }
-    
     const config = this.agentConfigs.get(agentId);
     if (!config) {
       throw new Error(`Agent configuration not found: ${agentId}`);
@@ -236,17 +222,13 @@ export class AgentDiscoveryService {
         agent = new DefaultAgent(configFileName, businessId, userId);
       }
       
-      // Cache only non-ephemeral agents
-      if (!this.EPHEMERAL_AGENTS.has(agentId)) {
-        this.agentInstances.set(cacheKey, agent);
-        logger.debug(`💾 Cached agent instance: ${agentId}`, { businessId });
-      } else {
-        logger.debug(`🌟 Created ephemeral agent instance: ${agentId}`, { 
-          businessId,
-          ephemeral: true,
-          reason: 'Per-task agent, will be garbage collected after use'
-        });
-      }
+      // NO CACHING - All agents are ephemeral
+      logger.debug(`🌟 Created ephemeral agent instance: ${agentId}`, { 
+        businessId,
+        userId,
+        ephemeral: true,
+        reason: 'All agents are ephemeral - will be garbage collected after use'
+      });
       
       // Update capability availability
       const capability = this.capabilityRegistry.get(agentId);
@@ -340,44 +322,23 @@ export class AgentDiscoveryService {
   }
   
   /**
-   * Clean up cached agent instances for a specific task/business
-   * This allows garbage collection of completed task agents
+   * Clean up method kept for compatibility but now a no-op
+   * Since we don't cache agents anymore, there's nothing to clean up
+   * Agents are automatically garbage collected when no longer referenced
    */
   cleanupTaskAgents(businessId: string): void {
-    const keysToDelete: string[] = [];
-    
-    // Find all cached instances for this businessId
-    for (const [key, _agent] of this.agentInstances.entries()) {
-      if (key.includes(`:${businessId}`)) {
-        keysToDelete.push(key);
-      }
-    }
-    
-    // Delete found instances
-    for (const key of keysToDelete) {
-      this.agentInstances.delete(key);
-      logger.debug(`🧹 Cleaned up cached agent instance: ${key}`);
-    }
-    
-    if (keysToDelete.length > 0) {
-      logger.info(`♻️ Cleaned up ${keysToDelete.length} agent instances for task: ${businessId}`, {
-        cleanedAgents: keysToDelete
-      });
-    }
+    // No-op: No cached instances to clean up since all agents are ephemeral
+    logger.debug(`♻️ Cleanup called for task ${businessId} (no-op: agents are ephemeral)`);
   }
   
   /**
    * Get cache statistics for monitoring
+   * Since we don't cache anything, stats are always zero
    */
-  getCacheStats(): { cached: number, ephemeral: string[], cacheable: string[] } {
-    const ephemeral = Array.from(this.EPHEMERAL_AGENTS);
-    const cacheable = Array.from(this.capabilityRegistry.keys())
-      .filter(id => !this.EPHEMERAL_AGENTS.has(id));
-    
+  getCacheStats(): { cached: number, message: string } {
     return {
-      cached: this.agentInstances.size,
-      ephemeral,
-      cacheable
+      cached: 0,
+      message: 'All agents are ephemeral - no caching'
     };
   }
   
