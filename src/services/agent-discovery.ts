@@ -199,9 +199,9 @@ export class AgentDiscoveryService {
    * Uses DefaultAgent for all agents except OrchestratorAgent
    */
   async instantiateAgent(agentId: string, businessId: string = 'system', userId?: string): Promise<DefaultAgent> {
-    // Check if already instantiated
+    // Check if already instantiated (but not for UXOptimizationAgent - it should be per-task)
     const cacheKey = `${agentId}:${businessId}`;
-    if (this.agentInstances.has(cacheKey)) {
+    if (agentId !== 'ux_optimization_agent' && this.agentInstances.has(cacheKey)) {
       return this.agentInstances.get(cacheKey)!;
     }
     
@@ -216,16 +216,19 @@ export class AgentDiscoveryService {
       // Check for specialized agent implementations
       if (agentId === 'ux_optimization_agent') {
         // Use the specialized UXOptimizationAgent
+        // Note: For UXOptimizationAgent, businessId is actually the taskId
         const { UXOptimizationAgent } = await import('../agents/UXOptimizationAgent');
-        agent = new UXOptimizationAgent(businessId, userId) as any;
+        agent = new UXOptimizationAgent(businessId, undefined, userId) as any;
       } else {
         // Create DefaultAgent instance with YAML config path
         const configFileName = `${agentId}.yaml`;
         agent = new DefaultAgent(configFileName, businessId, userId);
       }
       
-      // Store instance
-      this.agentInstances.set(cacheKey, agent);
+      // Store instance (but not UXOptimizationAgent - let it be garbage collected per task)
+      if (agentId !== 'ux_optimization_agent') {
+        this.agentInstances.set(cacheKey, agent);
+      }
       
       // Update capability availability
       const capability = this.capabilityRegistry.get(agentId);

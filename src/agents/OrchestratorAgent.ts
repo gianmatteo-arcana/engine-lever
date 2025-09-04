@@ -167,7 +167,6 @@ export class OrchestratorAgent extends BaseAgent {
   // NO AGENT INSTANCES STORED - Using DI and task-centered message bus
   private agentCapabilities: Map<string, any> = new Map();
   private activeTaskSubscriptions: Map<string, Set<string>> = new Map(); // taskId -> Set of agentIds
-  private activeUXOptimizationAgents: Map<string, any> = new Map(); // taskId -> UXOptimizationAgent instance
   
   private constructor() {
     try {
@@ -2530,25 +2529,29 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       types: requests.map(r => r.templateType)
     });
     
-    // Check if we need to instantiate UXOptimizationAgent for this task
-    const taskId = context.contextId;
-    let uxAgent = this.activeUXOptimizationAgents.get(taskId);
-    
-    if (!uxAgent && requests.length > 0) {
-      // Instantiate UXOptimizationAgent for this task using dependency injection
+    // Instantiate UXOptimizationAgent if there are UIRequests
+    if (requests.length > 0) {
+      const taskId = context.contextId;
       logger.info('🎯 Instantiating UXOptimizationAgent for task', {
         taskId,
         requestCount: requests.length
       });
       
-      const { UXOptimizationAgent } = await import('./UXOptimizationAgent');
-      uxAgent = new UXOptimizationAgent(taskId, context.tenantId, undefined);
-      this.activeUXOptimizationAgents.set(taskId, uxAgent);
-    }
-    
-    if (uxAgent) {
+      // Use the agent discovery service factory pattern
+      // Factory will create a new instance per task (not cached)
+      const { agentDiscovery } = await import('../services/agent-discovery');
+      const agent = await agentDiscovery.instantiateAgent(
+        'ux_optimization_agent',
+        taskId, // Pass taskId as businessId for UXOptimizationAgent
+        (context.currentState as any)?.user_id
+      );
+      
+      // Cast to UXOptimizationAgent type (we know it's this type from the factory)
+      const uxAgent = agent as any;
+      
       // Notify the agent about new UIRequests
-      uxAgent.notifyUIRequestsDetected(requests, context);
+      // The agent instance will be garbage collected when no longer referenced
+      await uxAgent.notifyUIRequestsDetected(requests, context);
     }
     
     // Record FULL UI requests in context for proper persistence
@@ -2583,15 +2586,9 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
    * Clean up agents for a completed task
    */
   private cleanupAgentsForTask(taskId: string): void {
-    // Clean up UXOptimizationAgent if exists
-    const uxAgent = this.activeUXOptimizationAgents.get(taskId);
-    if (uxAgent) {
-      logger.info('🧹 Cleaning up UXOptimizationAgent for completed task', { taskId });
-      uxAgent.stopMonitoring();
-      this.activeUXOptimizationAgents.delete(taskId);
-    }
-    
-    // Clean up other agent subscriptions
+    // Clean up agent subscriptions
+    // Note: UXOptimizationAgent instances are not tracked here - they will be garbage collected
+    // when no longer referenced since they're not cached in the factory
     if (this.activeTaskSubscriptions.has(taskId)) {
       logger.info('🧹 Cleaning up agent subscriptions for completed task', { taskId });
       this.activeTaskSubscriptions.delete(taskId);
@@ -2603,11 +2600,6 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
    */
   private async recoverAgentsForPendingUIRequests(context: TaskContext): Promise<void> {
     const taskId = context.contextId;
-    
-    // Check if we already have a UXOptimizationAgent for this task
-    if (this.activeUXOptimizationAgents.has(taskId)) {
-      return; // Already recovered or running
-    }
     
     // Check if there are pending UIRequests in the context history
     const pendingUIRequests: UIRequest[] = [];
@@ -2635,11 +2627,20 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
         requestCount: pendingUIRequests.length
       });
       
-      const { UXOptimizationAgent } = await import('./UXOptimizationAgent');
-      const uxAgent = new UXOptimizationAgent(taskId, context.tenantId, undefined);
-      this.activeUXOptimizationAgents.set(taskId, uxAgent);
+      // Use the agent discovery service factory pattern for proper DI
+      // Factory will create a new instance per task (not cached)
+      const { agentDiscovery } = await import('../services/agent-discovery');
+      const agent = await agentDiscovery.instantiateAgent(
+        'ux_optimization_agent',
+        taskId, // Pass taskId as businessId for UXOptimizationAgent
+        (context.currentState as any)?.user_id
+      );
+      
+      // Cast to UXOptimizationAgent type (we know it's this type from the factory)
+      const uxAgent = agent as any;
       
       // Start monitoring for this recovered task
+      // The agent instance will be garbage collected when no longer referenced
       await uxAgent.startMonitoring(context);
       
       logger.info('✅ UXOptimizationAgent recovered for task', { taskId });
