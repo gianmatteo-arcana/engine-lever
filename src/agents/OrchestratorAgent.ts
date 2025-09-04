@@ -2546,12 +2546,34 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
         (context.currentState as any)?.user_id
       );
       
-      // Cast to UXOptimizationAgent type (we know it's this type from the factory)
-      const uxAgent = agent as any;
+      // Call executeInternal directly since we need the response
+      // This is safe because we know it's a UXOptimizationAgent from the factory
+      const uxAgent = agent as any; // Cast to access protected method
+      const optimizationResult = await uxAgent.executeInternal({
+        taskContext: context,
+        operation: 'optimize_form_experience',
+        parameters: {
+          uiRequests: requests,
+          userContext: {
+            businessType: (context.currentState as any)?.business_type || 'small business',
+            experienceLevel: 'first-time',
+            industry: (context.currentState as any)?.industry || 'general'
+          }
+        }
+      });
       
-      // Notify the agent about new UIRequests
-      // The agent instance will be garbage collected when no longer referenced
-      await uxAgent.notifyUIRequestsDetected(requests, context);
+      // Log the optimization result
+      if (optimizationResult.status === 'completed' && optimizationResult.uiRequests) {
+        logger.info('✅ UX Optimization completed', {
+          originalCount: requests.length,
+          optimizedCount: optimizationResult.uiRequests.length
+        });
+        
+        // Store optimized UIRequests if successful
+        if (optimizationResult.uiRequests.length > 0) {
+          requests = optimizationResult.uiRequests; // Replace with optimized version
+        }
+      }
     }
     
     // Record FULL UI requests in context for proper persistence
