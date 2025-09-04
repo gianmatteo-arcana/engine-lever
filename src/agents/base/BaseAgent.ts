@@ -2492,7 +2492,7 @@ What is your decision for iteration ${iteration}?`;
       });
       
       // Create contextually appropriate UIRequest based on agent role and response
-      uiRequest = this.createUIRequestFromAgentContext(response);
+      uiRequest = this.createUIRequestFromAgentContext(response, context);
     }
     
     if (!uiRequest) {
@@ -2593,7 +2593,7 @@ What is your decision for iteration ${iteration}?`;
    * Create contextually appropriate UIRequest when agent returns needs_input
    * This robust fallback works with actual agent response patterns
    */
-  private createUIRequestFromAgentContext(response: BaseAgentResponse): any {
+  private createUIRequestFromAgentContext(response: BaseAgentResponse, context?: { contextId: string; taskId: string; task: any }): any {
     const agentRole = this.specializedTemplate.agent.role;
     const agentId = this.specializedTemplate.agent.id;
     
@@ -2608,27 +2608,27 @@ What is your decision for iteration ${iteration}?`;
       }
     }
     
-    // Agent-specific UIRequest configuration
+    // Determine task-specific field requirements
+    // Try to get taskType from the task object or response data
+    const taskType = context?.task?.taskType || context?.task?.taskTemplateId || 
+                    (response.contextUpdate?.data as any)?.taskType || 'onboarding';
+    const taskFields = this.getTaskSpecificFields(taskType);
+    
+    // Agent-specific UIRequest configuration - now task-aware
     const agentUIRequestMap: Record<string, any> = {
       'profile_collection_specialist': {
         templateType: 'form',
-        title: 'Business Profile Information',
+        title: taskType === 'soi_filing' ? 'SOI Filing Information' : 'Business Profile Information',
         priority: 'high',
-        instructions: 'Let\'s start with the basics about your business.',
-        defaultFields: [
+        instructions: this.getTaskSpecificInstructions(taskType),
+        defaultFields: taskFields.length > 0 ? taskFields : [
+          // Fallback fields only if no task-specific fields
           {
             name: 'business_name',
             type: 'text',
             required: true,
             label: 'Business Name',
             placeholder: 'Enter your legal business name'
-          },
-          {
-            name: 'contact_email',
-            type: 'email',
-            required: true,
-            label: 'Contact Email',
-            placeholder: 'Enter your email address'
           },
           {
             name: 'entity_type',
@@ -2641,10 +2641,10 @@ What is your decision for iteration ${iteration}?`;
       },
       'data_collection_specialist': {
         templateType: 'form',
-        title: 'Business Information Required',
+        title: taskType === 'soi_filing' ? 'SOI Filing Data' : 'Business Information Required',
         priority: 'high',
         instructions: 'We couldn\'t find your business in public records. Please provide the following information:',
-        defaultFields: [
+        defaultFields: taskFields.length > 0 ? taskFields : [
           {
             name: 'legalBusinessName',
             type: 'text',
@@ -2701,6 +2701,96 @@ What is your decision for iteration ${iteration}?`;
         agentId: agentId
       }
     };
+  }
+
+  /**
+   * Get task-specific fields based on task type
+   */
+  private getTaskSpecificFields(taskType?: string): any[] {
+    if (!taskType) return [];
+    
+    // Define required fields for each task type
+    const taskFieldMap: Record<string, any[]> = {
+      'soi_filing': [
+        {
+          name: 'entity_number',
+          type: 'text',
+          required: true,
+          label: 'CA Entity Number',
+          placeholder: 'e.g., C1234567',
+          help: 'Your California Secretary of State entity number'
+        },
+        {
+          name: 'entity_name',
+          type: 'text',
+          required: true,
+          label: 'Legal Business Name',
+          placeholder: 'Exact name registered with CA SOS'
+        },
+        {
+          name: 'entity_type',
+          type: 'select',
+          required: true,
+          label: 'Entity Type',
+          options: ['LLC', 'Corporation', 'LP', 'LLP']
+        }
+      ],
+      'onboarding': [
+        {
+          name: 'business_name',
+          type: 'text',
+          required: true,
+          label: 'Business Name',
+          placeholder: 'Enter your legal business name'
+        },
+        {
+          name: 'entity_type',
+          type: 'select',
+          required: true,
+          label: 'Entity Type',
+          options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+        },
+        {
+          name: 'formation_state',
+          type: 'select',
+          required: true,
+          label: 'State of Formation',
+          options: ['California', 'Delaware', 'Nevada', 'Texas', 'Other']
+        }
+      ],
+      'business_registration': [
+        {
+          name: 'business_name',
+          type: 'text',
+          required: true,
+          label: 'Proposed Business Name',
+          placeholder: 'Enter your desired business name'
+        },
+        {
+          name: 'business_address',
+          type: 'text',
+          required: true,
+          label: 'Principal Business Address',
+          placeholder: 'Street address where business will operate'
+        }
+      ]
+    };
+    
+    return taskFieldMap[taskType] || [];
+  }
+  
+  /**
+   * Get task-specific instructions based on task type
+   */
+  private getTaskSpecificInstructions(taskType?: string): string {
+    const instructionMap: Record<string, string> = {
+      'soi_filing': 'Please provide your California business information for the Statement of Information filing.',
+      'onboarding': 'Let\'s start with the basics about your business.',
+      'business_registration': 'Please provide information to register your business.',
+      'compliance_check': 'We need some information to check your compliance status.'
+    };
+    
+    return instructionMap[taskType || ''] || 'Please provide the required information.';
   }
 
   /**

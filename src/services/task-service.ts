@@ -234,77 +234,24 @@ export class TaskService {
   }
 
   /**
-   * Get task by context ID (legacy - looks in task_contexts table which may not exist)
+   * Get task by context ID
+   * Now properly queries the tasks table and reconstructs TaskContext
    */
   async getTask(contextId: string): Promise<TaskContext | null> {
     try {
-      // Use service client when no user token (e.g., from EventListener)
-      const client = this.dbService.getServiceClient();
+      // Use the proper method that queries the correct table
+      const result = await this.getTaskContextById(contextId);
       
-      const { data, error } = await client
-        .from('task_contexts')
-        .select('*')
-        .eq('context_id', contextId)
-        .single();
-
-      if (error) {
-        // In test mode, this is expected when no database is configured
+      if (!result) {
         const isTestMode = process.env.NODE_ENV === 'test';
         if (isTestMode) {
-          logger.debug('Task fetch failed in test mode (expected - no database)', { contextId });
+          logger.debug('Task fetch returned null in test mode (expected - no database)', { contextId });
         } else {
-          // Provide detailed context about the failure
-          const errorDetails = {
-            taskId: contextId,
-            operation: 'fetch_task_context',
-            errorCode: error.code,
-            errorMessage: error.message,
-            possibleCauses: [] as string[]
-          };
-
-          // Add specific guidance based on error code
-          if (error.code === 'PGRST116') {
-            errorDetails.possibleCauses.push('Task does not exist in database');
-            errorDetails.possibleCauses.push('Task may have been deleted');
-          } else if (error.message?.includes('network') || error.message?.includes('connection')) {
-            errorDetails.possibleCauses.push('Database connection issue');
-            errorDetails.possibleCauses.push('Check Supabase credentials and network');
-          } else {
-            errorDetails.possibleCauses.push('Database query failed');
-            errorDetails.possibleCauses.push('Check database schema and permissions');
-          }
-
-          logger.error(`Failed to fetch task '${contextId}' from database`, errorDetails);
-        }
-        return null;
-      }
-
-      if (!data) {
-        return null;
-      }
-
-      // Fetch history
-      const { data: history, error: historyError } = await client
-        .from('context_history')
-        .select('*')
-        .eq('context_id', contextId)
-        .order('sequence_number', { ascending: true });
-
-      if (historyError) {
-        const isTestMode = process.env.NODE_ENV === 'test';
-        if (isTestMode) {
-          logger.debug('Task history fetch failed in test mode (expected)', { contextId });
-        } else {
-          logger.error('Failed to fetch task history', { 
-            contextId, 
-            errorCode: historyError.code,
-            errorMessage: historyError.message 
-          });
+          logger.debug('Task not found or error fetching', { contextId });
         }
       }
-
-      return this.mapToTaskContext(data, history || []);
-
+      
+      return result;
     } catch (error) {
       const isTestMode = process.env.NODE_ENV === 'test';
       if (isTestMode) {
@@ -340,7 +287,20 @@ export class TaskService {
         .single();
 
       if (taskError || !taskData) {
-        logger.warn('Task not found', { taskId, error: taskError });
+        const isTestMode = process.env.NODE_ENV === 'test';
+        if (!isTestMode) {
+          logger.warn(`Task '${taskId}' not found in tasks table`, { 
+            taskId, 
+            error: taskError?.message,
+            errorCode: taskError?.code,
+            possibleReasons: [
+              'Task does not exist',
+              'Task was deleted', 
+              'Invalid task ID format',
+              'Database connection issue'
+            ]
+          });
+        }
         return null;
       }
 
