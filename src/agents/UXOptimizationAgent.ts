@@ -21,82 +21,18 @@
 import { BaseAgent } from './base/BaseAgent';
 import { UIRequest, UITemplateType } from '../types/task-engine.types';
 import { BaseAgentRequest, BaseAgentResponse } from '../types/base-agent-types';
-import { logger, createTaskLogger } from '../utils/logger';
+import { createTaskLogger } from '../utils/logger';
 
 export class UXOptimizationAgent extends BaseAgent {
-  private fullYamlConfig: any;
-  
   constructor(taskId: string, tenantId?: string, userId?: string) {
     super('ux_optimization_agent.yaml', tenantId || 'system', userId);
-    // Load the full YAML configuration for this agent
-    this.loadFullYamlConfig();
-  }
-  
-  /**
-   * Load the full YAML configuration including operations
-   */
-  private loadFullYamlConfig(): void {
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      const yaml = require('yaml');
-      
-      const configPath = path.join(process.cwd(), 'config', 'agents', 'ux_optimization_agent.yaml');
-      const configContent = fs.readFileSync(configPath, 'utf8');
-      this.fullYamlConfig = yaml.parse(configContent);
-      
-      logger.debug('Loaded UXOptimizationAgent YAML configuration', {
-        hasOperations: !!this.fullYamlConfig?.operations,
-        hasProtocol: !!this.fullYamlConfig?.operations?.optimize_form_experience?.protocol
-      });
-    } catch (error) {
-      logger.warn('Failed to load full YAML config for UXOptimizationAgent', { error });
-      this.fullYamlConfig = null;
-    }
   }
 
   /**
-   * Helper method to create a BaseAgentResponse
+   * Override executeInternal to handle UIRequest optimization
+   * This is the standard pattern for extending BaseAgent
    */
-  private createResponse(
-    status: 'completed' | 'needs_input' | 'delegated' | 'error',
-    data: any,
-    message?: string
-  ): BaseAgentResponse {
-    return {
-      status,
-      contextUpdate: {
-        entryId: `ux_opt_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        sequenceNumber: 0,
-        actor: {
-          type: 'agent',
-          id: 'ux_optimization_agent',
-          version: '1.0.0'
-        },
-        operation: 'ux_optimization',
-        data: {
-          ...data,
-          status: status === 'completed' ? 'success' : status,
-          message
-        },
-        reasoning: message || 'UIRequest optimization performed',
-        confidence: status === 'completed' ? 0.9 : 0.5,
-        trigger: {
-          type: 'orchestrator_request',
-          source: 'orchestrator_agent',
-          details: {}
-        }
-      },
-      confidence: status === 'completed' ? 0.9 : 0.5,
-      uiRequests: data.optimizedUIRequest ? [data.optimizedUIRequest] : undefined
-    };
-  }
-
-  /**
-   * Main processing method - receives multiple UIRequests, returns ONE optimized UIRequest
-   */
-  public async process(request: BaseAgentRequest): Promise<BaseAgentResponse> {
+  async executeInternal(request: BaseAgentRequest): Promise<BaseAgentResponse> {
     const taskLogger = createTaskLogger(request.taskContext?.contextId || 'unknown');
     
     taskLogger.info('🎨 UX Optimization Agent - Streamlining UIRequests', {
@@ -108,16 +44,66 @@ export class UXOptimizationAgent extends BaseAgent {
       const uiRequests = request.parameters?.uiRequests as UIRequest[];
       
       if (!uiRequests || uiRequests.length === 0) {
-        return this.createResponse('completed', {
-          optimizedUIRequest: null
-        }, 'No UIRequests to optimize');
+        // Use BaseAgent's enforceStandardSchema for consistent responses
+        return {
+          status: 'completed',
+          contextUpdate: {
+            entryId: `ux_opt_${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            sequenceNumber: 0,
+            actor: {
+              type: 'agent',
+              id: this.specializedTemplate.agent.id,
+              version: this.specializedTemplate.agent.version
+            },
+            operation: 'ux_optimization',
+            data: {
+              optimizedUIRequest: null,
+              status: 'success',
+              message: 'No UIRequests to optimize'
+            },
+            reasoning: 'No UIRequests provided for optimization',
+            confidence: 0.9,
+            trigger: {
+              type: 'orchestrator_request',
+              source: 'orchestrator_agent',
+              details: {}
+            }
+          },
+          confidence: 0.9
+        };
       }
 
       if (uiRequests.length === 1) {
         // Single request - return as is
-        return this.createResponse('completed', {
-          optimizedUIRequest: uiRequests[0]
-        }, 'Single UIRequest - no optimization needed');
+        return {
+          status: 'completed',
+          contextUpdate: {
+            entryId: `ux_opt_${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            sequenceNumber: 0,
+            actor: {
+              type: 'agent',
+              id: this.specializedTemplate.agent.id,
+              version: this.specializedTemplate.agent.version
+            },
+            operation: 'ux_optimization',
+            data: {
+              optimizedUIRequest: uiRequests[0],
+              status: 'success',
+              message: 'Single UIRequest - no optimization needed'
+            },
+            reasoning: 'Single UIRequest passed through without modification',
+            confidence: 1.0,
+            trigger: {
+              type: 'orchestrator_request',
+              source: 'orchestrator_agent',
+              details: {}
+            }
+          },
+          confidence: 1.0,
+          uiRequests: [uiRequests[0]]
+        };
       }
 
       // Multiple requests - use LLM to create ONE streamlined request
@@ -131,22 +117,78 @@ export class UXOptimizationAgent extends BaseAgent {
         totalFieldsAfter: this.countFields(optimizedRequest)
       });
 
-      return this.createResponse('completed', {
-        optimizedUIRequest: optimizedRequest,
-        metrics: {
-          requests_consolidated: uiRequests.length,
-          cognitive_load_reduction: this.calculateCognitiveReduction(uiRequests, optimizedRequest)
-        }
-      }, 'Successfully created streamlined UIRequest');
+      return {
+        status: 'completed',
+        contextUpdate: {
+          entryId: `ux_opt_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          sequenceNumber: 0,
+          actor: {
+            type: 'agent',
+            id: this.specializedTemplate.agent.id,
+            version: this.specializedTemplate.agent.version
+          },
+          operation: 'ux_optimization',
+          data: {
+            optimizedUIRequest: optimizedRequest,
+            metrics: {
+              requests_consolidated: uiRequests.length,
+              cognitive_load_reduction: this.calculateCognitiveReduction(uiRequests, optimizedRequest)
+            },
+            status: 'success',
+            message: 'Successfully created streamlined UIRequest'
+          },
+          reasoning: 'Consolidated multiple UIRequests into streamlined human-friendly form',
+          confidence: 0.9,
+          trigger: {
+            type: 'orchestrator_request',
+            source: 'orchestrator_agent',
+            details: {}
+          }
+        },
+        confidence: 0.9,
+        uiRequests: [optimizedRequest]
+      };
 
     } catch (error) {
       taskLogger.error('❌ Error optimizing UIRequests', {
         error: error instanceof Error ? error.message : String(error)
       });
 
-      return this.createResponse('error', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }, 'Failed to optimize UIRequests');
+      return {
+        status: 'error',
+        contextUpdate: {
+          entryId: `ux_opt_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          sequenceNumber: 0,
+          actor: {
+            type: 'agent',
+            id: this.specializedTemplate.agent.id,
+            version: this.specializedTemplate.agent.version
+          },
+          operation: 'ux_optimization',
+          data: {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            status: 'error'
+          },
+          reasoning: 'Failed to optimize UIRequests',
+          confidence: 0.0,
+          trigger: {
+            type: 'orchestrator_request',
+            source: 'orchestrator_agent',
+            details: {}
+          }
+        },
+        confidence: 0.0,
+        error: {
+          type: 'permanent',
+          message: 'Failed to optimize UIRequests',
+          technical_details: error instanceof Error ? error.message : 'Unknown error',
+          recovery_strategy: 'Retry with valid UIRequests',
+          can_retry: true,
+          user_action_required: false
+        }
+      };
     }
   }
 
@@ -160,8 +202,13 @@ export class UXOptimizationAgent extends BaseAgent {
     // Build prompt for LLM to understand and merge the requests
     const prompt = this.buildOptimizationPrompt(requests, userContext);
     
-    // Call LLM to get optimization strategy
-    const optimizationPlan = await this.callLLM(prompt);
+    // Use BaseAgent's llmProvider instead of custom callLLM
+    const optimizationPlan = await this.llmProvider.complete({
+      prompt,
+      model: 'claude-3-sonnet',
+      temperature: 0.7,
+      maxTokens: 2000
+    });
     
     // Parse LLM response to create streamlined UIRequest
     const streamlinedRequest = this.parseOptimizationPlan(optimizationPlan, requests);
@@ -190,8 +237,8 @@ export class UXOptimizationAgent extends BaseAgent {
     const userExperience = userContext?.experienceLevel || 'first-time';
     const industry = userContext?.industry || 'general';
 
-    // Get the protocol from the full YAML configuration
-    const protocol = this.fullYamlConfig?.operations?.optimize_form_experience?.protocol;
+    // Get the protocol from the specialized template (loaded by BaseAgent)
+    const protocol = this.specializedTemplate?.operations?.optimize_form_experience?.protocol;
     
     if (protocol) {
       // Use the YAML-defined prompts with variable substitution
@@ -213,7 +260,6 @@ ${JSON.stringify(req.semanticData, null, 2)}
     }
 
     // Fallback if YAML protocol not loaded (shouldn't happen in production)
-    logger.warn('UXOptimizationAgent: Protocol not loaded from YAML, using fallback');
     return this.getFallbackPrompt(requests, userContext);
   }
 
@@ -265,7 +311,6 @@ Return as JSON with fields organized into logical sections.`;
       return streamlinedRequest;
     } catch (error) {
       // Fallback: Simple merge if LLM parsing fails
-      logger.warn('Failed to parse LLM optimization, using fallback merge', { error });
       return this.fallbackMerge(originalRequests);
     }
   }
@@ -369,28 +414,5 @@ Return as JSON with fields organized into logical sections.`;
       .replace(/([A-Z])/g, ' $1')
       .trim()
       .replace(/\b\w/g, l => l.toUpperCase());
-  }
-
-  /**
-   * Call LLM for optimization
-   */
-  private async callLLM(prompt: string): Promise<any> {
-    // This would use the actual LLM service
-    // For now, returning a mock response
-    // In production, this would call: this.executeLLMCall(prompt)
-    
-    logger.debug('Would call LLM with optimization prompt', { 
-      promptLength: prompt.length 
-    });
-
-    // Mock response for development
-    return {
-      templateType: UITemplateType.SteppedWizard,
-      title: "Complete Your Business Information",
-      description: "We need a few details to proceed with your request",
-      fields: [],
-      sections: ["Basic Information", "Contact Details", "Additional Information"],
-      reasoning: "Consolidated multiple forms into a single wizard for better UX"
-    };
   }
 }

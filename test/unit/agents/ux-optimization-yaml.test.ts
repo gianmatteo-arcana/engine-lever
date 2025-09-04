@@ -15,35 +15,35 @@ describe('UXOptimizationAgent YAML Configuration', () => {
   });
 
   it('should load YAML configuration on instantiation', () => {
-    // Check that the agent has loaded the YAML config
-    const fullConfig = (agent as any).fullYamlConfig;
+    // Check that the agent has loaded the YAML config via BaseAgent
+    const config = (agent as any).specializedTemplate;
     
-    expect(fullConfig).toBeDefined();
-    expect(fullConfig.agent).toBeDefined();
-    expect(fullConfig.agent.id).toBe('ux_optimization_agent');
+    expect(config).toBeDefined();
+    expect(config.agent).toBeDefined();
+    expect(config.agent.id).toBe('ux_optimization_agent');
   });
 
   it('should have human-centered mission in YAML', () => {
-    const fullConfig = (agent as any).fullYamlConfig;
+    const config = (agent as any).specializedTemplate;
     
-    expect(fullConfig.agent.mission).toContain('trusted advisor');
-    expect(fullConfig.agent.mission).toContain('translator');
-    expect(fullConfig.agent.mission).toContain('human-friendly');
+    expect(config.agent.mission).toContain('trusted advisor');
+    expect(config.agent.mission).toContain('translator');
+    expect(config.agent.mission).toContain('human-friendly');
   });
 
   it('should have optimize_form_experience operation with protocol', () => {
-    const fullConfig = (agent as any).fullYamlConfig;
+    const config = (agent as any).specializedTemplate;
     
-    expect(fullConfig.operations).toBeDefined();
-    expect(fullConfig.operations.optimize_form_experience).toBeDefined();
-    expect(fullConfig.operations.optimize_form_experience.protocol).toBeDefined();
-    expect(fullConfig.operations.optimize_form_experience.protocol.system_prompt).toBeDefined();
-    expect(fullConfig.operations.optimize_form_experience.protocol.user_prompt).toBeDefined();
+    expect(config.operations).toBeDefined();
+    expect(config.operations.optimize_form_experience).toBeDefined();
+    expect(config.operations.optimize_form_experience.protocol).toBeDefined();
+    expect(config.operations.optimize_form_experience.protocol.system_prompt).toBeDefined();
+    expect(config.operations.optimize_form_experience.protocol.user_prompt).toBeDefined();
   });
 
   it('should use YAML prompts with variable substitution', () => {
-    const fullConfig = (agent as any).fullYamlConfig;
-    const protocol = fullConfig.operations.optimize_form_experience.protocol;
+    const config = (agent as any).specializedTemplate;
+    const protocol = config.operations.optimize_form_experience.protocol;
     
     // Check that prompts have variable placeholders
     expect(protocol.system_prompt).toContain('{userExperience}');
