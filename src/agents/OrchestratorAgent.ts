@@ -2700,6 +2700,23 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       logger.info(`✅ Task status updated to ${status.toUpperCase()} in database`, {
         contextId: context.contextId
       });
+      
+      // Clean up agent instances for terminal states
+      if (status === TASK_STATUS.FAILED || status === TASK_STATUS.CANCELLED) {
+        try {
+          const { agentDiscovery } = await import('../services/agent-discovery');
+          agentDiscovery.cleanupTaskAgents(context.contextId);
+          logger.info(`♻️ Agent instances cleaned up for ${status} task`, {
+            taskId: context.contextId,
+            status
+          });
+        } catch (cleanupError) {
+          logger.warn('Could not clean up agent instances', {
+            taskId: context.contextId,
+            error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+          });
+        }
+      }
     } catch (error) {
       logger.error('Failed to update task status', {
         contextId: context.contextId,
@@ -2753,9 +2770,24 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     // NOTE: Knowledge extraction is handled as a phase in the execution plan
     // as instructed in orchestrator.yaml - not triggered here
     
-    // Clean up
+    // Clean up local state
     this.activeExecutions.delete(context.contextId);
     this.pendingUIRequests.delete(context.contextId);
+    
+    // Clean up cached agent instances for garbage collection
+    // This is critical for ephemeral agents and memory management
+    try {
+      const { agentDiscovery } = await import('../services/agent-discovery');
+      agentDiscovery.cleanupTaskAgents(context.contextId);
+      logger.info('♻️ Agent instances cleaned up for completed task', {
+        taskId: context.contextId
+      });
+    } catch (error) {
+      logger.warn('Could not clean up agent instances', {
+        taskId: context.contextId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
   }
   
   /**

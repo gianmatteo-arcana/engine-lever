@@ -46,6 +46,14 @@ export class AgentDiscoveryService {
   private capabilityRegistry: Map<string, AgentCapability> = new Map();
   private routingTable: Map<string, Set<string>> = new Map(); // who can send to whom
   
+  // Agents that should NOT be cached (ephemeral, per-task instances)
+  private readonly EPHEMERAL_AGENTS = new Set([
+    'ux_optimization_agent',  // Per-task UI optimization
+    'celebration_agent',       // Per-task celebration
+    'monitoring_agent',        // Per-task monitoring
+    // Add more ephemeral agents here as needed
+  ]);
+  
   constructor(private configPath: string = 'config/agents') {
     this.configPath = path.join(process.cwd(), configPath);
     // TODO: Simple optimization - Add file watching to auto-refresh cache
@@ -197,11 +205,14 @@ export class AgentDiscoveryService {
   /**
    * Instantiate an agent from its configuration
    * Uses DefaultAgent for all agents except OrchestratorAgent
+   * Ephemeral agents are NOT cached to allow garbage collection
    */
   async instantiateAgent(agentId: string, businessId: string = 'system', userId?: string): Promise<DefaultAgent> {
-    // Check if already instantiated (but not for UXOptimizationAgent - it should be per-task)
     const cacheKey = `${agentId}:${businessId}`;
-    if (agentId !== 'ux_optimization_agent' && this.agentInstances.has(cacheKey)) {
+    
+    // Check cache only for non-ephemeral agents
+    if (!this.EPHEMERAL_AGENTS.has(agentId) && this.agentInstances.has(cacheKey)) {
+      logger.debug(`📦 Returning cached agent instance: ${agentId}`, { businessId });
       return this.agentInstances.get(cacheKey)!;
     }
     
@@ -225,9 +236,16 @@ export class AgentDiscoveryService {
         agent = new DefaultAgent(configFileName, businessId, userId);
       }
       
-      // Store instance (but not UXOptimizationAgent - let it be garbage collected per task)
-      if (agentId !== 'ux_optimization_agent') {
+      // Cache only non-ephemeral agents
+      if (!this.EPHEMERAL_AGENTS.has(agentId)) {
         this.agentInstances.set(cacheKey, agent);
+        logger.debug(`💾 Cached agent instance: ${agentId}`, { businessId });
+      } else {
+        logger.debug(`🌟 Created ephemeral agent instance: ${agentId}`, { 
+          businessId,
+          ephemeral: true,
+          reason: 'Per-task agent, will be garbage collected after use'
+        });
       }
       
       // Update capability availability
@@ -319,6 +337,48 @@ export class AgentDiscoveryService {
   getReceivers(agentId: string): string[] {
     const routes = this.routingTable.get(agentId);
     return routes ? Array.from(routes) : [];
+  }
+  
+  /**
+   * Clean up cached agent instances for a specific task/business
+   * This allows garbage collection of completed task agents
+   */
+  cleanupTaskAgents(businessId: string): void {
+    const keysToDelete: string[] = [];
+    
+    // Find all cached instances for this businessId
+    for (const [key, _agent] of this.agentInstances.entries()) {
+      if (key.includes(`:${businessId}`)) {
+        keysToDelete.push(key);
+      }
+    }
+    
+    // Delete found instances
+    for (const key of keysToDelete) {
+      this.agentInstances.delete(key);
+      logger.debug(`🧹 Cleaned up cached agent instance: ${key}`);
+    }
+    
+    if (keysToDelete.length > 0) {
+      logger.info(`♻️ Cleaned up ${keysToDelete.length} agent instances for task: ${businessId}`, {
+        cleanedAgents: keysToDelete
+      });
+    }
+  }
+  
+  /**
+   * Get cache statistics for monitoring
+   */
+  getCacheStats(): { cached: number, ephemeral: string[], cacheable: string[] } {
+    const ephemeral = Array.from(this.EPHEMERAL_AGENTS);
+    const cacheable = Array.from(this.capabilityRegistry.keys())
+      .filter(id => !this.EPHEMERAL_AGENTS.has(id));
+    
+    return {
+      cached: this.agentInstances.size,
+      ephemeral,
+      cacheable
+    };
   }
   
   /**
