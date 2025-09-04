@@ -199,26 +199,44 @@ export class UXOptimizationAgent extends BaseAgent {
   private async createStreamlinedUIRequest(requests: UIRequest[], userContext?: any): Promise<UIRequest> {
     const taskLogger = createTaskLogger('ux-optimization');
 
-    // Build prompt for LLM to understand and merge the requests
-    const prompt = this.buildOptimizationPrompt(requests, userContext);
-    
-    // Use BaseAgent's llmProvider instead of custom callLLM
-    const optimizationPlan = await this.llmProvider.complete({
-      prompt,
-      model: 'claude-3-sonnet',
-      temperature: 0.7,
-      maxTokens: 2000
-    });
-    
-    // Parse LLM response to create streamlined UIRequest
-    const streamlinedRequest = this.parseOptimizationPlan(optimizationPlan, requests);
-    
-    taskLogger.info('📋 Streamlined UIRequest created', {
-      template: streamlinedRequest.templateType,
-      fieldCount: this.countFields(streamlinedRequest)
-    });
+    try {
+      // Build prompt for LLM to understand and merge the requests
+      const prompt = this.buildOptimizationPrompt(requests, userContext);
+      
+      // Use BaseAgent's llmProvider instead of custom callLLM
+      const optimizationPlan = await this.llmProvider.complete({
+        prompt,
+        model: 'claude-3-sonnet',
+        temperature: 0.7,
+        maxTokens: 2000
+      });
+      
+      // Parse LLM response to create streamlined UIRequest
+      const streamlinedRequest = this.parseOptimizationPlan(optimizationPlan, requests);
+      
+      taskLogger.info('📋 Streamlined UIRequest created', {
+        template: streamlinedRequest.templateType,
+        fieldCount: this.countFields(streamlinedRequest),
+        method: 'llm-optimized'
+      });
 
-    return streamlinedRequest;
+      return streamlinedRequest;
+    } catch (error) {
+      // If LLM fails (no API key, network error, etc.), use fallback merge
+      taskLogger.warn('⚠️ LLM optimization failed, using fallback merge', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      
+      const fallbackRequest = this.fallbackMerge(requests);
+      
+      taskLogger.info('📋 Fallback UIRequest created', {
+        template: fallbackRequest.templateType,
+        fieldCount: this.countFields(fallbackRequest),
+        method: 'fallback-merge'
+      });
+      
+      return fallbackRequest;
+    }
   }
 
   /**
