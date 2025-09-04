@@ -2630,20 +2630,20 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       // Use the agent discovery service factory pattern for proper DI
       // Factory will create a new instance per task (not cached)
       const { agentDiscovery } = await import('../services/agent-discovery');
-      const agent = await agentDiscovery.instantiateAgent(
+      await agentDiscovery.instantiateAgent(
         'ux_optimization_agent',
         taskId, // Pass taskId as businessId for UXOptimizationAgent
         (context.currentState as any)?.user_id
       );
       
-      // Cast to UXOptimizationAgent type (we know it's this type from the factory)
-      const uxAgent = agent as any;
-      
-      // Start monitoring for this recovered task
+      // The UXOptimizationAgent instance is now ready to process UIRequests
+      // It doesn't need explicit monitoring setup - it will process requests when called
       // The agent instance will be garbage collected when no longer referenced
-      await uxAgent.startMonitoring(context);
       
-      logger.info('✅ UXOptimizationAgent recovered for task', { taskId });
+      logger.info('✅ UXOptimizationAgent instantiated for task recovery', { 
+        taskId,
+        info: 'Agent ready to process UIRequests when needed'
+      });
     }
   }
   
