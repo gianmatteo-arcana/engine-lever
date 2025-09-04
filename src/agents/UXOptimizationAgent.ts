@@ -24,8 +24,35 @@ import { BaseAgentRequest, BaseAgentResponse } from '../types/base-agent-types';
 import { logger, createTaskLogger } from '../utils/logger';
 
 export class UXOptimizationAgent extends BaseAgent {
+  private fullYamlConfig: any;
+  
   constructor(taskId: string, tenantId?: string, userId?: string) {
-    super('ux_optimization_agent', tenantId || 'system', userId);
+    super('ux_optimization_agent.yaml', tenantId || 'system', userId);
+    // Load the full YAML configuration for this agent
+    this.loadFullYamlConfig();
+  }
+  
+  /**
+   * Load the full YAML configuration including operations
+   */
+  private loadFullYamlConfig(): void {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const yaml = require('yaml');
+      
+      const configPath = path.join(process.cwd(), 'config', 'agents', 'ux_optimization_agent.yaml');
+      const configContent = fs.readFileSync(configPath, 'utf8');
+      this.fullYamlConfig = yaml.parse(configContent);
+      
+      logger.debug('Loaded UXOptimizationAgent YAML configuration', {
+        hasOperations: !!this.fullYamlConfig?.operations,
+        hasProtocol: !!this.fullYamlConfig?.operations?.optimize_form_experience?.protocol
+      });
+    } catch (error) {
+      logger.warn('Failed to load full YAML config for UXOptimizationAgent', { error });
+      this.fullYamlConfig = null;
+    }
   }
 
   /**
@@ -94,7 +121,9 @@ export class UXOptimizationAgent extends BaseAgent {
       }
 
       // Multiple requests - use LLM to create ONE streamlined request
-      const optimizedRequest = await this.createStreamlinedUIRequest(uiRequests);
+      // Extract user context from request parameters or task context
+      const userContext = request.parameters?.userContext || request.taskContext?.user || {};
+      const optimizedRequest = await this.createStreamlinedUIRequest(uiRequests, userContext);
 
       taskLogger.info('✅ Created streamlined UIRequest', {
         originalCount: uiRequests.length,
@@ -125,11 +154,11 @@ export class UXOptimizationAgent extends BaseAgent {
    * Create a single streamlined UIRequest from multiple requests
    * Uses LLM to intelligently merge and optimize
    */
-  private async createStreamlinedUIRequest(requests: UIRequest[]): Promise<UIRequest> {
+  private async createStreamlinedUIRequest(requests: UIRequest[], userContext?: any): Promise<UIRequest> {
     const taskLogger = createTaskLogger('ux-optimization');
 
     // Build prompt for LLM to understand and merge the requests
-    const prompt = this.buildOptimizationPrompt(requests);
+    const prompt = this.buildOptimizationPrompt(requests, userContext);
     
     // Call LLM to get optimization strategy
     const optimizationPlan = await this.callLLM(prompt);
@@ -146,7 +175,7 @@ export class UXOptimizationAgent extends BaseAgent {
   }
 
   /**
-   * Build prompt for LLM to optimize UIRequests with psychological adaptation
+   * Build prompt for LLM to optimize UIRequests using YAML-defined protocol
    */
   private buildOptimizationPrompt(requests: UIRequest[], userContext?: any): string {
     const requestSummaries = requests.map((req, idx) => ({
@@ -161,87 +190,49 @@ export class UXOptimizationAgent extends BaseAgent {
     const userExperience = userContext?.experienceLevel || 'first-time';
     const industry = userContext?.industry || 'general';
 
-    return `
-You are a trusted advisor helping a ${userExperience} ${businessType} owner in the ${industry} industry.
-Your role is to be a friendly translator between bureaucratic requirements and human understanding.
-
-Multiple government/official forms are overwhelming the user. Your task is to:
-1. Create ONE friendly, conversational form that collects all necessary information
-2. Translate bureaucrat-speak into plain, friendly language
-3. Use terminology familiar to someone in the ${industry} industry
-4. Provide helpful context so they understand WHY each piece of information is needed
-5. Identify which partial answers could unlock tool usage to auto-fill other fields
-
-Current bureaucratic requests:
-${JSON.stringify(requestSummaries, null, 2)}
-
-Raw bureaucratic language being used:
-${requests.map((req, idx) => `
+    // Get the protocol from the full YAML configuration
+    const protocol = this.fullYamlConfig?.operations?.optimize_form_experience?.protocol;
+    
+    if (protocol) {
+      // Use the YAML-defined prompts with variable substitution
+      const systemPrompt = protocol.system_prompt
+        ?.replace('{userExperience}', userExperience)
+        ?.replace('{businessType}', businessType)
+        ?.replace('{industry}', industry);
+      
+      const userPrompt = protocol.user_prompt
+        ?.replace('{industry}', industry)
+        ?.replace('{requestSummaries}', JSON.stringify(requestSummaries, null, 2))
+        ?.replace('{rawRequests}', requests.map((req, idx) => `
 Request ${idx + 1} (${req.templateType}):
 ${JSON.stringify(req.semanticData, null, 2)}
-`).join('\n')}
+`).join('\n'));
 
-Please create a human-friendly form with:
-
-1. PSYCHOLOGICAL APPROACH:
-   - Use encouraging, supportive language
-   - Break complex concepts into simple explanations
-   - Provide examples relevant to ${industry}
-   - Build confidence with progress indicators
-   - Acknowledge this might feel overwhelming and reassure
-
-2. LANGUAGE TRANSLATION:
-   - Replace terms like "Legal Entity Type" with "How is your business organized?"
-   - Replace "EIN/Tax ID" with "Your business tax number (like a Social Security number for your business)"
-   - Replace "Registered Agent" with "Who receives official mail for your business?"
-   - Use "you" and "your" instead of "the applicant" or "the entity"
-
-3. SMART FIELD ORDERING:
-   - Start with easy, non-threatening questions to build momentum
-   - Group related items logically
-   - Identify fields where partial answers unlock tools:
-     * Business name → can search for existing registrations
-     * Address → can auto-fill city, state, zip
-     * Industry type → can suggest relevant licenses
-   - Mark these fields with hints like "Once you enter this, we can help fill other details"
-
-4. CONTEXT AND HELP:
-   - Explain WHY each piece of info is needed in plain language
-   - Provide inline help and examples
-   - Offer "Not sure?" options with explanations
-
-Provide your response as:
-{
-  "templateType": "SteppedWizard",
-  "title": "Friendly, encouraging title",
-  "description": "Warm, helpful description that reduces anxiety",
-  "introduction": "Personal, reassuring message about the process",
-  "fields": [
-    {
-      "name": "internal_field_name",
-      "label": "Friendly question in plain language",
-      "helpText": "Why we need this, in simple terms",
-      "placeholder": "Example that makes sense for ${industry}",
-      "type": "field type",
-      "required": boolean,
-      "canUnlockTools": boolean,
-      "unlockHint": "What happens when they fill this",
-      "section": "Friendly section name"
+      // Combine system and user prompts
+      return `${systemPrompt}\n\n${userPrompt}`;
     }
-  ],
-  "sections": [
-    {
-      "name": "Section name",
-      "title": "Friendly section title",
-      "description": "What this section is about and why it matters",
-      "encouragement": "Supportive message for this stage"
-    }
-  ],
-  "closingMessage": "Encouraging message about what happens next",
-  "estimatedTime": "X minutes",
-  "progressIndicator": true
-}
-`;
+
+    // Fallback if YAML protocol not loaded (shouldn't happen in production)
+    logger.warn('UXOptimizationAgent: Protocol not loaded from YAML, using fallback');
+    return this.getFallbackPrompt(requests, userContext);
+  }
+
+  /**
+   * Fallback prompt if YAML not loaded (for development/testing)
+   */
+  private getFallbackPrompt(requests: UIRequest[], _userContext?: any): string {
+    return `Transform these ${requests.length} bureaucratic UIRequests into ONE human-friendly form.
+    
+Current requests:
+${JSON.stringify(requests, null, 2)}
+
+Create a SteppedWizard template with:
+- Friendly, encouraging title and description
+- Plain language field labels (no bureaucrat-speak)
+- Helpful context explaining WHY each field is needed
+- Smart field ordering to unlock tool usage
+
+Return as JSON with fields organized into logical sections.`;
   }
 
   /**
