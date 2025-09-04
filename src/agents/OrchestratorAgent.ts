@@ -167,6 +167,7 @@ export class OrchestratorAgent extends BaseAgent {
   // NO AGENT INSTANCES STORED - Using DI and task-centered message bus
   private agentCapabilities: Map<string, any> = new Map();
   private activeTaskSubscriptions: Map<string, Set<string>> = new Map(); // taskId -> Set of agentIds
+  private activeUXOptimizationAgents: Map<string, any> = new Map(); // taskId -> UXOptimizationAgent instance
   
   private constructor() {
     try {
@@ -824,6 +825,9 @@ export class OrchestratorAgent extends BaseAgent {
         });
         
         execution.status = 'completed';
+        
+        // Clean up agents for completed task
+        this.cleanupAgentsForTask(taskId);
         this.activeExecutions.delete(taskId);
       } else {
         // Critical failures exist
@@ -1073,6 +1077,9 @@ export class OrchestratorAgent extends BaseAgent {
       // We're resuming if:
       // 1. We have execution history (work was started)
       // 2. Task is not in a terminal state
+      
+      // Recovery: Check for unresolved UIRequests and reinstantiate agents as needed
+      await this.recoverAgentsForPendingUIRequests(context);
       const isResuming = hasExecutionHistory && 
                         context.currentState.status !== TASK_STATUS.COMPLETED &&
                         context.currentState.status !== TASK_STATUS.FAILED &&
@@ -2523,9 +2530,26 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       types: requests.map(r => r.templateType)
     });
     
-    // Notify UIRequest monitor for UXOptimizationAgent auto-start
-    const { uiRequestMonitor } = await import('../services/ui-request-monitor');
-    uiRequestMonitor.notifyUIRequestsSent(context, requests);
+    // Check if we need to instantiate UXOptimizationAgent for this task
+    const taskId = context.contextId;
+    let uxAgent = this.activeUXOptimizationAgents.get(taskId);
+    
+    if (!uxAgent && requests.length > 0) {
+      // Instantiate UXOptimizationAgent for this task using dependency injection
+      logger.info('🎯 Instantiating UXOptimizationAgent for task', {
+        taskId,
+        requestCount: requests.length
+      });
+      
+      const { UXOptimizationAgent } = await import('./UXOptimizationAgent');
+      uxAgent = new UXOptimizationAgent(taskId, context.tenantId, undefined);
+      this.activeUXOptimizationAgents.set(taskId, uxAgent);
+    }
+    
+    if (uxAgent) {
+      // Notify the agent about new UIRequests
+      uxAgent.notifyUIRequestsDetected(requests, context);
+    }
     
     // Record FULL UI requests in context for proper persistence
     // UI requests are now stored as task_context_events
@@ -2553,6 +2577,73 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       contextId: context.contextId,
       requestCount: requests.length
     });
+  }
+  
+  /**
+   * Clean up agents for a completed task
+   */
+  private cleanupAgentsForTask(taskId: string): void {
+    // Clean up UXOptimizationAgent if exists
+    const uxAgent = this.activeUXOptimizationAgents.get(taskId);
+    if (uxAgent) {
+      logger.info('🧹 Cleaning up UXOptimizationAgent for completed task', { taskId });
+      uxAgent.stopMonitoring();
+      this.activeUXOptimizationAgents.delete(taskId);
+    }
+    
+    // Clean up other agent subscriptions
+    if (this.activeTaskSubscriptions.has(taskId)) {
+      logger.info('🧹 Cleaning up agent subscriptions for completed task', { taskId });
+      this.activeTaskSubscriptions.delete(taskId);
+    }
+  }
+  
+  /**
+   * Recovery: Reinstantiate agents for pending UIRequests after system restart
+   */
+  private async recoverAgentsForPendingUIRequests(context: TaskContext): Promise<void> {
+    const taskId = context.contextId;
+    
+    // Check if we already have a UXOptimizationAgent for this task
+    if (this.activeUXOptimizationAgents.has(taskId)) {
+      return; // Already recovered or running
+    }
+    
+    // Check if there are pending UIRequests in the context history
+    const pendingUIRequests: UIRequest[] = [];
+    let hasUnresolvedUIRequests = false;
+    
+    // Scan history for UIRequest events
+    for (const entry of context.history) {
+      if (entry.operation === 'ui_requests_created' && entry.data?.uiRequests) {
+        // Found UIRequests
+        pendingUIRequests.push(...(entry.data.uiRequests as UIRequest[]));
+        hasUnresolvedUIRequests = true;
+      }
+      
+      if (entry.operation === 'ui_response_received') {
+        // UIRequests were resolved
+        hasUnresolvedUIRequests = false;
+        pendingUIRequests.length = 0;
+      }
+    }
+    
+    // If we have unresolved UIRequests, reinstantiate UXOptimizationAgent
+    if (hasUnresolvedUIRequests && pendingUIRequests.length > 0) {
+      logger.info('🔄 Recovering UXOptimizationAgent for pending UIRequests', {
+        taskId,
+        requestCount: pendingUIRequests.length
+      });
+      
+      const { UXOptimizationAgent } = await import('./UXOptimizationAgent');
+      const uxAgent = new UXOptimizationAgent(taskId, context.tenantId, undefined);
+      this.activeUXOptimizationAgents.set(taskId, uxAgent);
+      
+      // Start monitoring for this recovered task
+      await uxAgent.startMonitoring(context);
+      
+      logger.info('✅ UXOptimizationAgent recovered for task', { taskId });
+    }
   }
   
   /**

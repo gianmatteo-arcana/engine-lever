@@ -25,12 +25,82 @@ import { EventEmitter } from 'events';
 export class UXOptimizationAgent extends BaseAgent {
   private eventListener: EventEmitter | null = null;
   private dbService: DatabaseService;
-  private activeContexts: Set<string> = new Set();
+  private taskId: string | null = null;
+  private uiRequestBuffer: UIRequest[] = [];
+  private isMonitoring: boolean = false;
   
-  constructor(tenantId?: string, userId?: string) {
+  constructor(taskId: string, tenantId?: string, userId?: string) {
     super('ux_optimization_agent', tenantId || 'system', userId);
     this.dbService = DatabaseService.getInstance();
-    logger.info('🎨 UX Optimization Agent initialized', { tenantId, userId });
+    this.taskId = taskId;
+    logger.info('🎨 UX Optimization Agent initialized for task', { taskId, tenantId, userId });
+  }
+
+  /**
+   * Start monitoring UIRequest events for this specific task
+   */
+  public async startMonitoring(context: TaskContext): Promise<void> {
+    if (this.isMonitoring) return;
+    
+    logger.info('🎧 Starting UIRequest monitoring for task', { taskId: this.taskId });
+    this.isMonitoring = true;
+    
+    // Read existing UIRequests from context history
+    const existingRequests = await this.readUIRequestsFromHistory(context);
+    if (existingRequests.length > 0) {
+      this.uiRequestBuffer.push(...existingRequests);
+      this.checkAndOptimizeIfNeeded(context);
+    }
+    
+    // Set up SSE listener for new UIRequests
+    this.setupSSEListener(context);
+  }
+
+  /**
+   * Called when new UIRequests are detected for this task
+   */
+  public notifyUIRequestsDetected(requests: UIRequest[], context: TaskContext): void {
+    if (!this.isMonitoring) {
+      this.startMonitoring(context);
+    }
+    
+    logger.debug('📥 UIRequests detected for task', {
+      taskId: this.taskId,
+      count: requests.length
+    });
+
+    // Add to buffer
+    this.uiRequestBuffer.push(...requests);
+
+    // Check if optimization is needed
+    this.checkAndOptimizeIfNeeded(context);
+  }
+
+  /**
+   * Check if optimization is needed and perform it
+   */
+  private async checkAndOptimizeIfNeeded(context: TaskContext): Promise<void> {
+    if (this.uiRequestBuffer.length > 1) {
+      logger.info('🎯 Multiple UIRequests detected, optimizing', {
+        taskId: this.taskId,
+        requestCount: this.uiRequestBuffer.length
+      });
+      
+      await this.processAndOptimizeUIRequests(context, this.uiRequestBuffer);
+      
+      // Clear buffer after optimization
+      this.uiRequestBuffer = [];
+    }
+  }
+
+  /**
+   * Stop monitoring and clean up
+   */
+  public stopMonitoring(): void {
+    logger.info('🛑 Stopping UIRequest monitoring for task', { taskId: this.taskId });
+    this.isMonitoring = false;
+    this.uiRequestBuffer = [];
+    // TODO: Unsubscribe from SSE events
   }
 
   /**
@@ -108,12 +178,13 @@ export class UXOptimizationAgent extends BaseAgent {
     context: TaskContext,
     mode: string = 'background'
   ): Promise<BaseAgentResponse> {
+    const taskId = context.contextId; // contextId IS the taskId in this architecture
     const contextId = context.contextId;
     const taskLogger = createTaskLogger(contextId);
     
     try {
-      // Mark this context as active
-      this.activeContexts.add(contextId);
+      // Task is being monitored
+      this.isMonitoring = true;
       
       // Step 1: Read existing UIRequests from context history
       const existingUIRequests = await this.readUIRequestsFromHistory(context);
@@ -132,6 +203,7 @@ export class UXOptimizationAgent extends BaseAgent {
       this.setupSSEListener(context);
       
       taskLogger.info('✅ UXOptimizationAgent listening for UIRequests', {
+        taskId,
         contextId,
         mode,
         existingRequests: existingUIRequests.length
@@ -139,6 +211,7 @@ export class UXOptimizationAgent extends BaseAgent {
       
       return this.createResponse('completed', {
         status: 'listening',
+        taskId,
         contextId,
         mode,
         processedRequests: existingUIRequests.length
@@ -146,6 +219,7 @@ export class UXOptimizationAgent extends BaseAgent {
       
     } catch (error) {
       taskLogger.error('❌ Failed to start listening', {
+        taskId,
         contextId,
         error: error instanceof Error ? error.message : String(error)
       });
@@ -178,11 +252,12 @@ export class UXOptimizationAgent extends BaseAgent {
   private setupSSEListener(context: TaskContext): void {
     const taskLogger = createTaskLogger(context.contextId);
     
-    // Subscribe to context events for this specific context
+    // Subscribe to task events for this specific task
     // This would integrate with the UnifiedEventBus
+    const taskId = context.contextId; // contextId IS the taskId in this architecture
     const contextId = context.contextId;
     
-    taskLogger.info('🎧 Setting up SSE listener for context', { contextId });
+    taskLogger.info('🎧 Setting up SSE listener for task', { taskId, contextId });
     
     // TODO: Integrate with actual SSE/EventBus infrastructure
     // For now, this is a placeholder showing the intended pattern
@@ -634,6 +709,16 @@ export class UXOptimizationAgent extends BaseAgent {
       },
       confidence: status === 'completed' ? 0.9 : 0.5
     };
+  }
+
+  /**
+   * Clean up completed task
+   */
+  public markTaskCompleted(taskId: string): void {
+    if (this.taskId === taskId && this.isMonitoring) {
+      logger.info('🧹 Cleaning up UXOptimizationAgent for completed task', { taskId });
+      this.stopMonitoring();
+    }
   }
 
   /**
