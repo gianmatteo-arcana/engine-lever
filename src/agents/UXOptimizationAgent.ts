@@ -49,7 +49,7 @@ export class UXOptimizationAgent extends BaseAgent {
     const existingRequests = await this.readUIRequestsFromHistory(context);
     if (existingRequests.length > 0) {
       this.uiRequestBuffer.push(...existingRequests);
-      this.checkAndOptimizeIfNeeded(context);
+      await this.checkAndOptimizeIfNeeded(context);
     }
     
     // Set up SSE listener for new UIRequests
@@ -59,21 +59,29 @@ export class UXOptimizationAgent extends BaseAgent {
   /**
    * Called when new UIRequests are detected for this task
    */
-  public notifyUIRequestsDetected(requests: UIRequest[], context: TaskContext): void {
-    if (!this.isMonitoring) {
-      this.startMonitoring(context);
+  public async notifyUIRequestsDetected(requests: UIRequest[], context: TaskContext): Promise<void> {
+    try {
+      if (!this.isMonitoring) {
+        await this.startMonitoring(context);
+      }
+      
+      logger.debug('📥 UIRequests detected for task', {
+        taskId: this.taskId,
+        count: requests.length
+      });
+
+      // Add to buffer
+      this.uiRequestBuffer.push(...requests);
+
+      // Check if optimization is needed
+      await this.checkAndOptimizeIfNeeded(context);
+    } catch (error) {
+      logger.error('❌ Error handling UIRequests detection', {
+        taskId: this.taskId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't throw - we don't want to disrupt the orchestration flow
     }
-    
-    logger.debug('📥 UIRequests detected for task', {
-      taskId: this.taskId,
-      count: requests.length
-    });
-
-    // Add to buffer
-    this.uiRequestBuffer.push(...requests);
-
-    // Check if optimization is needed
-    this.checkAndOptimizeIfNeeded(context);
   }
 
   /**
