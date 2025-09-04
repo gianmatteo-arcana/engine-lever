@@ -55,6 +55,7 @@ export interface BusinessEntity {
     state: string;
     zip: string;
   };
+  otherInformation?: Record<string, any>;  // Flexible field for additional data we didn't predict
 }
 
 export interface PaymentResult {

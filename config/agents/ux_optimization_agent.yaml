@@ -100,7 +100,7 @@ schemas:
 # Available operations for UX optimization
 operations:
   optimize_form_experience:
-    description: "Transform multiple bureaucratic UIRequests into ONE human-friendly form"
+    description: "Given the current context at any moment of what the system requires from the user, as expressed with UIRequests, translate that into human-friendly form"
     parameters:
       current_form:
         type: "object"
@@ -149,6 +149,7 @@ operations:
         3. SMART FIELD ORDERING:
            - Start with easy, non-threatening questions to build momentum
            - Group related items logically
+           - Optimize the queries to the user, their order and chunking to maximize the system's ability to autonomously find out the required data through their toolchain while minimizing the amount of inputs required from the human
            - Identify fields where partial answers unlock tools:
              * Business name → can search for existing registrations
              * Address → can auto-fill city, state, zip
