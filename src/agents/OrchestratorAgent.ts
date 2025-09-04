@@ -2719,7 +2719,10 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       const taskService = TaskService.getInstance();
       await taskService.updateTaskStatus(context.contextId, status);
       
-      logger.info(`✅ Task status updated to ${status.toUpperCase()} in database`, {
+      // CRITICAL: Also update the in-memory context to keep it in sync
+      context.currentState.status = status;
+      
+      logger.info(`✅ Task status updated to ${status.toUpperCase()} in database and context`, {
         contextId: context.contextId
       });
       

@@ -248,7 +248,17 @@ export class TaskService {
         .single();
 
       if (error) {
-        logger.error('Failed to fetch task', { contextId, error });
+        // In test mode, this is expected when no database is configured
+        const isTestMode = process.env.NODE_ENV === 'test';
+        if (isTestMode) {
+          logger.debug('Task fetch failed in test mode (expected - no database)', { contextId });
+        } else {
+          logger.error('Failed to fetch task from database', { 
+            contextId, 
+            errorCode: error.code,
+            errorMessage: error.message 
+          });
+        }
         return null;
       }
 
@@ -264,13 +274,31 @@ export class TaskService {
         .order('sequence_number', { ascending: true });
 
       if (historyError) {
-        logger.error('Failed to fetch task history', { contextId, error: historyError });
+        const isTestMode = process.env.NODE_ENV === 'test';
+        if (isTestMode) {
+          logger.debug('Task history fetch failed in test mode (expected)', { contextId });
+        } else {
+          logger.error('Failed to fetch task history', { 
+            contextId, 
+            errorCode: historyError.code,
+            errorMessage: historyError.message 
+          });
+        }
       }
 
       return this.mapToTaskContext(data, history || []);
 
     } catch (error) {
-      logger.error('Error fetching task', { contextId, error });
+      const isTestMode = process.env.NODE_ENV === 'test';
+      if (isTestMode) {
+        logger.debug('Task fetch error in test mode (expected - mock context will be used)', { contextId });
+      } else {
+        logger.error('Error fetching task - database connection issue', { 
+          contextId, 
+          error: error instanceof Error ? error.message : String(error),
+          hint: 'Check database connection and credentials'
+        });
+      }
       return null;
     }
   }
@@ -831,10 +859,20 @@ export class TaskService {
       };
 
     } catch (error) {
-      logger.error('Error fetching task', { error });
+      const isTestMode = process.env.NODE_ENV === 'test';
+      if (isTestMode) {
+        logger.debug('Task fetch error in test mode (expected)', { 
+          error: error instanceof Error ? error.message : String(error) 
+        });
+      } else {
+        logger.error('Error fetching task by ID', { 
+          error: error instanceof Error ? error.message : String(error),
+          hint: 'Check database connection'
+        });
+      }
       return {
         success: false,
-        error: 'Internal server error'
+        error: isTestMode ? 'Test mode - no database' : 'Internal server error'
       };
     }
   }

@@ -2969,19 +2969,37 @@ What is your decision for iteration ${iteration}?`;
           currentState: freshContext.currentState?.status
         });
       } else {
-        logger.warn('⚠️ Task context not found in database', {
-          contextId,
-          agentId: this.specializedTemplate.agent.id
-        });
+        const isTestMode = process.env.NODE_ENV === 'test';
+        if (isTestMode) {
+          logger.debug('📋 Task context not in database (test mode - using mock/empty context)', {
+            contextId,
+            agentId: this.specializedTemplate.agent.id
+          });
+        } else {
+          logger.warn('⚠️ Task context not found in database', {
+            contextId,
+            agentId: this.specializedTemplate.agent.id,
+            hint: 'Task may not exist or database connection issue'
+          });
+        }
       }
       
       return freshContext;
     } catch (error) {
-      logger.error('❌ Failed to fetch fresh task context', {
-        contextId,
-        agentId: this.specializedTemplate.agent.id,
-        error: error instanceof Error ? error.message : String(error)
-      });
+      const isTestMode = process.env.NODE_ENV === 'test';
+      if (isTestMode) {
+        logger.debug('📋 Could not fetch task context (test mode - proceeding with defaults)', {
+          contextId,
+          agentId: this.specializedTemplate.agent.id
+        });
+      } else {
+        logger.error('❌ Failed to fetch fresh task context', {
+          contextId,
+          agentId: this.specializedTemplate.agent.id,
+          error: error instanceof Error ? error.message : String(error),
+          hint: 'Check database connection and task existence'
+        });
+      }
       return null;
     }
   }
