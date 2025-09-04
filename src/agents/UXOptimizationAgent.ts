@@ -22,10 +22,15 @@ import { BaseAgent } from './base/BaseAgent';
 import { UIRequest, UITemplateType } from '../types/task-engine.types';
 import { BaseAgentRequest, BaseAgentResponse } from '../types/base-agent-types';
 import { createTaskLogger } from '../utils/logger';
+import { ToolChain } from '../services/tool-chain';
+import { BusinessKnowledge } from '../tools/business-memory';
 
 export class UXOptimizationAgent extends BaseAgent {
+  protected toolChain: ToolChain;
+
   constructor(taskId: string, tenantId?: string, userId?: string) {
     super('ux_optimization_agent.yaml', tenantId || 'system', userId);
+    this.toolChain = new ToolChain();
   }
 
   /**
@@ -195,13 +200,25 @@ export class UXOptimizationAgent extends BaseAgent {
   /**
    * Create a single streamlined UIRequest from multiple requests
    * Uses LLM to intelligently merge and optimize
+   * Now also queries business memory to pre-fill known data
    */
   private async createStreamlinedUIRequest(requests: UIRequest[], userContext?: any): Promise<UIRequest> {
     const taskLogger = createTaskLogger('ux-optimization');
 
     try {
+      // First, check business memory for known data if businessId is available
+      let knownData: BusinessKnowledge | null = null;
+      if (userContext?.businessId) {
+        knownData = await this.queryBusinessMemory(userContext.businessId);
+        taskLogger.info('📚 Business memory queried', {
+          businessId: userContext.businessId,
+          factCount: knownData?.metadata?.factCount || 0,
+          avgConfidence: knownData?.metadata?.averageConfidence || 0
+        });
+      }
+
       // Build prompt for LLM to understand and merge the requests
-      const prompt = this.buildOptimizationPrompt(requests, userContext);
+      const prompt = this.buildOptimizationPrompt(requests, userContext, knownData);
       
       // Use BaseAgent's llmProvider instead of custom callLLM
       const optimizationPlan = await this.llmProvider.complete({
@@ -212,12 +229,18 @@ export class UXOptimizationAgent extends BaseAgent {
       });
       
       // Parse LLM response to create streamlined UIRequest
-      const streamlinedRequest = this.parseOptimizationPlan(optimizationPlan, requests);
+      let streamlinedRequest = this.parseOptimizationPlan(optimizationPlan, requests);
+      
+      // Apply intelligent pre-filling based on known data
+      if (knownData) {
+        streamlinedRequest = await this.applyIntelligentPrefilling(streamlinedRequest, knownData);
+      }
       
       taskLogger.info('📋 Streamlined UIRequest created', {
         template: streamlinedRequest.templateType,
         fieldCount: this.countFields(streamlinedRequest),
-        method: 'llm-optimized'
+        method: 'llm-optimized',
+        hasPrefilledData: knownData !== null
       });
 
       return streamlinedRequest;
@@ -227,7 +250,7 @@ export class UXOptimizationAgent extends BaseAgent {
         error: error instanceof Error ? error.message : String(error)
       });
       
-      const fallbackRequest = this.fallbackMerge(requests);
+      const fallbackRequest = await this.fallbackMergeWithMemory(requests, userContext);
       
       taskLogger.info('📋 Fallback UIRequest created', {
         template: fallbackRequest.templateType,
@@ -242,7 +265,7 @@ export class UXOptimizationAgent extends BaseAgent {
   /**
    * Build prompt for LLM to optimize UIRequests using YAML-defined protocol
    */
-  private buildOptimizationPrompt(requests: UIRequest[], userContext?: any): string {
+  private buildOptimizationPrompt(requests: UIRequest[], userContext?: any, knownData?: BusinessKnowledge | null): string {
     const requestSummaries = requests.map((req, idx) => ({
       index: idx + 1,
       template: req.templateType,
@@ -254,6 +277,11 @@ export class UXOptimizationAgent extends BaseAgent {
     const businessType = userContext?.businessType || 'small business';
     const userExperience = userContext?.experienceLevel || 'first-time';
     const industry = userContext?.industry || 'general';
+    
+    // Build known data summary for the prompt
+    const hasKnownData = knownData && knownData.metadata?.factCount > 0;
+    const knownDataContext = hasKnownData ? 
+      `\n\nNote: We have ${knownData.metadata.factCount} known facts about this business that will be pre-filled where applicable.` : '';
 
     // Get the protocol from the specialized template (loaded by BaseAgent)
     const protocol = this.specializedTemplate?.operations?.optimize_form_experience?.protocol;
@@ -273,12 +301,12 @@ Request ${idx + 1} (${req.templateType}):
 ${JSON.stringify(req.semanticData, null, 2)}
 `).join('\n'));
 
-      // Combine system and user prompts
-      return `${systemPrompt}\n\n${userPrompt}`;
+      // Combine system and user prompts with known data context
+      return `${systemPrompt}\n\n${userPrompt}${knownDataContext}`;
     }
 
     // Fallback if YAML protocol not loaded (shouldn't happen in production)
-    return this.getFallbackPrompt(requests, userContext);
+    return this.getFallbackPrompt(requests, userContext) + knownDataContext;
   }
 
   /**
@@ -432,5 +460,170 @@ Return as JSON with fields organized into logical sections.`;
       .replace(/([A-Z])/g, ' $1')
       .trim()
       .replace(/\b\w/g, l => l.toUpperCase());
+  }
+
+  /**
+   * Query business memory for known data
+   */
+  private async queryBusinessMemory(businessId: string): Promise<BusinessKnowledge | null> {
+    try {
+      const memory = await this.toolChain.searchBusinessMemory(
+        businessId,
+        ['identity', 'contact_info', 'structure', 'operations'],
+        0.3 // Get all data, we'll decide based on confidence
+      );
+      return memory;
+    } catch (error) {
+      const taskLogger = createTaskLogger('ux-optimization');
+      taskLogger.warn('Could not query business memory', {
+        businessId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Apply intelligent pre-filling based on confidence levels
+   */
+  private async applyIntelligentPrefilling(
+    request: UIRequest, 
+    knownData: BusinessKnowledge
+  ): Promise<UIRequest> {
+    const taskLogger = createTaskLogger('ux-optimization');
+    
+    // Analyze each field in the request
+    const fields = request.semanticData.fields || [];
+    const enhancedFields = [];
+    
+    for (const field of fields) {
+      const fieldName = field.name || field.id;
+      const knownValue = this.findKnownValue(fieldName, knownData);
+      
+      if (knownValue) {
+        const confidence = knownValue.confidence || 0.5;
+        
+        if (confidence >= 0.9) {
+          // High confidence: Pre-fill as value
+          enhancedFields.push({
+            ...field,
+            value: knownValue.value,
+            placeholder: knownValue.value,
+            help: `We've filled this based on your profile (${knownValue.source || 'saved data'})`
+          });
+        } else if (confidence >= 0.6) {
+          // Medium confidence: Pre-fill but ask for confirmation
+          enhancedFields.push({
+            ...field,
+            value: knownValue.value,
+            placeholder: knownValue.value,
+            help: `Please confirm: ${field.help || ''} (pre-filled from ${knownValue.source || 'previous data'})`,
+            label: `${field.label} (please verify)`
+          });
+        } else {
+          // Low confidence: Show as suggestion in placeholder
+          enhancedFields.push({
+            ...field,
+            placeholder: knownValue.value ? `e.g., ${knownValue.value}` : field.placeholder,
+            help: `${field.help || ''} (we have a suggestion based on your profile)`
+          });
+        }
+        
+        taskLogger.debug('Field enhanced with known data', {
+          field: fieldName,
+          confidence,
+          method: confidence >= 0.9 ? 'prefilled' : confidence >= 0.6 ? 'validation' : 'suggestion'
+        });
+      } else {
+        // No known value, keep field as is
+        enhancedFields.push(field);
+      }
+    }
+    
+    // Create validation-focused UIRequest if we have medium confidence data
+    const hasValidationNeeds = enhancedFields.some(f => 
+      f.value && f.label?.includes('verify')
+    );
+    
+    if (hasValidationNeeds) {
+      request.semanticData.title = `Please verify your information`;
+      request.semanticData.description = `We've pre-filled some information based on your profile. Please review and confirm it's correct.`;
+    }
+    
+    request.semanticData.fields = enhancedFields;
+    return request;
+  }
+
+  /**
+   * Find known value for a field from business memory
+   */
+  private findKnownValue(fieldName: string, knownData: BusinessKnowledge): any {
+    // Map common field names to business memory paths
+    const fieldMappings: Record<string, string[]> = {
+      'business_email': ['facts.primary_email', 'facts.contact_email', 'facts.email'],
+      'contact_email': ['facts.primary_email', 'facts.contact_email', 'facts.email'],
+      'email': ['facts.primary_email', 'facts.contact_email', 'facts.email'],
+      'business_phone': ['facts.primary_phone', 'facts.contact_phone', 'facts.phone'],
+      'contact_phone': ['facts.primary_phone', 'facts.contact_phone', 'facts.phone'],
+      'phone': ['facts.primary_phone', 'facts.contact_phone', 'facts.phone'],
+      'business_name': ['facts.legal_name', 'facts.business_name', 'facts.name'],
+      'legal_business_name': ['facts.legal_name', 'facts.business_name'],
+      'owner_name': ['facts.owner_name', 'facts.primary_contact'],
+      'preferred_contact_method': ['preferences.contact_method', 'preferences.communication_preference']
+    };
+    
+    const paths = fieldMappings[fieldName.toLowerCase()] || [`facts.${fieldName}`, `preferences.${fieldName}`];
+    
+    for (const path of paths) {
+      const value = this.getNestedValue(knownData, path);
+      if (value !== undefined && value !== null) {
+        // Try to get confidence for this specific field
+        const confidence = this.getFieldConfidence(fieldName, knownData);
+        const source = this.getFieldSource(fieldName, knownData);
+        return { value, confidence, source };
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Get nested value from object using dot notation
+   */
+  private getNestedValue(obj: any, path: string): any {
+    return path.split('.').reduce((current, key) => current?.[key], obj);
+  }
+
+  /**
+   * Get confidence level for a specific field
+   */
+  private getFieldConfidence(_fieldName: string, knownData: BusinessKnowledge): number {
+    // Use average confidence as baseline
+    // In production, this would query field-specific confidence
+    return knownData.metadata?.averageConfidence || 0.7;
+  }
+
+  /**
+   * Get source information for a field
+   */
+  private getFieldSource(_fieldName: string, _knownData: BusinessKnowledge): string {
+    // In production, this would track where each piece of data came from
+    return 'your business profile';
+  }
+
+  /**
+   * Fallback merge with business memory integration
+   */
+  private async fallbackMergeWithMemory(requests: UIRequest[], userContext?: any): Promise<UIRequest> {
+    let mergedRequest = this.fallbackMerge(requests);
+    
+    if (userContext?.businessId) {
+      const knownData = await this.queryBusinessMemory(userContext.businessId);
+      if (knownData) {
+        mergedRequest = await this.applyIntelligentPrefilling(mergedRequest, knownData);
+      }
+    }
+    
+    return mergedRequest;
   }
 }
