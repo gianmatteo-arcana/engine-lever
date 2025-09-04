@@ -1461,10 +1461,21 @@ Respond with a JSON array of field definitions.
     // Get available tools dynamically
     const availableTools = await this.toolChain.getAvailableTools();
     
-    logger.info('🔄 Starting ReAct reasoning loop', {
+    // Extract task details for better logging context
+    const taskDetails = {
+      taskType: request.taskContext?.taskType || 'unknown',
+      businessName: request.taskContext?.businessEntity?.name || 'unspecified',
+      currentPhase: request.taskContext?.currentState?.phase || 'initial',
+      operation: request.operation || 'general_execution'
+    };
+
+    logger.info(`🔄 [${this.specializedTemplate.agent.name}] Starting ReAct reasoning loop for ${taskDetails.taskType} task`, {
       agentId: this.specializedTemplate.agent.id,
+      agentName: this.specializedTemplate.agent.name,
       taskId: request.taskContext?.contextId,
-      availableTools: availableTools.length
+      taskDetails,
+      availableTools: availableTools.length,
+      reasoning: `Processing ${taskDetails.operation} for ${taskDetails.businessName || 'business'}`
     });
     
     // ReAct loop
@@ -2004,10 +2015,18 @@ Respond with a JSON array of field definitions.
     // 3. Request parameters take highest precedence (can override everything)
     Object.assign(availableData, request.parameters || {});
     
-    logger.debug('📊 Final availableData composition', {
+    logger.debug(`📊 [${this.specializedTemplate.agent.name}] Composed data for reasoning (${Object.keys(availableData).length} fields)`, {
       agentId: this.specializedTemplate.agent.id,
-      totalKeys: Object.keys(availableData).length,
-      keys: Object.keys(availableData).slice(0, 10) // Show first 10 to avoid log spam
+      agentName: this.specializedTemplate.agent.name,
+      taskId: request.taskContext?.contextId,
+      dataCategories: {
+        businessData: (availableData as any).businessEntity ? 'present' : 'missing',
+        taskData: (availableData as any).taskType ? 'present' : 'missing',
+        userInput: (availableData as any).userInput ? 'present' : 'missing',
+        contextHistory: (availableData as any).history ? `${(availableData as any).history.length} events` : 'none'
+      },
+      totalFields: Object.keys(availableData).length,
+      sampleFields: Object.keys(availableData).slice(0, 5) // Show first 5 fields
     });
     
     // Append ReAct enhancement to the inherited prompt
@@ -2973,13 +2992,21 @@ What is your decision for iteration ${iteration}?`;
         if (isTestMode) {
           logger.debug('📋 Task context not in database (test mode - using mock/empty context)', {
             contextId,
-            agentId: this.specializedTemplate.agent.id
+            agentId: this.specializedTemplate.agent.id,
+            agentName: this.specializedTemplate.agent.name
           });
         } else {
-          logger.warn('⚠️ Task context not found in database', {
-            contextId,
+          logger.warn(`⚠️ [${this.specializedTemplate.agent.name}] Task context '${contextId}' not found in database`, {
+            taskId: contextId,
             agentId: this.specializedTemplate.agent.id,
-            hint: 'Task may not exist or database connection issue'
+            agentName: this.specializedTemplate.agent.name,
+            possibleReasons: [
+              'Task does not exist yet (may be creating new task)',
+              'Task was deleted or expired',
+              'Database connection issue',
+              'Incorrect task ID provided'
+            ],
+            action: 'Agent will proceed with available context or create new task'
           });
         }
       }

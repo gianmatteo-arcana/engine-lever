@@ -253,11 +253,28 @@ export class TaskService {
         if (isTestMode) {
           logger.debug('Task fetch failed in test mode (expected - no database)', { contextId });
         } else {
-          logger.error('Failed to fetch task from database', { 
-            contextId, 
+          // Provide detailed context about the failure
+          const errorDetails = {
+            taskId: contextId,
+            operation: 'fetch_task_context',
             errorCode: error.code,
-            errorMessage: error.message 
-          });
+            errorMessage: error.message,
+            possibleCauses: [] as string[]
+          };
+
+          // Add specific guidance based on error code
+          if (error.code === 'PGRST116') {
+            errorDetails.possibleCauses.push('Task does not exist in database');
+            errorDetails.possibleCauses.push('Task may have been deleted');
+          } else if (error.message?.includes('network') || error.message?.includes('connection')) {
+            errorDetails.possibleCauses.push('Database connection issue');
+            errorDetails.possibleCauses.push('Check Supabase credentials and network');
+          } else {
+            errorDetails.possibleCauses.push('Database query failed');
+            errorDetails.possibleCauses.push('Check database schema and permissions');
+          }
+
+          logger.error(`Failed to fetch task '${contextId}' from database`, errorDetails);
         }
         return null;
       }
