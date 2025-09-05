@@ -48,31 +48,49 @@ router.get('/:taskId', requireAuth, async (req: Request, res: Response) => {
           .order('created_at', { ascending: true });
         
         // Build a synthetic timeline from database data
+        const taskStartTime = new Date(task.created_at);
+        const taskEndTime = task.status === 'completed' || task.status === 'failed' 
+          ? new Date(task.updated_at) 
+          : new Date();
+        
         timeline = {
           taskId,
-          startTime: new Date(task.created_at).toISOString(),
-          endTime: task.status === 'completed' ? new Date(task.updated_at).toISOString() : null,
-          events: events?.map(event => ({
-            timestamp: new Date(event.created_at).toISOString(),
-            type: event.event_type,
-            operation: event.operation,
-            actor: event.actor_id,
-            data: event.data || {}
-          })) || [],
+          startTime: taskStartTime.toISOString(),
+          endTime: task.status === 'completed' || task.status === 'failed' 
+            ? taskEndTime.toISOString() 
+            : null,
+          events: events?.map(event => {
+            const eventTime = new Date(event.created_at);
+            const relativeTime = eventTime.getTime() - taskStartTime.getTime();
+            return {
+              timestamp: eventTime.toISOString(),
+              relativeTime, // milliseconds since task start
+              type: event.event_type || event.type || 'unknown',
+              operation: event.operation || event.event_type || 'unknown',
+              actor: event.actor_id || event.actor_type || 'system',
+              data: event.data || event.metadata || {}
+            };
+          }) || [],
           status: task.status,
-          taskType: task.task_type
+          taskType: task.task_type || 'unknown'
         };
         
         // Build synthetic metrics
-        const duration = new Date(task.updated_at).getTime() - new Date(task.created_at).getTime();
+        const duration = taskEndTime.getTime() - taskStartTime.getTime();
         metrics = {
           taskId,
-          startTime: new Date(task.created_at).getTime(),
-          endTime: task.status === 'completed' ? new Date(task.updated_at).getTime() : undefined,
-          events: [],
+          startTime: taskStartTime.getTime(),
+          endTime: task.status === 'completed' || task.status === 'failed' 
+            ? taskEndTime.getTime() 
+            : undefined,
+          events: events?.map((event, index) => ({
+            timestamp: new Date(event.created_at).getTime(),
+            type: event.event_type || event.type || 'event',
+            index
+          })) || [],
           summary: {
             totalDuration: duration,
-            agentCount: 0,
+            agentCount: events?.filter(e => e.actor_type === 'agent').length || 0,
             averageDuration: duration,
             durations: {
               min: duration,
