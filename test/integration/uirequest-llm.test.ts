@@ -25,6 +25,7 @@ jest.mock('../../src/services/database', () => ({
   DatabaseService: {
     getInstance: jest.fn().mockReturnValue({
       insertTaskContextEntry: jest.fn().mockResolvedValue({ id: 'mock-id' }),
+      createTaskContextEvent: jest.fn().mockResolvedValue({ id: 'mock-event-id' }),
       getServiceClient: jest.fn().mockReturnValue({
         from: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
@@ -328,11 +329,11 @@ describe.skip('UIRequest LLM Integration Tests', () => {
       expect(response.status).toBe('needs_input');
       expect(response.uiRequests).toHaveLength(1);
       // The extracted UIRequest should match what was in contextUpdate.data.uiRequest
-      const extracted = response.uiRequests![0];
+      const extracted = response.uiRequests![0] as any;
       expect(extracted.templateType).toBe('form');
-      expect(extracted.semanticData?.title).toBe('Test Form');
-      expect(extracted.semanticData?.instructions).toBe('Test instructions');
-      expect(extracted.semanticData?.fields).toEqual([
+      expect(extracted.title).toBe('Test Form');
+      expect(extracted.instructions).toBe('Test instructions');
+      expect(extracted.fields).toEqual([
         {
           name: 'test_field',
           type: 'text',

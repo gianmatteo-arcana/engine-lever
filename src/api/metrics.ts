@@ -81,10 +81,10 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     
     // Get current task statuses from database
     let taskStatuses = null;
-    if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
       const supabase = createClient(
         process.env.SUPABASE_URL,
-        process.env.SUPABASE_ANON_KEY
+        process.env.SUPABASE_SERVICE_KEY
       );
       
       const { data: tasks } = await supabase

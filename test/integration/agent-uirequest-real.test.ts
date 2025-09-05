@@ -23,6 +23,7 @@ jest.mock('../../src/services/database', () => ({
   DatabaseService: {
     getInstance: jest.fn().mockReturnValue({
       insertTaskContextEntry: jest.fn().mockResolvedValue({ id: 'mock-id' }),
+      createTaskContextEvent: jest.fn().mockResolvedValue({ id: 'mock-event-id' }),
       getServiceClient: jest.fn().mockReturnValue({
         from: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
