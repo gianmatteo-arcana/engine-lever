@@ -25,6 +25,36 @@ router.get('/:taskId', requireAuth, async (req: Request, res: Response) => {
     let timeline = taskPerformanceTracker.getTaskTimeline(taskId);
     let metrics = taskPerformanceTracker.getTaskMetrics(taskId);
     
+    // If we have in-memory timeline, ensure events have labels
+    if (timeline && timeline.events) {
+      timeline.events = timeline.events.map((event: any) => {
+        if (event.label) return event; // Already has label
+        
+        // Add label based on event type and name
+        let label = event.name || event.type || 'Unknown Event';
+        
+        if (event.type === 'agent_start') {
+          label = `Agent Started: ${event.name || 'Unknown'}`;
+        } else if (event.type === 'agent_complete') {
+          label = `Agent Completed: ${event.name || 'Unknown'}`;
+        } else if (event.type === 'tool_call') {
+          label = `Tool: ${event.name || 'Unknown'}`;
+        } else if (event.type === 'llm_call') {
+          label = `LLM Call: ${event.name || 'Unknown'}`;
+        } else if (event.type === 'database') {
+          label = `Database: ${event.name || 'Query'}`;
+        } else if (event.type === 'error') {
+          label = `Error: ${event.details?.message || event.name || 'Unknown'}`;
+        }
+        
+        return {
+          ...event,
+          label,
+          relativeTime: event.relativeTime || (event.time ? new Date(event.time).getTime() - new Date(timeline.startTime).getTime() : 0)
+        };
+      });
+    }
+    
     // If not in memory, fetch from database
     if (!timeline && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
       const supabase = createClient(
@@ -62,12 +92,41 @@ router.get('/:taskId', requireAuth, async (req: Request, res: Response) => {
           events: events?.map(event => {
             const eventTime = new Date(event.created_at);
             const relativeTime = eventTime.getTime() - taskStartTime.getTime();
+            
+            // Create a descriptive label for the event
+            const eventType = event.event_type || event.type || 'unknown';
+            const operation = event.operation || '';
+            const actor = event.actor_id || event.actor_type || '';
+            
+            let label = eventType;
+            if (eventType === 'AGENT_EXECUTION_STARTED') {
+              label = `Agent Started: ${actor || 'Unknown Agent'}`;
+            } else if (eventType === 'AGENT_EXECUTION_COMPLETED') {
+              label = `Agent Completed: ${actor || 'Unknown Agent'}`;
+            } else if (eventType === 'AGENT_EXECUTION_PAUSED') {
+              label = `Agent Paused (Needs Input): ${actor || 'Unknown Agent'}`;
+            } else if (eventType === 'TASK_STATUS_CHANGE') {
+              const newStatus = event.data?.status || event.metadata?.status || 'unknown';
+              label = `Status → ${newStatus}`;
+            } else if (eventType === 'SUBTASK_STARTED') {
+              label = `Subtask: ${operation || 'Started'}`;
+            } else if (eventType === 'SUBTASK_COMPLETED') {
+              label = `Subtask Done: ${operation || 'Completed'}`;
+            } else if (eventType === 'USER_INPUT_RECEIVED') {
+              label = 'User Input Received';
+            } else if (eventType === 'ERROR') {
+              label = `Error: ${event.data?.message || 'Unknown error'}`;
+            } else if (operation) {
+              label = `${eventType}: ${operation}`;
+            }
+            
             return {
               timestamp: eventTime.toISOString(),
               relativeTime, // milliseconds since task start
-              type: event.event_type || event.type || 'unknown',
-              operation: event.operation || event.event_type || 'unknown',
-              actor: event.actor_id || event.actor_type || 'system',
+              type: eventType,
+              operation: operation,
+              actor: actor,
+              label, // Human-readable label for the event
               data: event.data || event.metadata || {}
             };
           }) || [],
