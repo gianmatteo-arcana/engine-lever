@@ -58,7 +58,7 @@ export class CaliforniaBusinessSearchTool {
    * Creates a new browser instance for this search
    */
   async searchByName(businessName: string): Promise<CaliforniaBusinessDetails[]> {
-    logger.info(`[CaliforniaBusinessSearch] Starting search for: ${businessName}`);
+    logger.debug(`[CaliforniaBusinessSearch] Starting search for: ${businessName}`);
     
     let stagehand: Stagehand | null = null;
     
@@ -69,7 +69,7 @@ export class CaliforniaBusinessSearchTool {
       
       stagehand = new Stagehand({
         env: 'LOCAL',
-        verbose: 1,
+        verbose: 0,  // Suppress verbose Stagehand logs
         domSettleTimeoutMs: 15000,
         localBrowserLaunchOptions: {
           headless,
@@ -92,7 +92,7 @@ export class CaliforniaBusinessSearchTool {
       const page = stagehand.page;
       await page.goto(this.searchUrl);
       
-      logger.info('[CaliforniaBusinessSearch] Navigated to search page');
+      logger.debug('[CaliforniaBusinessSearch] Navigated to search page');
       
       // Wait for page to fully load and detect iframe presence
       await new Promise(resolve => setTimeout(resolve, 5000)); // Allow time for dynamic content
@@ -100,14 +100,14 @@ export class CaliforniaBusinessSearchTool {
       // Check if iframe exists (headless vs non-headless difference)
       try {
         await page.waitForSelector('iframe', { timeout: 10000 });
-        logger.info('[CaliforniaBusinessSearch] Iframe detected, using iframe-aware approach');
+        logger.debug('[CaliforniaBusinessSearch] Iframe detected, using iframe-aware approach');
         
         // Use iframe-aware approach
         await page.act({ action: 'Select "Corporation Name" from the search type dropdown', iframes: true, domSettleTimeoutMs: 15000 });
         await page.act({ action: `Enter "${businessName}" in the business name search field`, iframes: true, domSettleTimeoutMs: 15000 });
         await page.act({ action: 'Click the Search button', iframes: true, domSettleTimeoutMs: 15000 });
       } catch (iframeError) {
-        logger.info('[CaliforniaBusinessSearch] No iframe detected, using direct approach');
+        logger.debug('[CaliforniaBusinessSearch] No iframe detected, using direct approach');
         
         // Use direct approach for non-iframe version
         await page.act({ action: 'Select "Corporation Name" from the search type dropdown', domSettleTimeoutMs: 15000 });
@@ -123,7 +123,7 @@ export class CaliforniaBusinessSearchTool {
         logger.warn('[CaliforniaBusinessSearch] Page load timeout, proceeding with extraction');
       }
       
-      logger.info('[CaliforniaBusinessSearch] Extracting search results');
+      logger.debug('[CaliforniaBusinessSearch] Extracting search results');
       
       // Extract the search results
       const searchResultsSchema = z.object({
@@ -158,17 +158,17 @@ export class CaliforniaBusinessSearchTool {
       const searchResults = extractedData.results || [];
       
       if (searchResults.length === 0) {
-        logger.info('[CaliforniaBusinessSearch] No results found');
+        logger.debug('[CaliforniaBusinessSearch] No results found');
         return [];
       }
       
-      logger.info(`[CaliforniaBusinessSearch] Found ${searchResults.length} results`);
+      logger.debug(`[CaliforniaBusinessSearch] Found ${searchResults.length} results`);
       
       // For the first result, automatically fetch detailed information
       // This provides agents with complete data they need
       if (searchResults.length > 0) {
         const firstResult = searchResults[0];
-        logger.info(`[CaliforniaBusinessSearch] Fetching detailed info for top result: ${firstResult.entityNumber}`);
+        logger.debug(`[CaliforniaBusinessSearch] Fetching detailed info for top result: ${firstResult.entityNumber}`);
         
         // Close current browser and create new one for entity search
         if (stagehand) {
@@ -181,11 +181,11 @@ export class CaliforniaBusinessSearchTool {
         if (detailedResult) {
           // Replace the first result with detailed version
           searchResults[0] = detailedResult;
-          logger.info(`[CaliforniaBusinessSearch] Enhanced first result with full details including EIN, addresses, and agent info`);
+          logger.debug(`[CaliforniaBusinessSearch] Enhanced first result with full details including EIN, addresses, and agent info`);
         }
       }
       
-      logger.info(`[CaliforniaBusinessSearch] Completed search with ${searchResults.length} results (first has full details)`);
+      logger.info(`[CaliforniaBusinessSearch] Found ${searchResults.length} business records`);
       return searchResults;
       
     } catch (error) {
@@ -196,7 +196,7 @@ export class CaliforniaBusinessSearchTool {
       if (stagehand) {
         try {
           await stagehand.close();
-          logger.info('[CaliforniaBusinessSearch] Browser instance closed');
+          logger.debug('[CaliforniaBusinessSearch] Browser instance closed');
         } catch (closeError) {
           logger.error('[CaliforniaBusinessSearch] Error closing browser:', closeError);
         }
@@ -208,7 +208,7 @@ export class CaliforniaBusinessSearchTool {
    * Search for a business by entity number
    */
   async searchByEntityNumber(entityNumber: string): Promise<CaliforniaBusinessDetails | null> {
-    logger.info(`[CaliforniaBusinessSearch] Starting search for entity: ${entityNumber}`);
+    logger.debug(`[CaliforniaBusinessSearch] Starting search for entity: ${entityNumber}`);
     
     let stagehand: Stagehand | null = null;
     
@@ -218,7 +218,7 @@ export class CaliforniaBusinessSearchTool {
       
       stagehand = new Stagehand({
         env: 'LOCAL',
-        verbose: 1,
+        verbose: 0,  // Suppress verbose Stagehand logs
         domSettleTimeoutMs: 15000,
         localBrowserLaunchOptions: {
           headless,
@@ -247,14 +247,14 @@ export class CaliforniaBusinessSearchTool {
       // Check if iframe exists (headless vs non-headless difference)
       try {
         await page.waitForSelector('iframe', { timeout: 10000 });
-        logger.info('[CaliforniaBusinessSearch] Iframe detected, using iframe-aware approach');
+        logger.debug('[CaliforniaBusinessSearch] Iframe detected, using iframe-aware approach');
         
         // Use iframe-aware approach
         await page.act({ action: 'Select "Entity Number" from the search type dropdown', iframes: true, domSettleTimeoutMs: 15000 });
         await page.act({ action: `Enter "${entityNumber}" in the entity number search field`, iframes: true, domSettleTimeoutMs: 15000 });
         await page.act({ action: 'Click the Search button', iframes: true, domSettleTimeoutMs: 15000 });
       } catch (iframeError) {
-        logger.info('[CaliforniaBusinessSearch] No iframe detected, using direct approach');
+        logger.debug('[CaliforniaBusinessSearch] No iframe detected, using direct approach');
         
         // Use direct approach for non-iframe version
         await page.act({ action: 'Select "Entity Number" from the search type dropdown', domSettleTimeoutMs: 15000 });
@@ -358,7 +358,7 @@ export class CaliforniaBusinessSearchTool {
         domSettleTimeoutMs: 15000
       });
       
-      logger.info('[CaliforniaBusinessSearch] Entity details extracted successfully');
+      logger.debug('[CaliforniaBusinessSearch] Entity details extracted successfully');
       return details as CaliforniaBusinessDetails;
       
     } catch (error) {
@@ -390,7 +390,7 @@ export class CaliforniaBusinessSearchTool {
       timeoutMs = 45000
     } = options;
 
-    logger.info(`[CaliforniaBusinessSearch] Agent lookup for: "${businessName}"`);
+    logger.debug(`[CaliforniaBusinessSearch] Agent lookup for: "${businessName}"`);
 
     // Input validation
     if (!businessName || businessName.trim().length < 2) {
@@ -474,7 +474,7 @@ export class CaliforniaBusinessSearchTool {
           entity: entityResult
         };
       }
-      logger.info(`[CaliforniaBusinessSearch] Entity number failed, trying name search`);
+      logger.debug(`[CaliforniaBusinessSearch] Entity number failed, trying name search`);
     }
 
     // Try name search
@@ -498,7 +498,7 @@ export class CaliforniaBusinessSearchTool {
       try {
         const results = await this.searchByName(variation);
         if (results && results.length > 0) {
-          logger.info(`[CaliforniaBusinessSearch] Found results with variation: "${variation}"`);
+          logger.debug(`[CaliforniaBusinessSearch] Found results with variation: "${variation}"`);
           return {
             success: false,
             confidence: 'low',
