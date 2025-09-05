@@ -30,7 +30,24 @@ export class TaskRecoveryService {
     try {
       logger.info('🔍 Checking for orphaned tasks to recover...');
       
+      // First, let's see ALL tasks and their statuses for debugging
+      const { data: allTasks } = await this.supabase
+        .from('tasks')
+        .select('id, status, task_type, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(10);
+      
+      if (allTasks && allTasks.length > 0) {
+        logger.info(`📊 Current task statuses (last 10):`);
+        allTasks.forEach(task => {
+          const timeSinceUpdate = Date.now() - new Date(task.updated_at).getTime();
+          const minutes = Math.floor(timeSinceUpdate / 60000);
+          logger.info(`   - ${task.id.substring(0, 8)}... | ${task.status} | ${task.task_type} | ${minutes}m ago`);
+        });
+      }
+      
       // Find tasks that are in progress (not paused, not completed, not failed)
+      // Hot reload interrupts immediately, so we recover ALL in-progress tasks
       const { data: orphanedTasks, error } = await this.supabase
         .from('tasks')
         .select('*')
@@ -42,7 +59,17 @@ export class TaskRecoveryService {
       }
       
       if (!orphanedTasks || orphanedTasks.length === 0) {
-        logger.info('✅ No orphaned tasks found');
+        logger.info('✅ No orphaned tasks found with status AGENT_EXECUTION_IN_PROGRESS');
+        
+        // Check for PAUSED tasks that might need attention
+        const { data: pausedTasks } = await this.supabase
+          .from('tasks')
+          .select('id, task_type')
+          .eq('status', 'AGENT_EXECUTION_PAUSED');
+        
+        if (pausedTasks && pausedTasks.length > 0) {
+          logger.info(`ℹ️  Found ${pausedTasks.length} task(s) in PAUSED state (waiting for user input)`);
+        }
         return;
       }
       

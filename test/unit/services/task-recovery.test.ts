@@ -88,7 +88,9 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
       select: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
       insert: jest.fn().mockReturnThis(),
-      update: jest.fn().mockReturnThis()
+      update: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis()
     };
     
     (createClient as jest.Mock).mockReturnValue(mockSupabaseClient);
@@ -111,6 +113,12 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
   
   describe('Violent Disruption Scenarios', () => {
     it('should detect and recover a task interrupted mid-execution', async () => {
+      // Mock the initial status check query
+      mockSupabaseClient.limit.mockResolvedValueOnce({
+        data: [syntheticTask],
+        error: null
+      });
+      
       // Simulate: Task was in progress when server crashed
       mockSupabaseClient.eq.mockResolvedValueOnce({
         data: [syntheticTask],
@@ -165,6 +173,12 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
       const task2 = { ...syntheticTask, id: uuidv4(), task_type: 'soi_filing' };
       const task3 = { ...syntheticTask, id: uuidv4(), task_type: 'compliance_check' };
       
+      // Mock the initial status check query
+      mockSupabaseClient.limit.mockResolvedValueOnce({
+        data: [syntheticTask, task2, task3],
+        error: null
+      });
+      
       // Simulate: Multiple tasks were interrupted
       mockSupabaseClient.eq.mockResolvedValueOnce({
         data: [syntheticTask, task2, task3],
@@ -190,6 +204,12 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
     });
     
     it('should mark task as FAILED if recovery fails', async () => {
+      // Mock the initial status check query
+      mockSupabaseClient.limit.mockResolvedValueOnce({
+        data: [syntheticTask],
+        error: null
+      });
+      
       // Simulate: Task found but recovery fails
       mockSupabaseClient.eq.mockResolvedValueOnce({
         data: [syntheticTask],
@@ -220,6 +240,12 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
       // This test verifies we only recover IN_PROGRESS tasks
       // PAUSED tasks should be left alone
       
+      // Mock the initial status check query
+      mockSupabaseClient.limit.mockResolvedValueOnce({
+        data: [],
+        error: null
+      });
+      
       // Simulate: No IN_PROGRESS tasks found
       mockSupabaseClient.eq.mockResolvedValueOnce({
         data: [],
@@ -235,6 +261,12 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
     });
     
     it('should throw error if database query fails', async () => {
+      // Mock the initial status check query
+      mockSupabaseClient.limit.mockResolvedValueOnce({
+        data: [],
+        error: null
+      });
+      
       // Simulate: Database error
       mockSupabaseClient.eq.mockResolvedValueOnce({
         data: null,
@@ -248,6 +280,12 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
   
   describe('Recovery State Persistence', () => {
     it('should persist recovery event in task history', async () => {
+      // Mock the initial status check query
+      mockSupabaseClient.limit.mockResolvedValueOnce({
+        data: [syntheticTask],
+        error: null
+      });
+      
       // Setup
       mockSupabaseClient.eq.mockResolvedValueOnce({
         data: [syntheticTask],
@@ -275,6 +313,13 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
     it('should include recovery metadata', async () => {
       // Setup
       const beforeRecovery = new Date();
+      
+      // Mock the initial status check query
+      mockSupabaseClient.limit.mockResolvedValueOnce({
+        data: [syntheticTask],
+        error: null
+      });
+      
       mockSupabaseClient.eq.mockResolvedValueOnce({
         data: [syntheticTask],
         error: null
@@ -308,6 +353,12 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
       
       // Phase 3: Server restarts
       // - Recovery service runs on startup
+      // Mock the initial status check query
+      mockSupabaseClient.limit.mockResolvedValueOnce({
+        data: [runningTask],
+        error: null
+      });
+      
       mockSupabaseClient.eq.mockResolvedValueOnce({
         data: [runningTask],
         error: null

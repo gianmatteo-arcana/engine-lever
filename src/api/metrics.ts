@@ -9,6 +9,7 @@ import { Router, Request, Response } from 'express';
 import { taskPerformanceTracker } from '../services/task-performance-tracker';
 import { logger } from '../utils/logger';
 import { requireAuth } from '../middleware/auth';
+import { createClient } from '@supabase/supabase-js';
 
 const router = Router();
 
@@ -78,11 +79,45 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
         summary: m.summary
       }));
     
+    // Get current task statuses from database
+    let taskStatuses = null;
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+      const supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_ANON_KEY
+      );
+      
+      const { data: tasks } = await supabase
+        .from('tasks')
+        .select('id, status, task_type, created_at, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(20);
+      
+      if (tasks) {
+        // Group tasks by status
+        taskStatuses = {
+          total: tasks.length,
+          byStatus: tasks.reduce((acc: any, task) => {
+            acc[task.status] = (acc[task.status] || 0) + 1;
+            return acc;
+          }, {}),
+          recent: tasks.slice(0, 5).map(task => ({
+            id: task.id.substring(0, 8) + '...',
+            status: task.status,
+            type: task.task_type,
+            lastUpdate: new Date(task.updated_at).toISOString(),
+            ageMinutes: Math.floor((Date.now() - new Date(task.updated_at).getTime()) / 60000)
+          }))
+        };
+      }
+    }
+    
     return res.json({
       success: true,
       data: {
         statistics,
-        recentTasks
+        recentTasks,
+        taskStatuses
       }
     });
   } catch (error) {
