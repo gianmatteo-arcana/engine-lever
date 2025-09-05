@@ -110,14 +110,58 @@ router.get('/:taskId', requireAuth, async (req: Request, res: Response) => {
       });
     }
     
+    // Calculate duration if not present
+    let duration = 0;
+    if (timeline) {
+      if (timeline.duration) {
+        duration = timeline.duration;
+      } else if (timeline.startTime) {
+        const start = new Date(timeline.startTime).getTime();
+        const end = timeline.endTime ? new Date(timeline.endTime).getTime() : Date.now();
+        duration = end - start;
+      }
+    }
+    
+    // Ensure consistent response format
+    const responseData = {
+      timeline: {
+        ...timeline,
+        duration, // Ensure duration is always present
+        taskId,
+        startTime: timeline?.startTime || null,
+        endTime: timeline?.endTime || null,
+        events: timeline?.events || [],
+        status: timeline?.status || 'unknown',
+        taskType: timeline?.taskType || 'unknown'
+      },
+      metrics: metrics?.summary || {
+        totalDuration: duration,
+        agentCount: timeline?.events?.length || 0,
+        averageDuration: duration,
+        durations: {
+          min: duration,
+          max: duration,
+          average: duration
+        }
+      },
+      taskId,
+      status: timeline?.status || (metrics?.endTime ? 'completed' : 'active'),
+      duration, // Add duration at top level for easy access
+      // Add debug info
+      source: timeline ? (metrics ? 'memory' : 'database') : 'not_found'
+    };
+    
+    logger.debug(`Metrics for task ${taskId}`, {
+      taskId,
+      source: responseData.source,
+      hasTimeline: !!timeline,
+      hasMetrics: !!metrics,
+      eventCount: timeline?.events?.length || 0
+    });
+    
     return res.json({
       success: true,
-      data: {
-        timeline,
-        metrics: metrics?.summary,
-        taskId,
-        status: metrics?.endTime ? 'completed' : 'active'
-      }
+      data: responseData
     });
   } catch (error) {
     logger.error('Error fetching task metrics', {
