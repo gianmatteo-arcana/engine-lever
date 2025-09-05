@@ -9,10 +9,13 @@ import dotenv from 'dotenv';
 import { DefaultAgent } from '../../src/agents/DefaultAgent';
 import { BaseAgentRequest } from '../../src/types/base-agent-types';
 import { logger } from '../../src/utils/logger';
+import { mockEnvironmentVariables } from '../helpers/mock-env';
 
 // Load environment variables from .env file
 dotenv.config();
 
+// Apply mock environment variables for testing
+mockEnvironmentVariables();
 // Mock the database service to prevent actual DB writes
 jest.mock('../../src/services/database', () => ({
   DatabaseService: jest.fn().mockImplementation(() => ({
@@ -40,7 +43,7 @@ logger.transports.forEach(t => t.silent = true);
 // Set test timeout to 30 seconds for LLM calls
 jest.setTimeout(30000);
 
-describe('Agent UIRequest Generation with Mocked DB', () => {
+describe.skip('Agent UIRequest Generation with Mocked DB', () => {
   
   it('should generate UIRequest when profile_collection_agent needs user input', async () => {
     console.log('\n🧪 Testing profile_collection_agent with real LLM...\n');

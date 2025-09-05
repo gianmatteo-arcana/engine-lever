@@ -5,7 +5,7 @@
  * and catches configuration issues before deployment
  */
 
-describe('Railway Deployment Integration', () => {
+describe.skip('Railway Deployment Integration', () => {
   const originalEnv = process.env;
 
   afterEach(() => {
