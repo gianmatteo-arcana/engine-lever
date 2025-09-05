@@ -495,14 +495,30 @@ router.get('/:taskId/events',
         const dbService = DatabaseService.getInstance();
         
         // Verify user owns this task (with retry for newly created tasks)
+        logger.info('[SSE] Checking if task exists in database', { taskId, userId });
         let task = await dbService.getTask(userId, taskId);
+        logger.info('[SSE] Initial task check result', { 
+          taskId, 
+          userId, 
+          taskFound: !!task,
+          taskStatus: task?.status,
+          taskType: task?.task_type
+        });
+        
         if (!task) {
           logger.info('[SSE] Task not found immediately, retrying for newly created task', { taskId, userId });
           await new Promise(resolve => setTimeout(resolve, 500));
           task = await dbService.getTask(userId, taskId);
+          logger.info('[SSE] Retry task check result', { 
+            taskId, 
+            userId, 
+            taskFound: !!task,
+            taskStatus: task?.status,
+            taskType: task?.task_type
+          });
           
           if (!task) {
-            logger.warn('[SSE] Task not found after retry', { taskId, userId });
+            logger.warn('[SSE] Task not found after retry - returning 404', { taskId, userId });
             return res.status(404).json({ error: 'Task not found' });
           }
         }
@@ -536,6 +552,7 @@ router.get('/:taskId/events',
         };
         
         // Skip history since client fetches it separately via REST API
+        logger.info('[SSE] Setting up A2A subscription', { taskId, userId });
         const unsubscribe = a2aEventBus.subscribe(
           taskId, 
           (event) => {

@@ -18,6 +18,7 @@ import { initializeServices } from './services/dependency-injection';
 import { applySecurityValidations } from './middleware/validation';
 import { complianceAuditLogger, securityAuditLogger, performanceAuditLogger } from './middleware/audit-logging';
 import { getEventListener } from './services/event-listener';
+import { TaskService } from './services/task-service';
 import { productionSecurityHeaders, developmentSecurityHeaders, cacheControlHeaders } from './middleware/security-headers';
 
 dotenv.config();
@@ -356,6 +357,16 @@ async function startServer() {
       } catch (error) {
         logger.error('Failed to start Event Listener', error);
         // Non-critical - continue startup even if listener fails
+      }
+      
+      // Recover any orphaned tasks from previous server session
+      try {
+        const taskService = TaskService.getInstance();
+        await taskService.recoverOrphanedTasks();
+      } catch (error) {
+        logger.error('❌ Task recovery failed - this is a critical bug:', error);
+        // Continue startup but log this as a critical issue
+        // Tasks will be stuck until manually recovered or fixed
       }
     } else {
       logger.warn('⚠️ Supabase not configured - A2A system running without persistence');

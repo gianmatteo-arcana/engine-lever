@@ -22,7 +22,8 @@
 import { logger } from '../utils/logger';
 import { AgentRequest, AgentResponse } from '../types/task-engine.types';
 import { BaseAgentRequest, BaseAgentResponse } from '../types/base-agent-types';
-import { DefaultAgent } from '../agents/DefaultAgent';
+import { ORCHESTRATOR_OPS } from '../constants/orchestrator-operations';
+// Removed DefaultAgent import - now handles any agent type
 
 export class AgentExecutor {
   /**
@@ -33,8 +34,11 @@ export class AgentExecutor {
    * @param request - The agent request from OrchestratorAgent
    * @returns The agent's response
    */
-  static async execute(agent: DefaultAgent, request: AgentRequest): Promise<AgentResponse> {
-    const agentId = agent.getAgentId();
+  static async execute(agent: any, request: AgentRequest): Promise<AgentResponse> {
+    // Get agent ID - handle both DefaultAgent and BaseAgent
+    const agentId = typeof agent.getAgentId === 'function' 
+      ? agent.getAgentId() 
+      : (agent.specializedTemplate?.agent?.id || 'unknown_agent');
     
     logger.info('🚀 Agent Executor: Starting agent execution', {
       agentId,
@@ -43,8 +47,8 @@ export class AgentExecutor {
       taskId: request.taskContext?.contextId
     });
     
-    // Let the agent record its own execution event
-    if (request.taskContext) {
+    // Let the agent record its own execution event (if it supports it)
+    if (request.taskContext && typeof agent.recordExecutionEvent === 'function') {
       await agent.recordExecutionEvent(request.taskContext, {
         type: 'AGENT_EXECUTION_STARTED',
         agentId,
@@ -94,10 +98,10 @@ export class AgentExecutor {
       
       // Let the agent record its own execution event
       // CRITICAL: Use PAUSED when agent needs input, not COMPLETED
-      if (request.taskContext) {
+      if (request.taskContext && typeof agent.recordExecutionEvent === 'function') {
         const eventType = agentResponse.status === 'needs_input' 
-          ? 'AGENT_EXECUTION_PAUSED'  // Agent is paused waiting for user input
-          : 'AGENT_EXECUTION_COMPLETED'; // Agent finished successfully
+          ? ORCHESTRATOR_OPS.AGENT_EXECUTION_PAUSED  // Agent is paused waiting for user input
+          : ORCHESTRATOR_OPS.PHASE_COMPLETED; // Agent finished successfully
           
         await agent.recordExecutionEvent(request.taskContext, {
           type: eventType,

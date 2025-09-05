@@ -1,0 +1,7 @@
+# Debug scripts - DO NOT COMMIT
+check-*.ts
+debug-*.ts
+test-task-*.ts
+fix-*.ts
+direct-*.ts
+cleanup-*.ts

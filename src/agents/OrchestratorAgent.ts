@@ -161,6 +161,8 @@ export class OrchestratorAgent extends BaseAgent {
   private agentRegistry: Map<string, AgentCapability>;
   private activeExecutions: Map<string, ExecutionPlan>;
   private pendingUIRequests: Map<string, UIRequest[]>;
+  // NO agent tracking - use factory pattern for all agent instantiation
+  // Factory handles lifecycle - we just notify when task completes/fails
   
   // Pure A2A System - Agent Lifecycle Management via DI
   // NO AGENT INSTANCES STORED - Using DI and task-centered message bus
@@ -316,6 +318,9 @@ export class OrchestratorAgent extends BaseAgent {
       // Update the current state to reflect we're resuming
       // Set task status to in_progress (using TASK_STATUS enum)
       taskContext.currentState.status = TASK_STATUS.IN_PROGRESS;
+      
+      // CRITICAL: Also persist this status change to the database
+      await this.updateTaskStatus(taskContext, TASK_STATUS.IN_PROGRESS);
       
       // Clean up any stale execution plans to allow garbage collection
       // Agents should be ephemeral - created when needed, destroyed when done
@@ -616,7 +621,13 @@ export class OrchestratorAgent extends BaseAgent {
               await this.continueExecution(taskId);
             }
           } else {
-            logger.error('Cannot retry - execution or subtasks not found', { taskId, agentId });
+            logger.error(`Cannot retry agent "${agentId}" for task ${taskId} - execution plan or subtasks not found. The task may have been cleaned up or the execution plan was not properly stored.`, { 
+              taskId, 
+              agentId,
+              hasExecution: !!execution,
+              hasSubtasks: execution?.subtasks ? 'yes' : 'no',
+              executionKeys: execution ? Object.keys(execution) : []
+            });
           }
         }, action.retry.delay);
         break;
@@ -822,6 +833,9 @@ export class OrchestratorAgent extends BaseAgent {
         });
         
         execution.status = 'completed';
+        
+        // Clean up agents for completed task
+        this.cleanupAgentsForTask(taskId);
         this.activeExecutions.delete(taskId);
       } else {
         // Critical failures exist
@@ -1059,6 +1073,17 @@ export class OrchestratorAgent extends BaseAgent {
       context: JSON.stringify(context, null, 2)
     });
     
+    // CRITICAL: Immediately mark task as in_progress for recovery
+    // This ensures the task can be recovered if the process crashes
+    if (context.currentState.status === TASK_STATUS.PENDING) {
+      logger.info('📌 Immediately setting task status to IN_PROGRESS for recovery', {
+        contextId: context.contextId,
+        previousStatus: context.currentState.status
+      });
+      context.currentState.status = TASK_STATUS.IN_PROGRESS;
+      await this.updateTaskStatus(context, TASK_STATUS.IN_PROGRESS);
+    }
+    
     try {
       // Determine if we're resuming based on PERSISTENT HISTORY
       // Check if we have any execution history that indicates work was started
@@ -1071,6 +1096,9 @@ export class OrchestratorAgent extends BaseAgent {
       // We're resuming if:
       // 1. We have execution history (work was started)
       // 2. Task is not in a terminal state
+      
+      // Recovery: Check for unresolved UIRequests and reinstantiate agents as needed
+      await this.recoverAgentsForPendingUIRequests(context);
       const isResuming = hasExecutionHistory && 
                         context.currentState.status !== TASK_STATUS.COMPLETED &&
                         context.currentState.status !== TASK_STATUS.FAILED &&
@@ -1230,6 +1258,8 @@ export class OrchestratorAgent extends BaseAgent {
       }
       
       // 4. Execute plan phases (starting from the correct index)
+      // Status is already set to IN_PROGRESS at the start of orchestrateTask
+      
       let allPhasesCompleted = true;
       let phaseIndex = startPhaseIndex;
       const phases = executionPlan.phases || [];
@@ -1821,7 +1851,8 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
           const result = subtaskResults[index];
           if (result.status === 'fulfilled') {
             results.push(result.value);
-            if (result.value.uiRequests) {
+            // Collect UIRequests as-is (no modification)
+            if (result.value.uiRequests && result.value.uiRequests.length > 0) {
               uiRequests.push(...result.value.uiRequests);
             }
           } else {
@@ -1873,17 +1904,26 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
               phaseData = { ...phaseData, ...subtaskResult.outputData };
             }
             
-            // Collect UI requests
-            if (subtaskResult.uiRequests) {
-              uiRequests.push(...subtaskResult.uiRequests);
+            // Collect UIRequests from subtasks, adding source agent info
+            if (subtaskResult.uiRequests && subtaskResult.uiRequests.length > 0) {
+              for (const uiRequest of subtaskResult.uiRequests) {
+                uiRequests.push({
+                  ...uiRequest,
+                  semanticData: {
+                    ...uiRequest.semanticData,
+                    sourceAgent: subtaskResult.agent || subtask.agent
+                  }
+                } as UIRequest);
+              }
             }
             
           } catch (error) {
-            logger.error('Subtask execution failed', {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            logger.error(`Subtask execution failed for "${subtask.description}" using agent "${subtask.agent}": ${errorMsg}`, {
               contextId: context.contextId,
               subtask: subtask.description,
               agent: subtask.agent,
-              error: error instanceof Error ? error.message : String(error)
+              error: errorMsg
             });
             
             // Apply fallback strategy for failed subtask
@@ -2153,11 +2193,12 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     subtask: any,
     error: any
   ): Promise<any> {
-    logger.error('🚨 Subtask execution failed, applying fallback strategy', {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    logger.error(`🚨 Applying fallback strategy for failed subtask "${subtask.description}" (agent: ${subtask.agent}) - Error: ${errorMsg}`, {
       contextId: context.contextId,
       subtask: subtask.description,
       agent: subtask.agent,
-      error: error instanceof Error ? error.message : String(error)
+      error: errorMsg
     });
     
     // Record the failure for audit trail
@@ -2478,6 +2519,7 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
   /**
    * Handle progressive disclosure of UI requests
    * Engine PRD Lines 50, 83-85
+   * Orchestrator only sends UIRequests - UXOptimizationAgent handles its own lifecycle
    */
   private async handleProgressiveDisclosure(
     context: TaskContext,
@@ -2489,57 +2531,16 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       return;
     }
     
-    // Intelligent batching and reordering
-    const optimized = await this.optimizeUIRequests(uiRequests);
+    // Just send UIRequests - UXOptimizationAgent will auto-detect via SSE if needed
+    logger.info('📤 Sending UIRequests to frontend', {
+      contextId: context.contextId,
+      requestCount: uiRequests.length
+    });
     
-    // Store pending requests
-    const pending = this.pendingUIRequests.get(context.contextId) || [];
-    pending.push(...optimized);
-    this.pendingUIRequests.set(context.contextId, pending);
-    
-    // Send batch if threshold reached
-    if (pending.length >= this.config.progressiveDisclosure.minBatchSize) {
-      const batch = pending.splice(0, this.config.progressiveDisclosure.minBatchSize);
-      await this.sendUIRequests(context, batch);
-    }
+    await this.sendUIRequests(context, uiRequests);
   }
   
-  /**
-   * Optimize UI requests to minimize user interruption
-   */
-  private async optimizeUIRequests(requests: UIRequest[]): Promise<UIRequest[]> {
-    // Use LLM to intelligently reorder requests
-    const optimizationPrompt = `
-      Reorder these UI requests to minimize user interruption:
-      1. Group related requests together
-      2. Put requests that might eliminate others first
-      3. Prioritize critical information
-      
-      Requests: ${JSON.stringify(requests)}
-      
-      Return the optimized order as a JSON array of request IDs.
-    `;
-    
-    try {
-      const response = await this.llmProvider.complete({
-        prompt: optimizationPrompt,
-        model: process.env.LLM_DEFAULT_MODEL || 'claude-3-5-sonnet-20241022',
-        temperature: 0.3,
-        systemPrompt: 'You optimize UI request ordering for minimal user interruption.'
-      });
-      
-      const optimizedOrder = JSON.parse(response.content) as string[];
-      
-      // Reorder requests based on LLM recommendation
-      return optimizedOrder
-        .map(id => requests.find(r => r.requestId === id))
-        .filter(r => r !== undefined) as UIRequest[];
-        
-    } catch (error) {
-      logger.warn('Failed to optimize UI requests, using original order', { error });
-      return requests;
-    }
-  }
+  
   
   /**
    * Send UI requests to frontend
@@ -2551,6 +2552,53 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       count: requests.length,
       types: requests.map(r => r.templateType)
     });
+    
+    // Instantiate UXOptimizationAgent if there are UIRequests
+    if (requests.length > 0) {
+      const taskId = context.contextId;
+      logger.info('🎯 Instantiating UXOptimizationAgent for task', {
+        taskId,
+        requestCount: requests.length
+      });
+      
+      // Use the agent discovery service factory pattern
+      // Factory will create a new instance per task (not cached)
+      const { agentDiscovery } = await import('../services/agent-discovery');
+      const agent = await agentDiscovery.instantiateAgent(
+        'ux_optimization_agent',
+        taskId, // Pass taskId as businessId for UXOptimizationAgent
+        (context.currentState as any)?.user_id
+      );
+      
+      // Call executeInternal directly since we need the response
+      // This is safe because we know it's a UXOptimizationAgent from the factory
+      const uxAgent = agent as any; // Cast to access protected method
+      const optimizationResult = await uxAgent.executeInternal({
+        taskContext: context,
+        operation: 'optimize_form_experience',
+        parameters: {
+          uiRequests: requests,
+          userContext: {
+            businessType: (context.currentState as any)?.business_type || 'small business',
+            experienceLevel: 'first-time',
+            industry: (context.currentState as any)?.industry || 'general'
+          }
+        }
+      });
+      
+      // Log the optimization result
+      if (optimizationResult.status === 'completed' && optimizationResult.uiRequests) {
+        logger.info('✅ UX Optimization completed', {
+          originalCount: requests.length,
+          optimizedCount: optimizationResult.uiRequests.length
+        });
+        
+        // Store optimized UIRequests if successful
+        if (optimizationResult.uiRequests.length > 0) {
+          requests = optimizationResult.uiRequests; // Replace with optimized version
+        }
+      }
+    }
     
     // Record FULL UI requests in context for proper persistence
     // UI requests are now stored as task_context_events
@@ -2578,6 +2626,71 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       contextId: context.contextId,
       requestCount: requests.length
     });
+  }
+  
+  /**
+   * Clean up agents for a completed task
+   */
+  private cleanupAgentsForTask(taskId: string): void {
+    // Clean up agent subscriptions
+    // Note: UXOptimizationAgent instances are not tracked here - they will be garbage collected
+    // when no longer referenced since they're not cached in the factory
+    if (this.activeTaskSubscriptions.has(taskId)) {
+      logger.info('🧹 Cleaning up agent subscriptions for completed task', { taskId });
+      this.activeTaskSubscriptions.delete(taskId);
+    }
+  }
+  
+  /**
+   * Recovery: Reinstantiate agents for pending UIRequests after system restart
+   */
+  private async recoverAgentsForPendingUIRequests(context: TaskContext): Promise<void> {
+    const taskId = context.contextId;
+    
+    // Check if there are pending UIRequests in the context history
+    const pendingUIRequests: UIRequest[] = [];
+    let hasUnresolvedUIRequests = false;
+    
+    // Scan history for UIRequest events
+    for (const entry of context.history) {
+      if (entry.operation === 'ui_requests_created' && entry.data?.uiRequests) {
+        // Found UIRequests
+        pendingUIRequests.push(...(entry.data.uiRequests as UIRequest[]));
+        hasUnresolvedUIRequests = true;
+      }
+      
+      if (entry.operation === 'ui_response_received') {
+        // UIRequests were resolved
+        hasUnresolvedUIRequests = false;
+        pendingUIRequests.length = 0;
+      }
+    }
+    
+    // If we have unresolved UIRequests, reinstantiate UXOptimizationAgent
+    if (hasUnresolvedUIRequests && pendingUIRequests.length > 0) {
+      logger.info('🔄 Recovering UXOptimizationAgent for pending UIRequests', {
+        taskId,
+        requestCount: pendingUIRequests.length
+      });
+      
+      // Use the agent discovery service factory pattern for proper DI
+      // Factory will create a new instance per task (not cached)
+      const { agentDiscovery } = await import('../services/agent-discovery');
+      await agentDiscovery.instantiateAgent(
+        'ux_optimization_agent',
+        taskId, // Pass taskId as businessId for UXOptimizationAgent
+        (context.currentState as any)?.user_id
+      );
+      
+      // The UXOptimizationAgent instance is now ready to process UIRequests
+      // It doesn't need explicit monitoring setup - it will process requests when called
+      // The agent instance will be garbage collected when no longer referenced
+      
+      logger.info('✅ UXOptimizationAgent instantiated for task recovery', { 
+        taskId,
+        info: 'Agent ready to process UIRequests when needed'
+      });
+    }
   }
   
   /**
@@ -2630,9 +2743,29 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       const taskService = TaskService.getInstance();
       await taskService.updateTaskStatus(context.contextId, status);
       
-      logger.info(`✅ Task status updated to ${status.toUpperCase()} in database`, {
+      // CRITICAL: Also update the in-memory context to keep it in sync
+      context.currentState.status = status;
+      
+      logger.info(`✅ Task status updated to ${status.toUpperCase()} in database and context`, {
         contextId: context.contextId
       });
+      
+      // Clean up agent instances for terminal states
+      if (status === TASK_STATUS.FAILED || status === TASK_STATUS.CANCELLED) {
+        try {
+          const { agentDiscovery } = await import('../services/agent-discovery');
+          agentDiscovery.cleanupTaskAgents(context.contextId);
+          logger.info(`♻️ Agent instances cleaned up for ${status} task`, {
+            taskId: context.contextId,
+            status
+          });
+        } catch (cleanupError) {
+          logger.warn('Could not clean up agent instances', {
+            taskId: context.contextId,
+            error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+          });
+        }
+      }
     } catch (error) {
       logger.error('Failed to update task status', {
         contextId: context.contextId,
@@ -2686,9 +2819,24 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     // NOTE: Knowledge extraction is handled as a phase in the execution plan
     // as instructed in orchestrator.yaml - not triggered here
     
-    // Clean up
+    // Clean up local state
     this.activeExecutions.delete(context.contextId);
     this.pendingUIRequests.delete(context.contextId);
+    
+    // Clean up cached agent instances for garbage collection
+    // This is critical for ephemeral agents and memory management
+    try {
+      const { agentDiscovery } = await import('../services/agent-discovery');
+      agentDiscovery.cleanupTaskAgents(context.contextId);
+      logger.info('♻️ Agent instances cleaned up for completed task', {
+        taskId: context.contextId
+      });
+    } catch (error) {
+      logger.warn('Could not clean up agent instances', {
+        taskId: context.contextId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
   }
   
   /**

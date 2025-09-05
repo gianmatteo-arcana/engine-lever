@@ -131,16 +131,16 @@ describe('AgentDiscoveryService', () => {
       expect(DefaultAgent).toHaveBeenCalledWith('profile_collection_agent.yaml', 'business123', 'user456');
     });
 
-    it('should cache agent instances by businessId', async () => {
+    it('should NOT cache agent instances - all agents are ephemeral', async () => {
       const { DefaultAgent } = await import('../../../src/agents/DefaultAgent');
-      const mockAgent = { id: 'cached_agent' };
-      (DefaultAgent as any).mockImplementation(() => mockAgent);
+      let callCount = 0;
+      (DefaultAgent as any).mockImplementation(() => ({ id: `agent_${++callCount}` }));
 
       const agent1 = await service.instantiateAgent('profile_collection_agent', 'business123');
       const agent2 = await service.instantiateAgent('profile_collection_agent', 'business123');
       
-      expect(agent1).toBe(agent2);
-      expect(DefaultAgent).toHaveBeenCalledTimes(1); // Should use cached instance
+      expect(agent1).not.toBe(agent2); // Should create new instances
+      expect(DefaultAgent).toHaveBeenCalledTimes(2); // Should create fresh instances
     });
 
     it('should create separate instances for different businessIds', async () => {

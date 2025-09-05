@@ -4,7 +4,7 @@
  */
 
 /**
- * Checks if a value is effectively empty (null, undefined, empty string, or the literal strings "undefined"/"null")
+ * Checks if a value is effectively empty (null, undefined, empty string, or the literal strings "undefined"/"null"/"string")
  */
 export function isEffectivelyEmpty(value: any): boolean {
   if (value === null || value === undefined) {
@@ -15,7 +15,8 @@ export function isEffectivelyEmpty(value: any): boolean {
     const trimmed = value.trim().toLowerCase();
     return trimmed === '' || 
            trimmed === 'undefined' || 
-           trimmed === 'null';
+           trimmed === 'null' ||
+           trimmed === 'string';  // Catch placeholder "string" values
   }
   
   return false;
@@ -60,7 +61,7 @@ export function validateRequiredParams(
     }
     
     if (invalidFields.length > 0) {
-      errors.push(`Invalid/empty fields: ${invalidFields.join(', ')} (received null, undefined, empty string, or literal "undefined"/"null")`);
+      errors.push(`Invalid/empty fields: ${invalidFields.join(', ')} (received null, undefined, empty string, or placeholder values like "undefined"/"null"/"string")`);
     }
     
     throw new Error(`Parameter validation failed for ${context}: ${errors.join('; ')}`);

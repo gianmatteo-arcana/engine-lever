@@ -656,11 +656,19 @@ export class LLMProvider {
       return response;
       
     } catch (error: any) {
-      logger.error('LLM request failed', {
-        error,
+      const errorMessage = error.message || 'Unknown error';
+      const errorType = error.type || error.name || 'UnknownError';
+      const errorStatus = error.status || error.statusCode || 'Unknown';
+      
+      logger.error(`LLM request failed for ${model}: [${errorType}] ${errorMessage} (Status: ${errorStatus})`, {
+        error: errorMessage,
+        errorType,
+        errorStatus,
         model,
         duration: Date.now() - startTime,
-        metadata: request.metadata
+        metadata: request.metadata,
+        provider: model.startsWith('claude') ? 'Anthropic' : model.startsWith('gpt') ? 'OpenAI' : 'Unknown',
+        taskId: request.metadata?.taskId
       });
       
       // TODO: Automatic fallback to alternative provider
@@ -1217,13 +1225,33 @@ export class LLMProvider {
       };
       
     } catch (error: any) {
-      logger.error('❌ ANTHROPIC: API call failed', {
-        error: error.message,
-        stack: error.stack,
-        status: error.status,
-        type: error.type,
-        details: JSON.stringify(error)
+      const errorMessage = error.message || 'Unknown error';
+      const errorStatus = error.status || error.statusCode || 'Unknown status';
+      const errorType = error.type || error.name || 'Unknown type';
+      
+      // Build a descriptive error message
+      let detailedMessage = `❌ ANTHROPIC: API call failed - ${errorType}: ${errorMessage}`;
+      
+      // Add specific details for common errors
+      if (error.status === 429 || errorMessage.includes('rate_limit')) {
+        detailedMessage += ' (Rate limit exceeded - too many requests)';
+      } else if (error.status === 401) {
+        detailedMessage += ' (Authentication failed - check API key)';
+      } else if (error.status === 500 || error.status === 503) {
+        detailedMessage += ' (Anthropic service error - API temporarily unavailable)';
+      } else if (error.status === 400) {
+        detailedMessage += ' (Bad request - check prompt format/size)';
+      }
+      
+      logger.error(detailedMessage, {
+        status: errorStatus,
+        type: errorType,
+        message: errorMessage,
+        model: config.modelName || 'unknown',
+        promptTokens: request.maxTokens,
+        details: error.response?.data || error.details || undefined
       });
+      
       this.handleProviderError(error, 'Anthropic');
       throw error;
     }

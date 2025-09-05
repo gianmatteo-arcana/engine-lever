@@ -42,9 +42,11 @@ export interface AgentCapability {
  */
 export class AgentDiscoveryService {
   private agentConfigs: Map<string, any> = new Map();
-  private agentInstances: Map<string, DefaultAgent> = new Map();
   private capabilityRegistry: Map<string, AgentCapability> = new Map();
   private routingTable: Map<string, Set<string>> = new Map(); // who can send to whom
+  
+  // NO CACHING - All agents are ephemeral to ensure proper garbage collection
+  // Agents are instantiated per-task and garbage collected when done
   
   constructor(private configPath: string = 'config/agents') {
     this.configPath = path.join(process.cwd(), configPath);
@@ -196,27 +198,37 @@ export class AgentDiscoveryService {
   
   /**
    * Instantiate an agent from its configuration
-   * Uses DefaultAgent for all agents except OrchestratorAgent
+   * ALL agents are ephemeral - created fresh per-task and garbage collected when done
+   * This ensures optimal memory management and prevents stale state
    */
   async instantiateAgent(agentId: string, businessId: string = 'system', userId?: string): Promise<DefaultAgent> {
-    // Check if already instantiated
-    const cacheKey = `${agentId}:${businessId}`;
-    if (this.agentInstances.has(cacheKey)) {
-      return this.agentInstances.get(cacheKey)!;
-    }
-    
     const config = this.agentConfigs.get(agentId);
     if (!config) {
       throw new Error(`Agent configuration not found: ${agentId}`);
     }
     
     try {
-      // Create DefaultAgent instance with YAML config path
-      const configFileName = `${agentId}.yaml`;
-      const agent = new DefaultAgent(configFileName, businessId, userId);
+      let agent: DefaultAgent;
       
-      // Store instance
-      this.agentInstances.set(cacheKey, agent);
+      // Check for specialized agent implementations
+      if (agentId === 'ux_optimization_agent') {
+        // Use the specialized UXOptimizationAgent
+        // Note: For UXOptimizationAgent, businessId is actually the taskId
+        const { UXOptimizationAgent } = await import('../agents/UXOptimizationAgent');
+        agent = new UXOptimizationAgent(businessId, undefined, userId) as any;
+      } else {
+        // Create DefaultAgent instance with YAML config path
+        const configFileName = `${agentId}.yaml`;
+        agent = new DefaultAgent(configFileName, businessId, userId);
+      }
+      
+      // NO CACHING - All agents are ephemeral
+      logger.debug(`🌟 Created ephemeral agent instance: ${agentId}`, { 
+        businessId,
+        userId,
+        ephemeral: true,
+        reason: 'All agents are ephemeral - will be garbage collected after use'
+      });
       
       // Update capability availability
       const capability = this.capabilityRegistry.get(agentId);
@@ -227,7 +239,8 @@ export class AgentDiscoveryService {
       logger.info(`🤖 Instantiated agent: ${agentId}`, {
         businessId,
         userId,
-        role: config.agent.role
+        role: config.agent.role,
+        implementation: agentId === 'ux_optimization_agent' ? 'specialized' : 'default'
       });
       
       return agent;
@@ -306,6 +319,27 @@ export class AgentDiscoveryService {
   getReceivers(agentId: string): string[] {
     const routes = this.routingTable.get(agentId);
     return routes ? Array.from(routes) : [];
+  }
+  
+  /**
+   * Clean up method kept for compatibility but now a no-op
+   * Since we don't cache agents anymore, there's nothing to clean up
+   * Agents are automatically garbage collected when no longer referenced
+   */
+  cleanupTaskAgents(businessId: string): void {
+    // No-op: No cached instances to clean up since all agents are ephemeral
+    logger.debug(`♻️ Cleanup called for task ${businessId} (no-op: agents are ephemeral)`);
+  }
+  
+  /**
+   * Get cache statistics for monitoring
+   * Since we don't cache anything, stats are always zero
+   */
+  getCacheStats(): { cached: number, message: string } {
+    return {
+      cached: 0,
+      message: 'All agents are ephemeral - no caching'
+    };
   }
   
   /**

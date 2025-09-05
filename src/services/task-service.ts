@@ -234,43 +234,35 @@ export class TaskService {
   }
 
   /**
-   * Get task by context ID (legacy - looks in task_contexts table which may not exist)
+   * Get task by context ID
+   * Now properly queries the tasks table and reconstructs TaskContext
    */
   async getTask(contextId: string): Promise<TaskContext | null> {
     try {
-      // Use service client when no user token (e.g., from EventListener)
-      const client = this.dbService.getServiceClient();
+      // Use the proper method that queries the correct table
+      const result = await this.getTaskContextById(contextId);
       
-      const { data, error } = await client
-        .from('task_contexts')
-        .select('*')
-        .eq('context_id', contextId)
-        .single();
-
-      if (error) {
-        logger.error('Failed to fetch task', { contextId, error });
-        return null;
+      if (!result) {
+        const isTestMode = process.env.NODE_ENV === 'test';
+        if (isTestMode) {
+          logger.debug('Task fetch returned null in test mode (expected - no database)', { contextId });
+        } else {
+          logger.debug('Task not found or error fetching', { contextId });
+        }
       }
-
-      if (!data) {
-        return null;
-      }
-
-      // Fetch history
-      const { data: history, error: historyError } = await client
-        .from('context_history')
-        .select('*')
-        .eq('context_id', contextId)
-        .order('sequence_number', { ascending: true });
-
-      if (historyError) {
-        logger.error('Failed to fetch task history', { contextId, error: historyError });
-      }
-
-      return this.mapToTaskContext(data, history || []);
-
+      
+      return result;
     } catch (error) {
-      logger.error('Error fetching task', { contextId, error });
+      const isTestMode = process.env.NODE_ENV === 'test';
+      if (isTestMode) {
+        logger.debug('Task fetch error in test mode (expected - mock context will be used)', { contextId });
+      } else {
+        logger.error('Error fetching task - database connection issue', { 
+          contextId, 
+          error: error instanceof Error ? error.message : String(error),
+          hint: 'Check database connection and credentials'
+        });
+      }
       return null;
     }
   }
@@ -295,7 +287,20 @@ export class TaskService {
         .single();
 
       if (taskError || !taskData) {
-        logger.warn('Task not found', { taskId, error: taskError });
+        const isTestMode = process.env.NODE_ENV === 'test';
+        if (!isTestMode) {
+          logger.warn(`Task '${taskId}' not found in tasks table`, { 
+            taskId, 
+            error: taskError?.message,
+            errorCode: taskError?.code,
+            possibleReasons: [
+              'Task does not exist',
+              'Task was deleted', 
+              'Invalid task ID format',
+              'Database connection issue'
+            ]
+          });
+        }
         return null;
       }
 
@@ -831,10 +836,20 @@ export class TaskService {
       };
 
     } catch (error) {
-      logger.error('Error fetching task', { error });
+      const isTestMode = process.env.NODE_ENV === 'test';
+      if (isTestMode) {
+        logger.debug('Task fetch error in test mode (expected)', { 
+          error: error instanceof Error ? error.message : String(error) 
+        });
+      } else {
+        logger.error('Error fetching task by ID', { 
+          error: error instanceof Error ? error.message : String(error),
+          hint: 'Check database connection'
+        });
+      }
       return {
         success: false,
-        error: 'Internal server error'
+        error: isTestMode ? 'Test mode - no database' : 'Internal server error'
       };
     }
   }
@@ -913,6 +928,160 @@ export class TaskService {
     } catch (error) {
       logger.error('Error extracting user ID from token', { error });
       return null;
+    }
+  }
+
+  /**
+   * Find and recover tasks that were in progress when server stopped
+   * This runs at server startup to resume interrupted tasks
+   */
+  async recoverOrphanedTasks(): Promise<void> {
+    try {
+      logger.info('🔍 Checking for orphaned tasks to recover...');
+      
+      // Use service role client for recovery operations
+      const client = this.dbService.getServiceClient();
+      
+      // First, let's see ALL tasks and their statuses for debugging
+      const { data: allTasks } = await client
+        .from('tasks')
+        .select('id, status, task_type, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(10);
+      
+      if (allTasks && allTasks.length > 0) {
+        logger.info(`📊 Current task statuses (last 10):`);
+        allTasks.forEach(task => {
+          const timeSinceUpdate = Date.now() - new Date(task.updated_at).getTime();
+          const minutes = Math.floor(timeSinceUpdate / 60000);
+          logger.info(`   - ${task.id.substring(0, 8)}... | ${task.status} | ${task.task_type} | ${minutes}m ago`);
+        });
+      } else {
+        logger.info('📊 No recent tasks found in last 10 records (database may have older tasks)');
+      }
+      
+      // Find tasks that are in progress (not paused, not completed, not failed)
+      // Only recover RECENT tasks to avoid recovering stale/abandoned tasks
+      // Tasks older than 1 hour are likely genuinely stuck, not from HMR
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      
+      const { data: orphanedTasks, error } = await client
+        .from('tasks')
+        .select('*')
+        .eq('status', TASK_STATUS.IN_PROGRESS)
+        .gte('updated_at', oneHourAgo)  // Only tasks updated in last hour
+        .order('updated_at', { ascending: false });
+      
+      if (error) {
+        logger.error('❌ CRITICAL: Failed to query orphaned tasks - this is a bug!', error);
+        throw error; // Fail hard - this needs to be fixed
+      }
+      
+      if (!orphanedTasks || orphanedTasks.length === 0) {
+        logger.info(`✅ No orphaned tasks found with status '${TASK_STATUS.IN_PROGRESS}'`);
+        
+        // Check for tasks waiting for input that might need attention
+        const { data: pausedTasks } = await client
+          .from('tasks')
+          .select('id, task_type, status')
+          .eq('status', TASK_STATUS.WAITING_FOR_INPUT);
+        
+        if (pausedTasks && pausedTasks.length > 0) {
+          logger.info(`ℹ️  Found ${pausedTasks.length} task(s) in '${TASK_STATUS.WAITING_FOR_INPUT}' state (waiting for user input)`);
+          pausedTasks.forEach(task => {
+            logger.info(`   - ${task.id.substring(0, 8)}... | ${task.status} | ${task.task_type}`);
+          });
+        }
+        return;
+      }
+      
+      logger.info(`📍 Found ${orphanedTasks.length} recent orphaned task(s) to recover`);
+      
+      // Also clean up very old stuck tasks (older than 24 hours)
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: stuckTasks } = await client
+        .from('tasks')
+        .select('id, updated_at')
+        .eq('status', TASK_STATUS.IN_PROGRESS)
+        .lt('updated_at', oneDayAgo);
+      
+      if (stuckTasks && stuckTasks.length > 0) {
+        logger.warn(`🧹 Found ${stuckTasks.length} stuck tasks older than 24 hours - marking as failed`);
+        await client
+          .from('tasks')
+          .update({ 
+            status: TASK_STATUS.FAILED,
+            updated_at: new Date().toISOString()
+          })
+          .in('id', stuckTasks.map(t => t.id));
+      }
+      
+      // Recover each recent task
+      const { OrchestratorAgent } = await import('../agents/OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      for (const task of orphanedTasks) {
+        await this.recoverTask(task, orchestrator);
+      }
+      
+    } catch (error) {
+      logger.error('❌ CRITICAL: Task recovery failed - this is a bug!', error);
+      throw error; // Fail hard - recovery is critical for reliability
+    }
+  }
+  
+  private async recoverTask(task: any, orchestrator: any): Promise<void> {
+    try {
+      logger.info(`🔄 Recovering task ${task.id} (${task.task_type})`);
+      
+      // Add a recovery note to the task
+      const client = this.dbService.getServiceClient();
+      await client
+        .from('context_entries')
+        .insert({
+          context_id: task.id,
+          entry_type: 'system',
+          entry_data: {
+            operation: 'system.task_recovered',
+            data: {
+              reason: 'Server restart detected',
+              recovered_at: new Date().toISOString()
+            },
+            reasoning: 'Task was in progress when server restarted, automatically resuming',
+            confidence: 1.0
+          },
+          created_at: new Date().toISOString()
+        });
+      
+      // Get full task context and trigger orchestration to resume
+      const taskContext = await this.getTaskContextById(task.id);
+      if (taskContext) {
+        await orchestrator.orchestrateTask(taskContext);
+        logger.info(`✅ Task ${task.id} recovery triggered`);
+      } else {
+        logger.error(`Failed to get task context for ${task.id}`);
+        // Mark task as failed if we can't get its context
+        await client
+          .from('tasks')
+          .update({ 
+            status: TASK_STATUS.FAILED,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', task.id);
+      }
+      
+    } catch (error) {
+      logger.error(`Failed to recover task ${task.id}:`, error);
+      
+      // Mark task as failed if recovery fails
+      const client = this.dbService.getServiceClient();
+      await client
+        .from('tasks')
+        .update({ 
+          status: TASK_STATUS.FAILED,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', task.id);
     }
   }
 

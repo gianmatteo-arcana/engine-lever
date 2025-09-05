@@ -328,6 +328,27 @@ Check the error message above for specific configuration issues.
     const contextData = request.taskContext?.currentState?.data || {};
     const taskHistory = request.taskContext?.history || [];
     
+    // Extract ALL tool results and data from task history
+    const toolResults = taskHistory
+      .filter((entry: any) => entry.operation === 'system.tool_executed' && entry.data?.success)
+      .map((entry: any) => ({
+        tool: entry.data.tool,
+        params: entry.data.params,
+        // Include full result if available, not just preview
+        result: entry.data.result || entry.data.resultPreview,
+        resultPreview: entry.data.resultPreview,
+        // Extract any additional metadata
+        metadata: entry.metadata,
+        timestamp: entry.timestamp
+      }));
+    
+    // Also extract any accumulated data from context updates
+    const accumulatedData = taskHistory
+      .filter((entry: any) => entry.data && entry.operation !== 'system.tool_executed')
+      .reduce((acc: any, entry: any) => {
+        return { ...acc, ...entry.data };
+      }, {});
+    
     return `
 # Base Agent Principles (ALWAYS APPLY)
 
@@ -378,6 +399,22 @@ ${JSON.stringify(request.taskContext, null, 2)}
 
 ## Task History (Last 5 Entries)
 ${taskHistory.slice(-5).map((entry: any) => `- ${entry.operation}: ${entry.reasoning}`).join('\n')}
+
+## Previously Retrieved Data
+${toolResults.length > 0 ? `The following information has already been retrieved by tools:
+${toolResults.map((result: any) => `
+### Tool: ${result.tool}
+Parameters: ${JSON.stringify(result.params)}
+Full Result:
+${typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2)}
+${result.timestamp ? `Timestamp: ${result.timestamp}` : ''}
+`).join('\n---\n')}
+
+CRITICAL: Extract and utilize ALL information from the above results. Do not request data that already exists.
+` : 'No tool results available yet.'}
+
+## Accumulated Context Data
+${Object.keys(accumulatedData).length > 0 ? JSON.stringify(accumulatedData, null, 2) : 'No accumulated data yet.'}
 
 ## Operation Requested
 ${request.operation}
@@ -1424,10 +1461,21 @@ Respond with a JSON array of field definitions.
     // Get available tools dynamically
     const availableTools = await this.toolChain.getAvailableTools();
     
-    logger.info('🔄 Starting ReAct reasoning loop', {
+    // Extract task details for better logging context
+    const taskDetails = {
+      taskType: request.taskContext?.taskType || 'unknown',
+      businessName: request.taskContext?.businessEntity?.name || 'unspecified',
+      currentPhase: request.taskContext?.currentState?.phase || 'initial',
+      operation: request.operation || 'general_execution'
+    };
+
+    logger.info(`🔄 [${this.specializedTemplate.agent.name}] Starting ReAct reasoning loop for ${taskDetails.taskType} task`, {
       agentId: this.specializedTemplate.agent.id,
+      agentName: this.specializedTemplate.agent.name,
       taskId: request.taskContext?.contextId,
-      availableTools: availableTools.length
+      taskDetails,
+      availableTools: availableTools.length,
+      reasoning: `Processing ${taskDetails.operation} for ${taskDetails.businessName || 'business'}`
     });
     
     // ReAct loop
@@ -1967,10 +2015,18 @@ Respond with a JSON array of field definitions.
     // 3. Request parameters take highest precedence (can override everything)
     Object.assign(availableData, request.parameters || {});
     
-    logger.debug('📊 Final availableData composition', {
+    logger.debug(`📊 [${this.specializedTemplate.agent.name}] Composed data for reasoning (${Object.keys(availableData).length} fields)`, {
       agentId: this.specializedTemplate.agent.id,
-      totalKeys: Object.keys(availableData).length,
-      keys: Object.keys(availableData).slice(0, 10) // Show first 10 to avoid log spam
+      agentName: this.specializedTemplate.agent.name,
+      taskId: request.taskContext?.contextId,
+      dataCategories: {
+        businessData: (availableData as any).businessEntity ? 'present' : 'missing',
+        taskData: (availableData as any).taskType ? 'present' : 'missing',
+        userInput: (availableData as any).userInput ? 'present' : 'missing',
+        contextHistory: (availableData as any).history ? `${(availableData as any).history.length} events` : 'none'
+      },
+      totalFields: Object.keys(availableData).length,
+      sampleFields: Object.keys(availableData).slice(0, 5) // Show first 5 fields
     });
     
     // Append ReAct enhancement to the inherited prompt
@@ -2436,7 +2492,7 @@ What is your decision for iteration ${iteration}?`;
       });
       
       // Create contextually appropriate UIRequest based on agent role and response
-      uiRequest = this.createUIRequestFromAgentContext(response);
+      uiRequest = this.createUIRequestFromAgentContext(response, context);
     }
     
     if (!uiRequest) {
@@ -2537,7 +2593,7 @@ What is your decision for iteration ${iteration}?`;
    * Create contextually appropriate UIRequest when agent returns needs_input
    * This robust fallback works with actual agent response patterns
    */
-  private createUIRequestFromAgentContext(response: BaseAgentResponse): any {
+  private createUIRequestFromAgentContext(response: BaseAgentResponse, context?: { contextId: string; taskId: string; task: any }): any {
     const agentRole = this.specializedTemplate.agent.role;
     const agentId = this.specializedTemplate.agent.id;
     
@@ -2552,27 +2608,27 @@ What is your decision for iteration ${iteration}?`;
       }
     }
     
-    // Agent-specific UIRequest configuration
+    // Determine task-specific field requirements
+    // Try to get taskType from the task object or response data
+    const taskType = context?.task?.taskType || context?.task?.taskTemplateId || 
+                    (response.contextUpdate?.data as any)?.taskType || 'onboarding';
+    const taskFields = this.getTaskSpecificFields(taskType);
+    
+    // Agent-specific UIRequest configuration - now task-aware
     const agentUIRequestMap: Record<string, any> = {
       'profile_collection_specialist': {
         templateType: 'form',
-        title: 'Business Profile Information',
+        title: taskType === 'soi_filing' ? 'SOI Filing Information' : 'Business Profile Information',
         priority: 'high',
-        instructions: 'Let\'s start with the basics about your business.',
-        defaultFields: [
+        instructions: this.getTaskSpecificInstructions(taskType),
+        defaultFields: taskFields.length > 0 ? taskFields : [
+          // Fallback fields only if no task-specific fields
           {
             name: 'business_name',
             type: 'text',
             required: true,
             label: 'Business Name',
             placeholder: 'Enter your legal business name'
-          },
-          {
-            name: 'contact_email',
-            type: 'email',
-            required: true,
-            label: 'Contact Email',
-            placeholder: 'Enter your email address'
           },
           {
             name: 'entity_type',
@@ -2585,10 +2641,10 @@ What is your decision for iteration ${iteration}?`;
       },
       'data_collection_specialist': {
         templateType: 'form',
-        title: 'Business Information Required',
+        title: taskType === 'soi_filing' ? 'SOI Filing Data' : 'Business Information Required',
         priority: 'high',
         instructions: 'We couldn\'t find your business in public records. Please provide the following information:',
-        defaultFields: [
+        defaultFields: taskFields.length > 0 ? taskFields : [
           {
             name: 'legalBusinessName',
             type: 'text',
@@ -2645,6 +2701,96 @@ What is your decision for iteration ${iteration}?`;
         agentId: agentId
       }
     };
+  }
+
+  /**
+   * Get task-specific fields based on task type
+   */
+  private getTaskSpecificFields(taskType?: string): any[] {
+    if (!taskType) return [];
+    
+    // Define required fields for each task type
+    const taskFieldMap: Record<string, any[]> = {
+      'soi_filing': [
+        {
+          name: 'entity_number',
+          type: 'text',
+          required: true,
+          label: 'CA Entity Number',
+          placeholder: 'e.g., C1234567',
+          help: 'Your California Secretary of State entity number'
+        },
+        {
+          name: 'entity_name',
+          type: 'text',
+          required: true,
+          label: 'Legal Business Name',
+          placeholder: 'Exact name registered with CA SOS'
+        },
+        {
+          name: 'entity_type',
+          type: 'select',
+          required: true,
+          label: 'Entity Type',
+          options: ['LLC', 'Corporation', 'LP', 'LLP']
+        }
+      ],
+      'onboarding': [
+        {
+          name: 'business_name',
+          type: 'text',
+          required: true,
+          label: 'Business Name',
+          placeholder: 'Enter your legal business name'
+        },
+        {
+          name: 'entity_type',
+          type: 'select',
+          required: true,
+          label: 'Entity Type',
+          options: ['LLC', 'Corporation', 'Partnership', 'Sole Proprietorship']
+        },
+        {
+          name: 'formation_state',
+          type: 'select',
+          required: true,
+          label: 'State of Formation',
+          options: ['California', 'Delaware', 'Nevada', 'Texas', 'Other']
+        }
+      ],
+      'business_registration': [
+        {
+          name: 'business_name',
+          type: 'text',
+          required: true,
+          label: 'Proposed Business Name',
+          placeholder: 'Enter your desired business name'
+        },
+        {
+          name: 'business_address',
+          type: 'text',
+          required: true,
+          label: 'Principal Business Address',
+          placeholder: 'Street address where business will operate'
+        }
+      ]
+    };
+    
+    return taskFieldMap[taskType] || [];
+  }
+  
+  /**
+   * Get task-specific instructions based on task type
+   */
+  private getTaskSpecificInstructions(taskType?: string): string {
+    const instructionMap: Record<string, string> = {
+      'soi_filing': 'Please provide your California business information for the Statement of Information filing.',
+      'onboarding': 'Let\'s start with the basics about your business.',
+      'business_registration': 'Please provide information to register your business.',
+      'compliance_check': 'We need some information to check your compliance status.'
+    };
+    
+    return instructionMap[taskType || ''] || 'Please provide the required information.';
   }
 
   /**
@@ -2932,19 +3078,45 @@ What is your decision for iteration ${iteration}?`;
           currentState: freshContext.currentState?.status
         });
       } else {
-        logger.warn('⚠️ Task context not found in database', {
-          contextId,
-          agentId: this.specializedTemplate.agent.id
-        });
+        const isTestMode = process.env.NODE_ENV === 'test';
+        if (isTestMode) {
+          logger.debug('📋 Task context not in database (test mode - using mock/empty context)', {
+            contextId,
+            agentId: this.specializedTemplate.agent.id,
+            agentName: this.specializedTemplate.agent.name
+          });
+        } else {
+          logger.warn(`⚠️ [${this.specializedTemplate.agent.name}] Task context '${contextId}' not found in database`, {
+            taskId: contextId,
+            agentId: this.specializedTemplate.agent.id,
+            agentName: this.specializedTemplate.agent.name,
+            possibleReasons: [
+              'Task does not exist yet (may be creating new task)',
+              'Task was deleted or expired',
+              'Database connection issue',
+              'Incorrect task ID provided'
+            ],
+            action: 'Agent will proceed with available context or create new task'
+          });
+        }
       }
       
       return freshContext;
     } catch (error) {
-      logger.error('❌ Failed to fetch fresh task context', {
-        contextId,
-        agentId: this.specializedTemplate.agent.id,
-        error: error instanceof Error ? error.message : String(error)
-      });
+      const isTestMode = process.env.NODE_ENV === 'test';
+      if (isTestMode) {
+        logger.debug('📋 Could not fetch task context (test mode - proceeding with defaults)', {
+          contextId,
+          agentId: this.specializedTemplate.agent.id
+        });
+      } else {
+        logger.error('❌ Failed to fetch fresh task context', {
+          contextId,
+          agentId: this.specializedTemplate.agent.id,
+          error: error instanceof Error ? error.message : String(error),
+          hint: 'Check database connection and task existence'
+        });
+      }
       return null;
     }
   }
