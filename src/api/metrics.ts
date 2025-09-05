@@ -21,8 +21,68 @@ router.get('/:taskId', requireAuth, async (req: Request, res: Response) => {
   const { taskId } = req.params;
   
   try {
-    // Get the complete timeline for this task
-    const timeline = taskPerformanceTracker.getTaskTimeline(taskId);
+    // First try to get from in-memory tracker
+    let timeline = taskPerformanceTracker.getTaskTimeline(taskId);
+    let metrics = taskPerformanceTracker.getTaskMetrics(taskId);
+    
+    // If not in memory, fetch from database
+    if (!timeline && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+      const supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_KEY
+      );
+      
+      // Fetch task details
+      const { data: task } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('id', taskId)
+        .single();
+      
+      if (task) {
+        // Fetch task context events for timeline
+        const { data: events } = await supabase
+          .from('task_context_events')
+          .select('*')
+          .eq('task_id', taskId)
+          .order('created_at', { ascending: true });
+        
+        // Build a synthetic timeline from database data
+        timeline = {
+          taskId,
+          startTime: new Date(task.created_at).toISOString(),
+          endTime: task.status === 'completed' ? new Date(task.updated_at).toISOString() : null,
+          events: events?.map(event => ({
+            timestamp: new Date(event.created_at).toISOString(),
+            type: event.event_type,
+            operation: event.operation,
+            actor: event.actor_id,
+            data: event.data || {}
+          })) || [],
+          status: task.status,
+          taskType: task.task_type
+        };
+        
+        // Build synthetic metrics
+        const duration = new Date(task.updated_at).getTime() - new Date(task.created_at).getTime();
+        metrics = {
+          taskId,
+          startTime: new Date(task.created_at).getTime(),
+          endTime: task.status === 'completed' ? new Date(task.updated_at).getTime() : undefined,
+          events: [],
+          summary: {
+            totalDuration: duration,
+            agentCount: 0,
+            averageDuration: duration,
+            durations: {
+              min: duration,
+              max: duration,
+              average: duration
+            }
+          }
+        } as any;
+      }
+    }
     
     if (!timeline) {
       return res.status(404).json({
@@ -31,9 +91,6 @@ router.get('/:taskId', requireAuth, async (req: Request, res: Response) => {
         message: `No metrics available for task ${taskId}`
       });
     }
-    
-    // Get the raw metrics for additional detail
-    const metrics = taskPerformanceTracker.getTaskMetrics(taskId);
     
     return res.json({
       success: true,
