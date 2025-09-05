@@ -9,6 +9,7 @@ import { TaskService } from '../../../src/services/task-service';
 import { OrchestratorAgent } from '../../../src/agents/OrchestratorAgent';
 import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
+import { TASK_STATUS } from '../../../src/constants/task-status';
 
 // Mock the dependencies
 jest.mock('@supabase/supabase-js');
@@ -28,7 +29,7 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
     task_type: 'onboarding',
     business_id: 'test-business-123',
     user_id: 'test-user-456',
-    status: 'AGENT_EXECUTION_IN_PROGRESS',
+    status: TASK_STATUS.IN_PROGRESS,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     metadata: {
@@ -45,7 +46,7 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
     businessId: syntheticTask.business_id,
     createdAt: syntheticTask.created_at,
     currentState: {
-      status: 'AGENT_EXECUTION_IN_PROGRESS',
+      status: TASK_STATUS.IN_PROGRESS,
       phase: 'data_collection',
       data: {
         businessName: 'Test Corp',
@@ -145,7 +146,7 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
       // Assert: Task was detected
       expect(mockSupabaseClient.from).toHaveBeenCalledWith('tasks');
       expect(mockSupabaseClient.select).toHaveBeenCalledWith('*');
-      expect(mockSupabaseClient.eq).toHaveBeenCalledWith('status', 'AGENT_EXECUTION_IN_PROGRESS');
+      expect(mockSupabaseClient.eq).toHaveBeenCalledWith('status', TASK_STATUS.IN_PROGRESS);
       
       // Assert: Recovery note was added
       expect(mockSupabaseClient.from).toHaveBeenCalledWith('context_entries');
@@ -231,7 +232,7 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
       
       // Assert: Task was marked as failed
       expect(mockSupabaseClient.update).toHaveBeenCalledWith({
-        status: 'FAILED',
+        status: TASK_STATUS.FAILED,
         updated_at: expect.any(String)
       });
     });
@@ -344,7 +345,7 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
   describe('Simulated Server Restart', () => {
     it('should simulate full restart cycle with task recovery', async () => {
       // Phase 1: Task is running
-      const runningTask = { ...syntheticTask, status: 'AGENT_EXECUTION_IN_PROGRESS' };
+      const runningTask = { ...syntheticTask, status: TASK_STATUS.IN_PROGRESS };
       
       // Phase 2: Server crashes (violent disruption)
       // - No graceful shutdown
@@ -387,7 +388,7 @@ describe('TaskRecoveryService - Violent Disruption & Recovery', () => {
       // Assert: Task was recovered and resumed from correct state
       expect(mockOrchestrator.orchestrateTask).toHaveBeenCalled();
       const calledContext = mockOrchestrator.orchestrateTask.mock.calls[0][0];
-      expect(calledContext.currentState.status).toBe('AGENT_EXECUTION_IN_PROGRESS');
+      expect(calledContext.currentState.status).toBe(TASK_STATUS.IN_PROGRESS);
       expect(calledContext.currentState.phase).toBe('data_collection');
     });
   });

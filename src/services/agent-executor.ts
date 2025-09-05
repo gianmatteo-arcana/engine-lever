@@ -22,6 +22,7 @@
 import { logger } from '../utils/logger';
 import { AgentRequest, AgentResponse } from '../types/task-engine.types';
 import { BaseAgentRequest, BaseAgentResponse } from '../types/base-agent-types';
+import { ORCHESTRATOR_OPS } from '../constants/orchestrator-operations';
 // Removed DefaultAgent import - now handles any agent type
 
 export class AgentExecutor {
@@ -99,8 +100,8 @@ export class AgentExecutor {
       // CRITICAL: Use PAUSED when agent needs input, not COMPLETED
       if (request.taskContext && typeof agent.recordExecutionEvent === 'function') {
         const eventType = agentResponse.status === 'needs_input' 
-          ? 'AGENT_EXECUTION_PAUSED'  // Agent is paused waiting for user input
-          : 'AGENT_EXECUTION_COMPLETED'; // Agent finished successfully
+          ? ORCHESTRATOR_OPS.AGENT_EXECUTION_PAUSED  // Agent is paused waiting for user input
+          : ORCHESTRATOR_OPS.PHASE_COMPLETED; // Agent finished successfully
           
         await agent.recordExecutionEvent(request.taskContext, {
           type: eventType,

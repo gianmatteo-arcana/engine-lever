@@ -319,6 +319,9 @@ export class OrchestratorAgent extends BaseAgent {
       // Set task status to in_progress (using TASK_STATUS enum)
       taskContext.currentState.status = TASK_STATUS.IN_PROGRESS;
       
+      // CRITICAL: Also persist this status change to the database
+      await this.updateTaskStatus(taskContext, TASK_STATUS.IN_PROGRESS);
+      
       // Clean up any stale execution plans to allow garbage collection
       // Agents should be ephemeral - created when needed, destroyed when done
       if (this.activeExecutions.has(taskId)) {
@@ -1238,6 +1241,17 @@ export class OrchestratorAgent extends BaseAgent {
       }
       
       // 4. Execute plan phases (starting from the correct index)
+      // CRITICAL: Update task status to IN_PROGRESS when we start executing
+      if (context.currentState.status !== TASK_STATUS.IN_PROGRESS && 
+          context.currentState.status !== TASK_STATUS.WAITING_FOR_INPUT) {
+        logger.info('📌 Setting task status to IN_PROGRESS as we begin execution', {
+          contextId: context.contextId,
+          previousStatus: context.currentState.status,
+          newStatus: TASK_STATUS.IN_PROGRESS
+        });
+        await this.updateTaskStatus(context, TASK_STATUS.IN_PROGRESS);
+      }
+      
       let allPhasesCompleted = true;
       let phaseIndex = startPhaseIndex;
       const phases = executionPlan.phases || [];

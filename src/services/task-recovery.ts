@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 import { logger } from '../utils/logger';
 import { OrchestratorAgent } from '../agents/OrchestratorAgent';
 import { TaskService } from './task-service';
+import { TASK_STATUS } from '../constants/task-status';
 
 export class TaskRecoveryService {
   private supabase;
@@ -44,6 +45,8 @@ export class TaskRecoveryService {
           const minutes = Math.floor(timeSinceUpdate / 60000);
           logger.info(`   - ${task.id.substring(0, 8)}... | ${task.status} | ${task.task_type} | ${minutes}m ago`);
         });
+      } else {
+        logger.info('📊 No recent tasks found in last 10 records (database may have older tasks)');
       }
       
       // Find tasks that are in progress (not paused, not completed, not failed)
@@ -51,7 +54,7 @@ export class TaskRecoveryService {
       const { data: orphanedTasks, error } = await this.supabase
         .from('tasks')
         .select('*')
-        .eq('status', 'AGENT_EXECUTION_IN_PROGRESS');
+        .eq('status', TASK_STATUS.IN_PROGRESS);
       
       if (error) {
         logger.error('❌ CRITICAL: Failed to query orphaned tasks - this is a bug!', error);
@@ -59,16 +62,19 @@ export class TaskRecoveryService {
       }
       
       if (!orphanedTasks || orphanedTasks.length === 0) {
-        logger.info('✅ No orphaned tasks found with status AGENT_EXECUTION_IN_PROGRESS');
+        logger.info(`✅ No orphaned tasks found with status '${TASK_STATUS.IN_PROGRESS}'`);
         
-        // Check for PAUSED tasks that might need attention
+        // Check for tasks waiting for input that might need attention
         const { data: pausedTasks } = await this.supabase
           .from('tasks')
-          .select('id, task_type')
-          .eq('status', 'AGENT_EXECUTION_PAUSED');
+          .select('id, task_type, status')
+          .eq('status', TASK_STATUS.WAITING_FOR_INPUT);
         
         if (pausedTasks && pausedTasks.length > 0) {
-          logger.info(`ℹ️  Found ${pausedTasks.length} task(s) in PAUSED state (waiting for user input)`);
+          logger.info(`ℹ️  Found ${pausedTasks.length} task(s) in '${TASK_STATUS.WAITING_FOR_INPUT}' state (waiting for user input)`);
+          pausedTasks.forEach(task => {
+            logger.info(`   - ${task.id.substring(0, 8)}... | ${task.status} | ${task.task_type}`);
+          });
         }
         return;
       }
@@ -119,7 +125,7 @@ export class TaskRecoveryService {
         await this.supabase
           .from('tasks')
           .update({ 
-            status: 'FAILED',
+            status: TASK_STATUS.FAILED,
             updated_at: new Date().toISOString()
           })
           .eq('id', task.id);
@@ -132,7 +138,7 @@ export class TaskRecoveryService {
       await this.supabase
         .from('tasks')
         .update({ 
-          status: 'FAILED',
+          status: TASK_STATUS.FAILED,
           updated_at: new Date().toISOString()
         })
         .eq('id', task.id);

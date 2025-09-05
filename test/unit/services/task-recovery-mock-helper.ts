@@ -2,6 +2,8 @@
  * Helper to setup mocks for task recovery tests
  */
 
+import { TASK_STATUS } from '../../src/constants/task-status';
+
 export function setupRecoveryMocks(mockSupabaseClient: any) {
   // Setup chain for the initial status check query
   // from('tasks').select(...).order(...).limit(10)
@@ -11,14 +13,14 @@ export function setupRecoveryMocks(mockSupabaseClient: any) {
   };
   
   // Setup chain for orphaned task query
-  // from('tasks').select('*').eq('status', 'AGENT_EXECUTION_IN_PROGRESS')
+  // from('tasks').select('*').eq('status', TASK_STATUS.IN_PROGRESS)
   const orphanedTaskChain = {
     data: [],
     error: null
   };
   
   // Setup chain for paused task query
-  // from('tasks').select('id, task_type').eq('status', 'AGENT_EXECUTION_PAUSED')
+  // from('tasks').select('id, task_type').eq('status', TASK_STATUS.WAITING_FOR_INPUT)
   const pausedTaskChain = {
     data: [],
     error: null
@@ -32,9 +34,9 @@ export function setupRecoveryMocks(mockSupabaseClient: any) {
   });
   
   mockSupabaseClient.eq.mockImplementation((field: string, value: string) => {
-    if (value === 'AGENT_EXECUTION_IN_PROGRESS') {
+    if (value === TASK_STATUS.IN_PROGRESS) {
       return Promise.resolve(orphanedTaskChain);
-    } else if (value === 'AGENT_EXECUTION_PAUSED') {
+    } else if (value === TASK_STATUS.WAITING_FOR_INPUT) {
       return Promise.resolve(pausedTaskChain);
     }
     return Promise.resolve({ data: [], error: null });
