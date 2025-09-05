@@ -66,21 +66,10 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     const statistics = taskPerformanceTracker.getStatistics();
     const allMetrics = taskPerformanceTracker.getAllMetrics();
     
-    // Get recent task summaries (last 10)
-    const recentTasks = allMetrics
-      .slice(-10)
-      .reverse()
-      .map(m => ({
-        taskId: m.taskId,
-        startTime: new Date(m.startTime).toISOString(),
-        duration: m.endTime ? m.endTime - m.startTime : null,
-        status: m.endTime ? 'completed' : 'active',
-        eventCount: m.events.length,
-        summary: m.summary
-      }));
-    
-    // Get current task statuses from database
+    // Get recent tasks from database
+    let recentTasks: any[] = [];
     let taskStatuses = null;
+    
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
       const supabase = createClient(
         process.env.SUPABASE_URL,
@@ -89,11 +78,23 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
       
       const { data: tasks } = await supabase
         .from('tasks')
-        .select('id, status, task_type, created_at, updated_at')
+        .select('id, status, task_type, created_at, updated_at, metadata')
         .order('updated_at', { ascending: false })
         .limit(20);
       
-      if (tasks) {
+      if (tasks && tasks.length > 0) {
+        // Get recent task summaries (first 10)
+        recentTasks = tasks.slice(0, 10).map(task => ({
+          taskId: task.id,
+          taskType: task.task_type || 'unknown',
+          status: task.status,
+          startTime: new Date(task.created_at).toISOString(),
+          lastUpdate: new Date(task.updated_at).toISOString(),
+          duration: new Date(task.updated_at).getTime() - new Date(task.created_at).getTime(),
+          ageMinutes: Math.floor((Date.now() - new Date(task.updated_at).getTime()) / 60000),
+          metadata: task.metadata || {}
+        }));
+        
         // Group tasks by status
         taskStatuses = {
           total: tasks.length,
@@ -110,6 +111,21 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
           }))
         };
       }
+    }
+    
+    // If no tasks from database, use in-memory metrics as fallback
+    if (recentTasks.length === 0 && allMetrics.length > 0) {
+      recentTasks = allMetrics
+        .slice(-10)
+        .reverse()
+        .map(m => ({
+          taskId: m.taskId,
+          startTime: new Date(m.startTime).toISOString(),
+          duration: m.endTime ? m.endTime - m.startTime : null,
+          status: m.endTime ? 'completed' : 'active',
+          eventCount: m.events.length,
+          summary: m.summary
+        }));
     }
     
     return res.json({
