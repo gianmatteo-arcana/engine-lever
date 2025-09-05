@@ -931,4 +931,158 @@ export class TaskService {
     }
   }
 
+  /**
+   * Find and recover tasks that were in progress when server stopped
+   * This runs at server startup to resume interrupted tasks
+   */
+  async recoverOrphanedTasks(): Promise<void> {
+    try {
+      logger.info('🔍 Checking for orphaned tasks to recover...');
+      
+      // Use service role client for recovery operations
+      const client = this.dbService.getServiceClient();
+      
+      // First, let's see ALL tasks and their statuses for debugging
+      const { data: allTasks } = await client
+        .from('tasks')
+        .select('id, status, task_type, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(10);
+      
+      if (allTasks && allTasks.length > 0) {
+        logger.info(`📊 Current task statuses (last 10):`);
+        allTasks.forEach(task => {
+          const timeSinceUpdate = Date.now() - new Date(task.updated_at).getTime();
+          const minutes = Math.floor(timeSinceUpdate / 60000);
+          logger.info(`   - ${task.id.substring(0, 8)}... | ${task.status} | ${task.task_type} | ${minutes}m ago`);
+        });
+      } else {
+        logger.info('📊 No recent tasks found in last 10 records (database may have older tasks)');
+      }
+      
+      // Find tasks that are in progress (not paused, not completed, not failed)
+      // Only recover RECENT tasks to avoid recovering stale/abandoned tasks
+      // Tasks older than 1 hour are likely genuinely stuck, not from HMR
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      
+      const { data: orphanedTasks, error } = await client
+        .from('tasks')
+        .select('*')
+        .eq('status', TASK_STATUS.IN_PROGRESS)
+        .gte('updated_at', oneHourAgo)  // Only tasks updated in last hour
+        .order('updated_at', { ascending: false });
+      
+      if (error) {
+        logger.error('❌ CRITICAL: Failed to query orphaned tasks - this is a bug!', error);
+        throw error; // Fail hard - this needs to be fixed
+      }
+      
+      if (!orphanedTasks || orphanedTasks.length === 0) {
+        logger.info(`✅ No orphaned tasks found with status '${TASK_STATUS.IN_PROGRESS}'`);
+        
+        // Check for tasks waiting for input that might need attention
+        const { data: pausedTasks } = await client
+          .from('tasks')
+          .select('id, task_type, status')
+          .eq('status', TASK_STATUS.WAITING_FOR_INPUT);
+        
+        if (pausedTasks && pausedTasks.length > 0) {
+          logger.info(`ℹ️  Found ${pausedTasks.length} task(s) in '${TASK_STATUS.WAITING_FOR_INPUT}' state (waiting for user input)`);
+          pausedTasks.forEach(task => {
+            logger.info(`   - ${task.id.substring(0, 8)}... | ${task.status} | ${task.task_type}`);
+          });
+        }
+        return;
+      }
+      
+      logger.info(`📍 Found ${orphanedTasks.length} recent orphaned task(s) to recover`);
+      
+      // Also clean up very old stuck tasks (older than 24 hours)
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: stuckTasks } = await client
+        .from('tasks')
+        .select('id, updated_at')
+        .eq('status', TASK_STATUS.IN_PROGRESS)
+        .lt('updated_at', oneDayAgo);
+      
+      if (stuckTasks && stuckTasks.length > 0) {
+        logger.warn(`🧹 Found ${stuckTasks.length} stuck tasks older than 24 hours - marking as failed`);
+        await client
+          .from('tasks')
+          .update({ 
+            status: TASK_STATUS.FAILED,
+            updated_at: new Date().toISOString()
+          })
+          .in('id', stuckTasks.map(t => t.id));
+      }
+      
+      // Recover each recent task
+      const { OrchestratorAgent } = await import('../agents/OrchestratorAgent');
+      const orchestrator = OrchestratorAgent.getInstance();
+      
+      for (const task of orphanedTasks) {
+        await this.recoverTask(task, orchestrator);
+      }
+      
+    } catch (error) {
+      logger.error('❌ CRITICAL: Task recovery failed - this is a bug!', error);
+      throw error; // Fail hard - recovery is critical for reliability
+    }
+  }
+  
+  private async recoverTask(task: any, orchestrator: any): Promise<void> {
+    try {
+      logger.info(`🔄 Recovering task ${task.id} (${task.task_type})`);
+      
+      // Add a recovery note to the task
+      const client = this.dbService.getServiceClient();
+      await client
+        .from('context_entries')
+        .insert({
+          context_id: task.id,
+          entry_type: 'system',
+          entry_data: {
+            operation: 'system.task_recovered',
+            data: {
+              reason: 'Server restart detected',
+              recovered_at: new Date().toISOString()
+            },
+            reasoning: 'Task was in progress when server restarted, automatically resuming',
+            confidence: 1.0
+          },
+          created_at: new Date().toISOString()
+        });
+      
+      // Get full task context and trigger orchestration to resume
+      const taskContext = await this.getTaskContextById(task.id);
+      if (taskContext) {
+        await orchestrator.orchestrateTask(taskContext);
+        logger.info(`✅ Task ${task.id} recovery triggered`);
+      } else {
+        logger.error(`Failed to get task context for ${task.id}`);
+        // Mark task as failed if we can't get its context
+        await client
+          .from('tasks')
+          .update({ 
+            status: TASK_STATUS.FAILED,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', task.id);
+      }
+      
+    } catch (error) {
+      logger.error(`Failed to recover task ${task.id}:`, error);
+      
+      // Mark task as failed if recovery fails
+      const client = this.dbService.getServiceClient();
+      await client
+        .from('tasks')
+        .update({ 
+          status: TASK_STATUS.FAILED,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', task.id);
+    }
+  }
+
 }

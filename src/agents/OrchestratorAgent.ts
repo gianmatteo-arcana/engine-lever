@@ -621,7 +621,13 @@ export class OrchestratorAgent extends BaseAgent {
               await this.continueExecution(taskId);
             }
           } else {
-            logger.error('Cannot retry - execution or subtasks not found', { taskId, agentId });
+            logger.error(`Cannot retry agent "${agentId}" for task ${taskId} - execution plan or subtasks not found. The task may have been cleaned up or the execution plan was not properly stored.`, { 
+              taskId, 
+              agentId,
+              hasExecution: !!execution,
+              hasSubtasks: execution?.subtasks ? 'yes' : 'no',
+              executionKeys: execution ? Object.keys(execution) : []
+            });
           }
         }, action.retry.delay);
         break;
@@ -1067,6 +1073,17 @@ export class OrchestratorAgent extends BaseAgent {
       context: JSON.stringify(context, null, 2)
     });
     
+    // CRITICAL: Immediately mark task as in_progress for recovery
+    // This ensures the task can be recovered if the process crashes
+    if (context.currentState.status === TASK_STATUS.PENDING) {
+      logger.info('📌 Immediately setting task status to IN_PROGRESS for recovery', {
+        contextId: context.contextId,
+        previousStatus: context.currentState.status
+      });
+      context.currentState.status = TASK_STATUS.IN_PROGRESS;
+      await this.updateTaskStatus(context, TASK_STATUS.IN_PROGRESS);
+    }
+    
     try {
       // Determine if we're resuming based on PERSISTENT HISTORY
       // Check if we have any execution history that indicates work was started
@@ -1241,16 +1258,7 @@ export class OrchestratorAgent extends BaseAgent {
       }
       
       // 4. Execute plan phases (starting from the correct index)
-      // CRITICAL: Update task status to IN_PROGRESS when we start executing
-      if (context.currentState.status !== TASK_STATUS.IN_PROGRESS && 
-          context.currentState.status !== TASK_STATUS.WAITING_FOR_INPUT) {
-        logger.info('📌 Setting task status to IN_PROGRESS as we begin execution', {
-          contextId: context.contextId,
-          previousStatus: context.currentState.status,
-          newStatus: TASK_STATUS.IN_PROGRESS
-        });
-        await this.updateTaskStatus(context, TASK_STATUS.IN_PROGRESS);
-      }
+      // Status is already set to IN_PROGRESS at the start of orchestrateTask
       
       let allPhasesCompleted = true;
       let phaseIndex = startPhaseIndex;
@@ -1910,11 +1918,12 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
             }
             
           } catch (error) {
-            logger.error('Subtask execution failed', {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            logger.error(`Subtask execution failed for "${subtask.description}" using agent "${subtask.agent}": ${errorMsg}`, {
               contextId: context.contextId,
               subtask: subtask.description,
               agent: subtask.agent,
-              error: error instanceof Error ? error.message : String(error)
+              error: errorMsg
             });
             
             // Apply fallback strategy for failed subtask
@@ -2184,11 +2193,12 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     subtask: any,
     error: any
   ): Promise<any> {
-    logger.error('🚨 Subtask execution failed, applying fallback strategy', {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    logger.error(`🚨 Applying fallback strategy for failed subtask "${subtask.description}" (agent: ${subtask.agent}) - Error: ${errorMsg}`, {
       contextId: context.contextId,
       subtask: subtask.description,
       agent: subtask.agent,
-      error: error instanceof Error ? error.message : String(error)
+      error: errorMsg
     });
     
     // Record the failure for audit trail
