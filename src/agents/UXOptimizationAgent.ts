@@ -626,4 +626,214 @@ Return as JSON with fields organized into logical sections.`;
     
     return mergedRequest;
   }
+
+  /**
+   * Handle unstructured user messages (FluidUI)
+   * Extracts data from natural language and maps to pending UIRequest fields
+   * 
+   * @param message - The user's unstructured message
+   * @param taskContext - Current task context
+   * @returns BaseAgentResponse with extracted data
+   */
+  async handleUserMessage(message: string, taskContext?: any): Promise<BaseAgentResponse> {
+    const taskLogger = createTaskLogger(taskContext?.contextId || 'unknown');
+    
+    taskLogger.info('💬 Processing user message', {
+      messageLength: message.length,
+      taskId: taskContext?.contextId
+    });
+
+    try {
+      // Get pending UIRequests to understand what data is needed
+      const pendingUIRequests = await this.getPendingUIRequests(taskContext);
+      
+      // Build extraction prompt
+      const extractionPrompt = this.buildExtractionPrompt(message, pendingUIRequests);
+      
+      // Use LLM to extract data
+      const extractedData = await this.extractDataFromMessage(extractionPrompt);
+      
+      // Validate and clean extracted data
+      const validatedData = this.validateExtractedData(extractedData, pendingUIRequests);
+      
+      // Check if we need clarification
+      const clarificationNeeded = this.checkClarificationNeeded(validatedData, pendingUIRequests);
+      
+      if (clarificationNeeded) {
+        // Return a UIRequest for clarification
+        return {
+          status: 'needs_input',
+          contextUpdate: {
+            entryId: `ux_msg_${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            sequenceNumber: 0,
+            actor: {
+              type: 'agent',
+              id: this.specializedTemplate.agent.id,
+              version: this.specializedTemplate.agent.version
+            },
+            operation: 'message_clarification',
+            data: {
+              originalMessage: message,
+              extractedData: validatedData,
+              uiRequest: clarificationNeeded,
+              status: 'needs_clarification'
+            },
+            reasoning: `Need clarification on: ${clarificationNeeded.semanticData?.instructions}`,
+            confidence: 0.6,
+            trigger: {
+              type: 'user_request',
+              source: 'user',
+              details: { message }
+            }
+          },
+          confidence: 0.6,
+          uiRequests: [clarificationNeeded]
+        };
+      }
+      
+      // Return extracted data as completed response
+      return {
+        status: 'completed',
+        contextUpdate: {
+          entryId: `ux_msg_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          sequenceNumber: 0,
+          actor: {
+            type: 'agent',
+            id: this.specializedTemplate.agent.id,
+            version: this.specializedTemplate.agent.version
+          },
+          operation: 'message_extraction',
+          data: {
+            originalMessage: message,
+            extractedData: validatedData,
+            status: 'success',
+            message: 'Successfully extracted data from user message'
+          },
+          reasoning: `Extracted ${Object.keys(validatedData).length} data fields from user message`,
+          confidence: 0.85,
+          trigger: {
+            type: 'user_request',
+            source: 'user',
+            details: { message }
+          }
+        },
+        confidence: 0.85
+      };
+      
+    } catch (error) {
+      taskLogger.error('Failed to process user message', { error });
+      
+      return {
+        status: 'error',
+        contextUpdate: {
+          entryId: `ux_msg_error_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          sequenceNumber: 0,
+          actor: {
+            type: 'agent',
+            id: this.specializedTemplate.agent.id,
+            version: this.specializedTemplate.agent.version
+          },
+          operation: 'message_error',
+          data: {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            originalMessage: message
+          },
+          reasoning: 'Failed to process user message',
+          confidence: 0.1,
+          trigger: {
+            type: 'user_request',
+            source: 'user',
+            details: { message, error: String(error) }
+          }
+        },
+        confidence: 0.1
+      };
+    }
+  }
+
+  /**
+   * Get pending UIRequests from the current task context
+   */
+  private async getPendingUIRequests(_taskContext?: any): Promise<UIRequest[]> {
+    // TODO: Query A2A event bus or task context for pending UIRequests
+    // For now, return empty array
+    return [];
+  }
+
+  /**
+   * Build prompt for LLM to extract data from user message
+   */
+  private buildExtractionPrompt(message: string, pendingRequests: UIRequest[]): string {
+    const fields = pendingRequests.flatMap(r => 
+      r.semanticData?.fields || []
+    );
+    
+    return `Extract data from this user message that matches these needed fields:
+    
+Fields needed:
+${fields.map(f => `- ${f.name} (${f.type}): ${f.label || f.name}`).join('\n')}
+
+User message: "${message}"
+
+Extract any matching data. Use exact field names as keys.
+If a value seems to match but is slightly wrong format (like missing dashes in EIN), correct it.
+Return as JSON object with field names as keys.`;
+  }
+
+  /**
+   * Extract data from message using LLM
+   */
+  private async extractDataFromMessage(prompt: string): Promise<any> {
+    // TODO: Implement actual LLM call
+    // For now, return mock data
+    const taskLogger = createTaskLogger('message_extraction');
+    taskLogger.debug('Would process prompt with LLM:', { prompt });
+    return {};
+  }
+
+  /**
+   * Validate extracted data against UIRequest requirements
+   */
+  private validateExtractedData(data: any, pendingRequests: UIRequest[]): any {
+    const validated: any = {};
+    const fields = pendingRequests.flatMap(r => r.semanticData?.fields || []);
+    
+    for (const field of fields) {
+      if (data[field.name]) {
+        // Basic validation - can be enhanced
+        validated[field.name] = data[field.name];
+      }
+    }
+    
+    return validated;
+  }
+
+  /**
+   * Check if clarification is needed
+   */
+  private checkClarificationNeeded(validatedData: any, pendingRequests: UIRequest[]): UIRequest | null {
+    const requiredFields = pendingRequests.flatMap(r => 
+      (r.semanticData?.fields || []).filter((f: any) => f.required)
+    );
+    
+    const missingRequired = requiredFields.filter((f: any) => !validatedData[f.name]);
+    
+    if (missingRequired.length > 0) {
+      // Create a clarification UIRequest
+      return {
+        requestId: `clarify_${Date.now()}`,
+        templateType: 'form' as UITemplateType,
+        semanticData: {
+          title: "Just need a bit more information",
+          instructions: "I understood most of what you said, but need clarification on a few things:",
+          fields: missingRequired
+        }
+      };
+    }
+    
+    return null;
+  }
 }

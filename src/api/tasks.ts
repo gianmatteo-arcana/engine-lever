@@ -399,6 +399,122 @@ router.get('/:taskId/context-history', requireAuth, async (req: AuthenticatedReq
 });
 
 /**
+ * POST /api/tasks/:contextId/message
+ * 
+ * Handle unstructured user messages (FluidUI)
+ * Routes to UXOptimizationAgent for processing
+ */
+router.post('/:contextId/message', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { contextId } = req.params;
+    const userId = req.userId!;
+    const userEmail = req.userEmail!;
+    const { message } = req.body;
+    
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ error: 'Message is required and must be a string' });
+    }
+    
+    logger.info('Processing user message', {
+      contextId,
+      messageLength: message.length,
+      userId
+    });
+    
+    // Get services
+    const dbService = DatabaseService.getInstance();
+    const a2aEventBus = A2AEventBus.getInstance();
+    
+    // Verify user owns this task
+    const task = await dbService.getTask(userId, contextId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found or unauthorized' });
+    }
+    
+    // Get or create UXOptimizationAgent instance
+    const UXOptimizationAgent = (await import('../agents/UXOptimizationAgent')).UXOptimizationAgent;
+    const uxAgent = new UXOptimizationAgent(contextId, task.business_id, userId);
+    
+    // Process the message
+    const response = await uxAgent.handleUserMessage(message, {
+      contextId,
+      taskId: contextId,
+      tenantId: task.business_id,
+      userId
+    });
+    
+    // Extract data from response
+    const extractedData = response.contextUpdate?.data?.extractedData || {};
+    
+    // Create context event for the extracted data
+    const eventData = {
+      contextId,
+      actorType: 'agent',
+      actorId: 'ux_optimization_agent',
+      operation: 'USER_MESSAGE_PROCESSED',
+      data: {
+        originalMessage: message,
+        extractedData,
+        timestamp: new Date().toISOString()
+      },
+      reasoning: response.contextUpdate?.reasoning || 'Processed user message',
+      trigger: {
+        type: 'user_message',
+        source: 'conversation',
+        message
+      }
+    };
+    
+    // Persist the event
+    const persistedEvent = await dbService.createTaskContextEvent(
+      userId,
+      contextId,
+      eventData
+    );
+    
+    logger.info('User message processed and persisted', {
+      eventId: persistedEvent.id,
+      taskId: contextId,
+      extractedFields: Object.keys(extractedData)
+    });
+    
+    // Broadcast for real-time updates
+    await a2aEventBus.broadcast({
+      type: 'TASK_CONTEXT_UPDATE',
+      taskId: contextId,
+      agentId: 'ux_optimization_agent',
+      operation: 'USER_MESSAGE_PROCESSED',
+      data: {
+        ...eventData.data,
+        eventId: persistedEvent.id
+      },
+      reasoning: eventData.reasoning,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        userId,
+        userEmail
+      }
+    });
+    
+    // Return response with any UIRequest for clarification
+    res.json({
+      success: true,
+      contextId,
+      eventId: persistedEvent.id,
+      extractedData,
+      uiRequest: response.uiRequests?.[0] || null,
+      message: 'Message processed successfully'
+    });
+    
+  } catch (error) {
+    logger.error('Failed to process user message', error);
+    res.status(500).json({
+      error: 'Failed to process user message'
+    });
+  }
+});
+
+/**
  * POST /api/tasks/:taskId/events
  * 
  * Generic endpoint to emit events for ANY task
