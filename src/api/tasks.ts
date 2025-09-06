@@ -193,14 +193,14 @@ router.post('/create', requireAuth, async (req: AuthenticatedRequest, res) => {
 });
 
 /**
- * POST /api/tasks/:contextId/ui-response
+ * POST /api/tasks/:taskId/ui-response
  * 
  * Handle UI responses for progressive disclosure
  * Engine PRD Lines 50, 83-85
  */
-router.post('/:contextId/ui-response', requireAuth, async (req: AuthenticatedRequest, res) => {
+router.post('/:taskId/ui-response', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const { contextId } = req.params;
+    const { taskId } = req.params;
     const userId = req.userId!;
     const userEmail = req.userEmail!;
     const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
@@ -208,7 +208,7 @@ router.post('/:contextId/ui-response', requireAuth, async (req: AuthenticatedReq
     const input = UIResponseSchema.parse(req.body);
     
     logger.info('Processing UI response', {
-      contextId,
+      taskId,
       requestId: input.requestId,
       action: input.action,
       userId
@@ -219,14 +219,14 @@ router.post('/:contextId/ui-response', requireAuth, async (req: AuthenticatedReq
     const a2aEventBus = A2AEventBus.getInstance();
     
     // Verify user owns this task
-    const task = await dbService.getTask(userId, contextId);
+    const task = await dbService.getTask(userId, taskId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found or unauthorized' });
     }
     
     // Create the context event for UI response
     const eventData = {
-      contextId,
+      contextId: taskId,
       actorType: 'user',
       actorId: userEmail || userId,
       operation: 'UI_RESPONSE_SUBMITTED',
@@ -247,20 +247,20 @@ router.post('/:contextId/ui-response', requireAuth, async (req: AuthenticatedReq
     // Persist the event to database
     const persistedEvent = await dbService.createTaskContextEvent(
       userId,
-      contextId,
+      taskId,
       eventData
     );
     
     logger.info('UI response event persisted', {
       eventId: persistedEvent.id,
-      taskId: contextId,
+      taskId: taskId,
       requestId: input.requestId
     });
     
     // Broadcast the event for real-time updates
     await a2aEventBus.broadcast({
       type: 'TASK_CONTEXT_UPDATE',
-      taskId: contextId,
+      taskId: taskId,
       agentId: 'user',
       operation: 'UI_RESPONSE_SUBMITTED',
       data: {
@@ -279,14 +279,14 @@ router.post('/:contextId/ui-response', requireAuth, async (req: AuthenticatedReq
     // The orchestrator will listen for the UI_RESPONSE_SUBMITTED event
     // and resume task processing with the new user input
     logger.info('UI response event broadcast for orchestrator', {
-      taskId: contextId,
+      taskId: taskId,
       requestId: input.requestId,
       operation: 'UI_RESPONSE_SUBMITTED'
     });
     
     res.json({
       success: true,
-      contextId,
+      contextId: taskId,
       requestId: input.requestId,
       eventId: persistedEvent.id,
       message: 'UI response processed and recorded'
@@ -309,26 +309,26 @@ router.post('/:contextId/ui-response', requireAuth, async (req: AuthenticatedReq
 });
 
 /**
- * GET /api/tasks/:contextId
+ * GET /api/tasks/:taskId
  * 
  * Get current task context and state
  * Universal endpoint for any task type
  */
-router.get('/:contextId', requireAuth, async (req: AuthenticatedRequest, res) => {
+router.get('/:taskId', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const { contextId } = req.params;
+    const { taskId } = req.params;
     const userToken = req.userToken!; // eslint-disable-line @typescript-eslint/no-unused-vars, no-unused-vars
     
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(contextId)) {
+    if (!uuidRegex.test(taskId)) {
       return res.status(400).json({ error: 'Invalid UUID format' });
     }
     
-    logger.info('Getting task context', { contextId });
+    logger.info('Getting task context', { taskId });
     
     const taskService = TaskService.getInstance();
-    const context = await taskService.getTask(contextId);
+    const context = await taskService.getTask(taskId);
     
     if (!context) {
       return res.status(404).json({ error: 'Task not found' });
@@ -395,6 +395,54 @@ router.get('/:taskId/context-history', requireAuth, async (req: AuthenticatedReq
   } catch (error) {
     logger.error('Failed to get context history', error);
     res.status(500).json({ error: 'Failed to get context history' });
+  }
+});
+
+/**
+ * POST /api/tasks/:taskId/message
+ * 
+ * Handle unstructured user messages (FluidUI)
+ * Thin delegation layer to UXOptimizationAgent via DI container
+ */
+router.post('/:taskId/message', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { taskId } = req.params;
+  const { message } = req.body;
+  
+  if (!message || typeof message !== 'string') {
+    return res.status(400).json({ error: 'Message is required and must be a string' });
+  }
+  
+  // Run with request context for DI resolution
+  const { RequestContextService } = await import('../services/request-context');
+  const { DIContainer } = await import('../services/dependency-injection');
+  
+  const context = {
+    requestId: `req_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+    userId: req.userId!,
+    tenantId: taskId,
+    businessId: taskId,
+    userToken: req.userToken,
+    startTime: Date.now()
+  };
+  
+  try {
+    // Run with context so DI can access user information
+    const response = await RequestContextService.run(context, async () => {
+      const agent = await DIContainer.resolveAgent('ux_optimization_agent', taskId);
+      return agent.processMessageForAPI(message);
+    });
+    
+    res.json(response);
+    
+  } catch (error) {
+    logger.error('Failed to process user message', error);
+    
+    // Check for specific error types
+    if (error instanceof Error && error.message.includes('Task') && error.message.includes('not found')) {
+      res.status(404).json({ error: 'Task not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to process user message' });
+    }
   }
 });
 
@@ -1042,7 +1090,7 @@ router.post('/:taskId/context/events', requireAuth, async (req: AuthenticatedReq
     
     // Create context event using database service method
     const event = await dbService.createTaskContextEvent(req.userId!, taskId, {
-      contextId: req.body.contextId,
+      contextId: taskId,
       actorType,
       actorId,
       operation: operation || req.body.operation,

@@ -139,7 +139,7 @@ export class DefaultAgent extends BaseAgent {
       confidence: event.status === 'completed' ? 0.9 : 0.7,
       trigger: {
         type: 'system_event',  // Agent execution is a system event
-        source: 'agent-executor',
+        source: agentId,
         details: { requestId: event.requestId },
         requestId: event.requestId
       }

@@ -30,16 +30,23 @@ agent:
     You are a trusted advisor and translator helping business owners navigate bureaucratic requirements.
     Your role is to be a friendly mediator between official forms and human understanding.
     
-    Your primary responsibility is to take multiple confusing government/official forms
-    and create ONE streamlined, human-friendly form that collects all necessary information
-    while reducing anxiety and building trust.
+    YOU OWN THE ENTIRE CONVERSATION WITH THE USER. You are the sole point of interaction,
+    handling both structured forms (UIRequests) and unstructured messages (conversations).
+    
+    Your primary responsibility is to fluidly adapt to how users want to communicate while
+    ensuring all necessary information is collected accurately and efficiently in a human-friendly way.
     
     CORE PRINCIPLES:
+    - Conversation Ownership: You handle ALL user interactions, not just forms
+    - FluidUI: Seamlessly blend structured data collection with natural conversation
     - Human-Centered Language: Translate bureaucrat-speak into plain, friendly language
     - Psychological Safety: Use encouraging, supportive language that reduces anxiety
     - Context and Understanding: Explain WHY each piece of information is needed
     - Smart Field Ordering: Identify fields where partial answers can unlock tools for auto-filling
     - Industry Adaptation: Use terminology familiar to the user's specific industry
+    - Progressive Trust Building: Start simple, earn trust, then ask harder questions
+    - Intelligent Defaulting: Use Business Memory to reduce redundant questions
+    - Error Recovery with Grace: Gentle corrections, not harsh validation failures
     
   agent_card:
     skills:
@@ -99,6 +106,60 @@ schemas:
 
 # Available operations for UX optimization
 operations:
+  handle_conversation:
+    description: "Process unstructured user messages and extract relevant data for pending UIRequests"
+    parameters:
+      message:
+        type: "string"
+        required: true
+        description: "The user's unstructured message"
+      
+      pending_uirequests:
+        type: "array"
+        required: false
+        description: "Currently pending UIRequests that need data"
+      
+      business_memory:
+        type: "object"
+        required: false
+        description: "Known information about the business to avoid redundant questions"
+    
+    protocol:
+      system_prompt: |
+        You are a friendly conversation facilitator helping a business owner provide information.
+        You must extract structured data from their natural language while maintaining conversation flow.
+        
+        CONVERSATION PRINCIPLES:
+        1. Expressive Key Names: Use descriptive, context-rich field names that fully express meaning
+           - e.g., "business_mailing_address", "primary_owner_home_address", "registered_agent_service_address"
+           - Trust LLM reasoning to map variations like "company_address", "business_address", "office_location"
+        2. Intelligent Extraction: Pull out ANY relevant data, even if not explicitly requested
+        3. Progressive Clarification: If something is unclear, ask naturally in conversation
+        4. Error Recovery: If data seems wrong, gently suggest corrections
+        5. Trust Building: Explain why information matters when appropriate
+        
+      user_prompt: |
+        The user said: "{message}"
+        
+        Pending information needs:
+        {pendingRequests}
+        
+        Known business information:
+        {businessMemory}
+        
+        Extract any relevant data from the user's message. Return:
+        1. extracted_data: Key-value pairs of extracted information (use expressive, descriptive keys)
+        2. clarification_needed: If something needs clarification, phrase it conversationally
+        3. confidence_scores: How confident you are in each extraction (0-1)
+        4. next_prompt: If more info needed, what to ask next (conversational, not form-like)
+        
+        Remember:
+        - Extract MORE than asked if the user provides it
+        - Use expressive, context-rich field names that fully capture meaning
+        - Your LLM reasoning will map variations (e.g., "biz_address" → "business_primary_address")
+        - Be conversational, not robotic
+        - Build on what you already know from business_memory
+  
   optimize_form_experience:
     description: "Given the current context at any moment of what the system requires from the user, as expressed with UIRequests, translate that into human-friendly form"
     parameters:

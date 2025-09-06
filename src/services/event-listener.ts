@@ -256,7 +256,7 @@ export class EventListener {
       });
 
       // Emit event to UnifiedEventBus for other subscribers
-      const eventBus = new UnifiedEventBus(event.taskId || '', event.taskId || '');
+      const eventBus = new UnifiedEventBus(event.taskId || '', event.taskId || '', 'EventListener');
       const taskEvent: Task = {
         id: event.taskId || '',
         status: 'running' as const,
@@ -461,7 +461,7 @@ export class EventListener {
       });
 
       // Emit task event to UnifiedEventBus for other subscribers
-      const eventBus = new UnifiedEventBus(taskId, taskId);
+      const eventBus = new UnifiedEventBus(taskId, taskId, 'EventListener');
       const taskEvent: Task = {
         id: taskId,
         status: 'created',

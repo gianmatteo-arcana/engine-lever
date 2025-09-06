@@ -855,6 +855,64 @@ export class TaskService {
   }
 
   /**
+   * Update task completeness percentage
+   * This is the SINGLE SOURCE OF TRUTH for task progress
+   * Called by OrchestratorAgent to persist progress
+   */
+  async updateTaskCompleteness(taskId: string, completeness: number): Promise<void> {
+    try {
+      // Validate completeness range
+      const validCompleteness = Math.max(0, Math.min(100, Math.round(completeness)));
+      
+      logger.info('📊 Updating task completeness', { 
+        taskId, 
+        completeness: validCompleteness 
+      });
+      
+      // Use service role client for internal operations
+      const client = this.dbService.getServiceClient();
+      
+      const updateData: any = {
+        completeness: validCompleteness,
+        updated_at: new Date().toISOString()
+      };
+      
+      // If task reaches 100%, also mark as completed
+      if (validCompleteness === 100) {
+        updateData.status = 'completed';
+        updateData.completed_at = new Date().toISOString();
+      }
+      
+      const { error } = await client
+        .from('tasks')
+        .update(updateData)
+        .eq('id', taskId);
+      
+      if (error) {
+        logger.error('Failed to update task completeness', {
+          taskId,
+          completeness: validCompleteness,
+          error: error.message
+        });
+        throw new Error(`Failed to update task completeness: ${error.message}`);
+      }
+      
+      logger.info('✅ Task completeness updated successfully', {
+        taskId,
+        completeness: validCompleteness
+      });
+      
+    } catch (error) {
+      logger.error('Error updating task completeness', {
+        taskId,
+        completeness,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Update task status (internal use - service role)
    * Used by orchestrator to mark tasks as completed
    */
