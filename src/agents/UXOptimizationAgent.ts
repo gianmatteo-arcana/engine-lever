@@ -930,7 +930,10 @@ Return as JSON object with field names as keys.`;
       const dbService = DatabaseService.getInstance();
       
       // Load task context history
-      const taskHistory = await dbService.getContextHistory(this.userId || 'system', this.taskId, 100);
+      // Don't use 'system' as a UUID - it's not valid
+      const taskHistory = this.userId 
+        ? await dbService.getContextHistory(this.userId, this.taskId, 100)
+        : [];
       
       // Load business memory using BusinessMemoryTool
       const { BusinessMemoryTool } = await import('../tools/business-memory');
@@ -940,7 +943,9 @@ Return as JSON object with field names as keys.`;
       });
       
       // Load task metadata
-      const task = await dbService.getTask(this.userId || 'system', this.taskId);
+      const task = this.userId 
+        ? await dbService.getTask(this.userId, this.taskId)
+        : null;
       
       // Store in agent instance for reference during conversation
       this.taskContext = {
