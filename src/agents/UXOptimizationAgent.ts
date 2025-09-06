@@ -28,6 +28,9 @@ import { DatabaseService } from '../services/database';
 
 export class UXOptimizationAgent extends BaseAgent {
   private taskId: string;
+  private taskHistory: any[] = [];
+  private taskMetadata: any = null;
+  private businessMemory: any = null;
 
   constructor(taskId: string, tenantId?: string, userId?: string) {
     super('ux_optimization_agent.yaml', tenantId || 'system', userId);
@@ -225,7 +228,7 @@ export class UXOptimizationAgent extends BaseAgent {
       // Use BaseAgent's llmProvider instead of custom callLLM
       const optimizationPlan = await this.llmProvider.complete({
         prompt,
-        model: 'claude-3-sonnet',
+        model: 'claude-3-5-sonnet-20241022',
         temperature: 0.7,
         maxTokens: 2000
       });
@@ -933,7 +936,7 @@ Return as JSON object with field names as keys.`;
       // Use the LLM provider to extract data
       const response = await this.llmProvider.complete({
         prompt,
-        model: 'claude-3-sonnet',
+        model: 'claude-3-5-sonnet-20241022',
         temperature: 0.3,
         maxTokens: 500
       });
@@ -1003,26 +1006,37 @@ Return as JSON object with field names as keys.`;
     const taskLogger = createTaskLogger(taskContext?.contextId || 'conversation');
     
     try {
+      // Build context summary from loaded data
+      const contextSummary = this.taskHistory?.length > 0 
+        ? `Recent activity: ${this.taskHistory.slice(-3).map((h: any) => h.operation).join(', ')}`
+        : 'No previous activity';
+      
+      const currentData = taskContext?.currentState?.data || {};
+      const hasBusinessName = currentData.businessName || currentData.business_name;
+      const hasAddress = currentData.businessAddress || currentData.business_address;
+      const hasEIN = currentData.ein || currentData.EIN;
+      
       const prompt = `You are a helpful business registration assistant. The user is working on registering their business.
       
 Current task context:
-- Task ID: ${taskContext?.contextId || 'unknown'}
-- Task type: ${taskContext?.taskType || 'business registration'}
+- Task ID: ${this.taskId || 'unknown'}
+- Task type: ${this.taskMetadata?.title || 'business registration'}
+- ${contextSummary}
+- Data collected: ${hasBusinessName ? 'business name' : ''} ${hasAddress ? ', address' : ''} ${hasEIN ? ', EIN' : ''}
 
 User message: "${message}"
 
-Provide a helpful, concise response. If they're asking what they can do, suggest relevant business information they can provide like:
-- Business name
-- Business address
-- EIN (Employer Identification Number)
-- Business type/structure
-- Contact information
+${message.toLowerCase().includes('what') && message.toLowerCase().includes('task') 
+  ? 'The user is asking about the current task. Explain that this is a business registration task and what information has been collected so far.'
+  : 'Provide a helpful, concise response.'}
+
+If they're asking what they can do, suggest relevant business information they haven't provided yet.
 
 Keep the response conversational and under 2-3 sentences.`;
 
       const response = await this.llmProvider.complete({
         prompt,
-        model: 'claude-3-sonnet',
+        model: 'claude-3-5-sonnet-20241022',
         temperature: 0.7,
         maxTokens: 200
       });
@@ -1123,12 +1137,22 @@ Keep the response conversational and under 2-3 sentences.`;
         ? await dbService.getContextHistory(this.userId, this.taskId, 100)
         : [];
       
-      // Load business memory using BusinessMemoryTool
-      const { BusinessMemoryTool } = await import('../tools/business-memory');
-      const businessMemoryTool = new BusinessMemoryTool();
-      const businessMemory = await businessMemoryTool.searchMemory({
-        businessId: this.businessId
-      });
+      // Load business memory using BusinessMemoryTool (only if we have a valid business ID)
+      let businessMemory = null;
+      if (this.businessId && this.businessId !== 'system') {
+        try {
+          const { BusinessMemoryTool } = await import('../tools/business-memory');
+          const businessMemoryTool = new BusinessMemoryTool();
+          businessMemory = await businessMemoryTool.searchMemory({
+            businessId: this.businessId
+          });
+        } catch (memoryError) {
+          taskLogger.warn('Failed to load business memory', { 
+            error: memoryError instanceof Error ? memoryError.message : String(memoryError),
+            businessId: this.businessId 
+          });
+        }
+      }
       
       // Load task metadata
       const task = this.userId 
@@ -1136,6 +1160,9 @@ Keep the response conversational and under 2-3 sentences.`;
         : null;
       
       // Store in agent instance for reference during conversation
+      this.taskHistory = taskHistory;
+      this.businessMemory = businessMemory;
+      this.taskMetadata = task;
       this.taskContext = {
         history: taskHistory,
         businessMemory,
