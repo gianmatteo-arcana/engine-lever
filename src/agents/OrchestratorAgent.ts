@@ -1281,7 +1281,8 @@ export class OrchestratorAgent extends BaseAgent {
         // 4. Calculate and persist task completeness
         // OrchestratorAgent is the SINGLE SOURCE OF TRUTH for progress
         const completeness = Math.round((phaseIndex / phases.length) * 100);
-        await this.updateTaskCompleteness(context.contextId, completeness);
+        const taskId = context.contextId; // contextId IS the taskId in our architecture
+        await this.updateTaskCompleteness(taskId, completeness);
         
         // 5. Phase completion is tracked through subtask delegations
         // No need for separate phase_completed event to avoid duplicates
@@ -2773,7 +2774,8 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
     
     try {
       const taskService = TaskService.getInstance();
-      await taskService.updateTaskStatus(context.contextId, status);
+      const taskId = context.contextId; // contextId IS the taskId in our architecture
+      await taskService.updateTaskStatus(taskId, status);
       
       // CRITICAL: Also update the in-memory context to keep it in sync
       context.currentState.status = status;
@@ -2825,10 +2827,11 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
       const completedAt = new Date().toISOString();
       
       // Set completeness to 100% when task completes
-      await this.updateTaskCompleteness(context.contextId, 100);
+      const taskId = context.contextId; // contextId IS the taskId in our architecture
+      await this.updateTaskCompleteness(taskId, 100);
       
       // Update task status
-      await taskService.updateTaskStatus(context.contextId, TASK_STATUS.COMPLETED, completedAt);
+      await taskService.updateTaskStatus(taskId, TASK_STATUS.COMPLETED, completedAt);
       
       logger.info('✅ Task status updated to COMPLETED in database', {
         contextId: context.contextId
