@@ -169,7 +169,26 @@ export class TaskIntrospectionTool {
     const taskLogger = createTaskLogger(task.id);
 
     try {
-      // Calculate progress metrics
+      // Special handling for completed tasks
+      if (task.status === 'completed') {
+        const createdAt = new Date(task.created_at);
+        const completedAt = task.completed_at ? new Date(task.completed_at) : new Date();
+        const timeElapsed = this.formatTimeElapsed(completedAt.getTime() - createdAt.getTime());
+        const completedSteps = this.countCompletedSteps(history);
+        
+        return {
+          status: 'completed',
+          completeness: 100, // Completed tasks are always 100%
+          stepsCompleted: completedSteps,
+          totalSteps: Math.max(completedSteps, this.countTotalSteps(history)),
+          currentStep: 'Task completed',
+          blockers: [],
+          lastActivity: 'Task marked as completed',
+          timeElapsed
+        };
+      }
+
+      // Calculate progress metrics for active tasks
       const totalSteps = this.countTotalSteps(history);
       const completedSteps = this.countCompletedSteps(history);
       const completeness = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
@@ -391,8 +410,21 @@ export class TaskIntrospectionTool {
     const completedOperations = new Set<string>();
     
     for (const entry of history) {
-      if (entry.operation && entry.data?.status === 'success') {
-        completedOperations.add(entry.operation);
+      // Count operations that have been completed (various patterns)
+      if (entry.operation) {
+        // Check various success patterns
+        const isCompleted = 
+          entry.data?.status === 'success' ||
+          entry.data?.status === 'completed' ||
+          entry.data?.uiResponse || // UI response means step completed
+          entry.data?.extractedData || // Data extracted means progress
+          entry.data?.formData || // Form submitted means progress
+          (entry.operation === 'task_completed') ||
+          (entry.operation === 'phase_transition' && entry.data?.phase);
+        
+        if (isCompleted) {
+          completedOperations.add(entry.operation);
+        }
       }
     }
     
