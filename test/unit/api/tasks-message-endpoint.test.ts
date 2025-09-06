@@ -1,5 +1,5 @@
 /**
- * Unit tests for /api/tasks/:contextId/message endpoint
+ * Unit tests for /api/tasks/:taskId/message endpoint
  * Tests the FluidUI message processing API
  */
 
@@ -38,7 +38,7 @@ jest.mock('../../../src/utils/logger', () => ({
   }))
 }));
 
-describe('POST /api/tasks/:contextId/message', () => {
+describe('POST /api/tasks/:taskId/message', () => {
   let app: express.Application;
   const mockUserId = 'test-user-123';
   const mockContextId = 'test-context-456';
