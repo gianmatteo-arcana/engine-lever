@@ -170,9 +170,22 @@ export class TaskIntrospectionTool {
 
     try {
       // Get completeness from task record (persisted by OrchestratorAgent)
-      const completeness = task.completeness || 0;
+      // If not available (migration not run), estimate from history
+      let completeness = task.completeness;
+      if (completeness === undefined || completeness === null) {
+        // Fallback calculation if DB doesn't have completeness column yet
+        const totalSteps = this.countTotalSteps(history);
+        const completedSteps = this.countCompletedSteps(history);
+        completeness = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
+        
+        // If we have UI responses, we're definitely making progress
+        const uiResponses = history.filter(h => h.data?.uiResponse || h.data?.response);
+        if (uiResponses.length > 0 && completeness < 25) {
+          completeness = Math.max(25, completeness); // At least 25% if we have responses
+        }
+      }
       
-      // Calculate progress metrics
+      // Calculate progress metrics for display
       const totalSteps = this.countTotalSteps(history);
       const completedSteps = this.countCompletedSteps(history);
 
@@ -223,6 +236,14 @@ export class TaskIntrospectionTool {
         }
         if (entry.data?.formData) {
           Object.assign(collectedFields, entry.data.formData);
+        }
+        // Also check UI response data
+        if (entry.data?.uiResponse?.response) {
+          Object.assign(collectedFields, entry.data.uiResponse.response);
+        }
+        // Check response field directly
+        if (entry.data?.response) {
+          Object.assign(collectedFields, entry.data.response);
         }
       }
 
@@ -307,20 +328,28 @@ export class TaskIntrospectionTool {
     }
 
     // Generate recommendations
-    if (result.collectedData?.missingRequired?.length) {
-      insights.recommendations.push(
-        `Collect missing required fields: ${result.collectedData.missingRequired.join(', ')}`
-      );
+    if (result.progress?.completeness && result.progress.completeness > 0) {
+      // Task has progress, suggest continuation
+      if (result.collectedData?.missingRequired?.length) {
+        insights.recommendations.push(
+          `Continue by collecting: ${result.collectedData.missingRequired.slice(0, 3).join(', ')}`
+        );
+      } else if (result.progress.completeness < 100) {
+        insights.recommendations.push('Continue with the next step in your business registration process');
+      }
+    } else {
+      // Task just started
+      insights.recommendations.push('Begin by providing your basic business information');
     }
 
     if (result.progress?.blockers?.length) {
       insights.recommendations.push(
-        `Address blockers: ${result.progress.blockers.join(', ')}`
+        `First resolve: ${result.progress.blockers[0]}`
       );
     }
 
     if (result.objectives?.nextActions?.length) {
-      insights.recommendations.push(...result.objectives.nextActions);
+      insights.recommendations.push(result.objectives.nextActions[0]); // Just the first one
     }
 
     // Generate warnings
