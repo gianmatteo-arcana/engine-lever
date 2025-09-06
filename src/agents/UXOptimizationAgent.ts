@@ -1006,17 +1006,19 @@ Return as JSON object with field names as keys.`;
     const taskLogger = createTaskLogger(taskContext?.contextId || 'conversation');
     
     try {
-      // Use TaskIntrospectionTool for deep understanding
+      // Use TaskIntrospectionTool via toolchain for deep understanding
       let introspection = null;
-      if (this.userId && this.taskId) {
+      if (this.userId && this.taskId && this.toolChain) {
         try {
-          const { TaskIntrospectionTool } = await import('../tools/task-introspection');
-          const introspectionTool = new TaskIntrospectionTool();
-          introspection = await introspectionTool.introspect({
+          const toolResult = await this.toolChain.executeTool('taskIntrospection', {
             taskId: this.taskId,
             userId: this.userId,
             aspectToInspect: 'all'
           });
+          
+          if (toolResult.success) {
+            introspection = toolResult.data;
+          }
         } catch (introError) {
           taskLogger.warn('Failed to introspect task', introError);
         }

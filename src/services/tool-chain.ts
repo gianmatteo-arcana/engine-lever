@@ -9,6 +9,7 @@
 import { CredentialVault } from './credential-vault';
 import { californiaBusinessSearch } from '../tools/california-business-search';
 import { BusinessMemoryTool, BusinessMemorySearchParams, BusinessKnowledge } from '../tools/business-memory';
+import { TaskIntrospectionTool } from '../tools/task-introspection';
 import type { Tool, ToolExecutionResult, ToolChain as IToolChain } from '../toolchain/ToolChain';
 import { 
   validateRequiredParams, 
@@ -80,10 +81,12 @@ export class NeedCredentialsError extends Error {
 export class ToolChain implements IToolChain {
   private credentials: CredentialVault;
   private businessMemory: BusinessMemoryTool;
+  private taskIntrospection: TaskIntrospectionTool;
   
   constructor() {
     this.credentials = new CredentialVault();
     this.businessMemory = new BusinessMemoryTool();
+    this.taskIntrospection = new TaskIntrospectionTool();
   }
   
   /**
@@ -437,6 +440,12 @@ Available Tools:
   * Categories: identity, structure, contact_info, operations, financial, etc.
   * Default confidence: 0.7
   * Use to retrieve learned information about a business
+
+- taskIntrospection(taskId, userId, aspectToInspect?): Analyze current task internals and processing state
+  * Returns: Detailed task introspection including template, progress, data, objectives
+  * Aspects: template, progress, data, objectives, all (default: all)
+  * SCOPE: Task-specific introspective analysis only - NOT for general data access
+  * Use to understand task state, requirements, and next steps
   
 - getQuickBooksData(tenantId, dataType): Retrieve QuickBooks data (requires credentials)
 - processPayment(amount, description, tenantId): Process payment via Stripe (requires credentials)
@@ -561,6 +570,54 @@ Available Tools:
           'Read-only access',
           'Only returns knowledge above confidence threshold',
           'May have incomplete data for new businesses'
+        ]
+      },
+      taskIntrospection: {
+        name: 'taskIntrospection',
+        description: 'Analyze and understand current task internals, processing state, and requirements',
+        category: 'task_analysis',
+        parameters: {
+          taskId: {
+            type: 'string',
+            required: true,
+            description: 'The task ID to introspect'
+          },
+          userId: {
+            type: 'string',
+            required: true,
+            description: 'The user ID (for authorization)'
+          },
+          aspectToInspect: {
+            type: 'string',
+            required: false,
+            default: 'all',
+            enum: ['template', 'progress', 'data', 'objectives', 'all'],
+            description: 'Specific aspect to analyze (default: all)'
+          }
+        },
+        returns: {
+          type: 'TaskIntrospectionResult',
+          description: 'Comprehensive task analysis including template, progress, collected data, and objectives'
+        },
+        capabilities: [
+          'read_only',
+          'task_scoped',
+          'introspective_analysis',
+          'no_external_access'
+        ],
+        dataSource: 'task and context_history tables',
+        limitations: [
+          'Scoped to single task only',
+          'Read-only introspection',
+          'No cross-task access',
+          'Internal task state analysis only'
+        ],
+        usage: [
+          'Understanding task requirements and structure',
+          'Analyzing task progress and completeness',
+          'Reviewing collected data and validation',
+          'Determining next steps and blockers',
+          'NOT for general data retrieval or cross-task queries'
         ]
       },
       persistKnowledge: {
@@ -815,6 +872,30 @@ Available Tools:
           return {
             success: true,
             data: knowledge,
+            executionTime: Date.now()
+          };
+        }
+
+        case 'taskIntrospection': {
+          validateRequiredParams(sanitizedParams, ['taskId', 'userId'], `tool ${toolId}`);
+          
+          const taskId = safeString(sanitizedParams.taskId);
+          const userId = safeString(sanitizedParams.userId);
+          const aspectToInspect = (sanitizedParams.aspectToInspect as any) || 'all';
+          
+          if (!taskId || !userId) {
+            throw new Error('Task ID and User ID are required for task introspection');
+          }
+          
+          const introspectionResult = await this.taskIntrospection.introspect({
+            taskId,
+            userId,
+            aspectToInspect
+          });
+          
+          return {
+            success: true,
+            data: introspectionResult,
             executionTime: Date.now()
           };
         }

@@ -76,7 +76,7 @@ export class TaskIntrospectionTool extends BaseTool {
   }
 
   get description(): string {
-    return 'Analyze and understand the current task context, progress, and objectives';
+    return 'Introspective analysis of current task internals: processing state, requirements, and progress. SCOPE: Task-specific internal analysis only - NOT for general data access or cross-task queries.';
   }
 
   /**

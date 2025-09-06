@@ -46,7 +46,7 @@ describe('TaskIntrospectionTool', () => {
     });
 
     it('should have correct description', () => {
-      expect(tool.description).toBe('Analyze and understand the current task context, progress, and objectives');
+      expect(tool.description).toBe('Introspective analysis of current task internals: processing state, requirements, and progress. SCOPE: Task-specific internal analysis only - NOT for general data access or cross-task queries.');
     });
   });
 
