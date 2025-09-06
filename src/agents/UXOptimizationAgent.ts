@@ -1036,6 +1036,52 @@ Keep the response conversational and under 2-3 sentences.`;
   }
 
   /**
+   * Process a message and return API-ready response
+   * Encapsulates all processing, persistence, and response formatting
+   * 
+   * @param message - User's message
+   * @returns API-ready response object
+   */
+  async processMessageForAPI(message: string): Promise<{
+    success: boolean;
+    contextId: string;
+    eventId: string | null;
+    extractedData: any;
+    uiRequest: any;
+    message: string;
+    ephemeral: boolean;
+  }> {
+    try {
+      // Process the message with full context
+      const response = await this.handleUserMessage(message, {
+        contextId: this.taskId,
+        taskId: this.taskId,
+        userId: this.userId
+      });
+      
+      // Extract response data
+      const isEphemeral = (response as any).ephemeral === true;
+      const extractedData = response.contextUpdate?.data?.extractedData || {};
+      const eventId = response.contextUpdate?.entryId || null;
+      const responseMessage = response.contextUpdate?.data?.message || 'Message processed successfully';
+      
+      return {
+        success: true,
+        contextId: this.taskId,
+        eventId,
+        extractedData,
+        uiRequest: response.uiRequests?.[0] || null,
+        message: responseMessage,
+        ephemeral: isEphemeral
+      };
+    } catch (error) {
+      const taskLogger = createTaskLogger(this.taskId);
+      taskLogger.error('Failed to process message for API', error);
+      throw error;
+    }
+  }
+
+  /**
    * Initialize agent for a specific task (called by DI container)
    * Loads full context history to enable intelligent conversation
    */

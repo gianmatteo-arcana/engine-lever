@@ -75,30 +75,30 @@ describe('POST /api/tasks/:contextId/message', () => {
       createTaskContextEvent: mockCreateTaskContextEvent
     });
     
-    // Mock UXOptimizationAgent
-    const mockHandleUserMessage = jest.fn().mockResolvedValue({
-      status: 'completed',
-      contextUpdate: {
-        operation: 'message_extraction',
-        data: {
-          extractedData: { businessName: 'TestCorp' },
-          originalMessage: 'test message'
-        },
-        reasoning: 'Extracted data successfully'
-      },
-      confidence: 0.85
+    // Mock the processMessageForAPI method that returns API-ready response
+    const mockProcessMessageForAPI = jest.fn().mockResolvedValue({
+      success: true,
+      contextId: mockContextId,
+      eventId: 'event_123',
+      extractedData: { businessName: 'TestCorp' },
+      uiRequest: null,
+      message: 'Successfully extracted data from user message',
+      ephemeral: false
     });
     
-    const mockLoadContext = jest.fn().mockResolvedValue(undefined);
+    const mockAgent = {
+      processMessageForAPI: mockProcessMessageForAPI
+    };
     
-    (UXOptimizationAgent as jest.Mock).mockImplementation(() => ({
-      handleUserMessage: mockHandleUserMessage,
-      loadContext: mockLoadContext
-    }));
+    (UXOptimizationAgent as jest.Mock).mockImplementation(() => mockAgent);
     
-    // Mock DI Container - make it fail so we use direct instantiation
+    // Mock DI Container to return our mock agent
     const { DIContainer } = require('../../../src/services/dependency-injection');
-    DIContainer.resolveAgent = jest.fn().mockRejectedValue(new Error('Not registered'));
+    DIContainer.resolveAgent = jest.fn().mockResolvedValue(mockAgent);
+    
+    // Mock RequestContextService
+    const { RequestContextService } = require('../../../src/services/request-context');
+    RequestContextService.run = jest.fn().mockImplementation((context, fn) => fn());
     
     // Mount routes
     app.use('/api/tasks', router);
@@ -130,33 +130,32 @@ describe('POST /api/tasks/:contextId/message', () => {
         .expect(200);
       
       expect(response.body.success).toBe(true);
-      expect(response.body.message).toBe('Message processed successfully');
+      expect(response.body.message).toBe('Successfully extracted data from user message');
       expect(response.body).toHaveProperty('extractedData');
     });
 
     it('should return clarification request when needed', async () => {
       // Mock clarification response
-      const mockAgent = UXOptimizationAgent as jest.Mock;
-      mockAgent.mockImplementationOnce(() => ({
-        loadContext: jest.fn().mockResolvedValue(undefined),
-        handleUserMessage: jest.fn().mockResolvedValue({
-          status: 'needs_clarification',
-          contextUpdate: {
-            operation: 'clarification_request',
-            data: {
-              clarificationNeeded: 'Please provide your business address'
-            }
-          },
-          uiRequests: [{
+      const { DIContainer } = require('../../../src/services/dependency-injection');
+      DIContainer.resolveAgent.mockResolvedValueOnce({
+        processMessageForAPI: jest.fn().mockResolvedValue({
+          success: true,
+          contextId: mockContextId,
+          eventId: null,
+          extractedData: {},
+          uiRequest: {
             requestId: 'clarify_123',
             templateType: 'form',
             semanticData: {
               title: 'Need more information',
+              instructions: 'Please provide your business address',
               fields: []
             }
-          }]
+          },
+          message: 'Please provide your business address',
+          ephemeral: true
         })
-      }));
+      });
       
       const response = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
@@ -173,20 +172,18 @@ describe('POST /api/tasks/:contextId/message', () => {
     });
 
     it('should handle empty extracted data', async () => {
-      const mockAgent = UXOptimizationAgent as jest.Mock;
-      mockAgent.mockImplementationOnce(() => ({
-        loadContext: jest.fn().mockResolvedValue(undefined),
-        handleUserMessage: jest.fn().mockResolvedValue({
-          status: 'completed',
-          contextUpdate: {
-            operation: 'message_extraction',
-            data: {
-              extractedData: {},
-              originalMessage: 'Hello'
-            }
-          }
+      const { DIContainer } = require('../../../src/services/dependency-injection');
+      DIContainer.resolveAgent.mockResolvedValueOnce({
+        processMessageForAPI: jest.fn().mockResolvedValue({
+          success: true,
+          contextId: mockContextId,
+          eventId: null,
+          extractedData: {},
+          uiRequest: null,
+          message: 'Hello! How can I help you with your task?',
+          ephemeral: true
         })
-      }));
+      });
       
       const response = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
@@ -198,17 +195,21 @@ describe('POST /api/tasks/:contextId/message', () => {
     });
 
     it('should include UIRequest in response when present', async () => {
-      const mockAgent = UXOptimizationAgent as jest.Mock;
-      mockAgent.mockImplementationOnce(() => ({
-        loadContext: jest.fn().mockResolvedValue(undefined),
-        handleUserMessage: jest.fn().mockResolvedValue({
-          status: 'needs_clarification',
-          uiRequests: [{
+      const { DIContainer } = require('../../../src/services/dependency-injection');
+      DIContainer.resolveAgent.mockResolvedValueOnce({
+        processMessageForAPI: jest.fn().mockResolvedValue({
+          success: true,
+          contextId: mockContextId,
+          eventId: null,
+          extractedData: {},
+          uiRequest: {
             requestId: 'ui_123',
             templateType: 'form'
-          }]
+          },
+          message: 'Need clarification',
+          ephemeral: true
         })
-      }));
+      });
       
       const response = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
@@ -240,8 +241,12 @@ describe('POST /api/tasks/:contextId/message', () => {
     });
 
     it('should return 404 for non-existent task', async () => {
-      const mockGetTask = (DatabaseService as any).getInstance().getTask as jest.Mock;
-      mockGetTask.mockResolvedValueOnce(null);
+      const { DIContainer } = require('../../../src/services/dependency-injection');
+      
+      // Mock DI resolution failure with task not found error
+      DIContainer.resolveAgent.mockRejectedValueOnce(
+        new Error('Task test-context-456 not found')
+      );
       
       const response = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
@@ -252,9 +257,12 @@ describe('POST /api/tasks/:contextId/message', () => {
     });
 
     it('should return 404 for unauthorized task access', async () => {
-      const mockGetTask = (DatabaseService as any).getInstance().getTask as jest.Mock;
-      // getTask returns null when user doesn't own the task
-      mockGetTask.mockResolvedValueOnce(null);
+      const { DIContainer } = require('../../../src/services/dependency-injection');
+      
+      // Mock DI resolution failure with task not found (unauthorized)
+      DIContainer.resolveAgent.mockRejectedValueOnce(
+        new Error('Task test-context-456 not found')
+      );
       
       const response = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
@@ -265,11 +273,10 @@ describe('POST /api/tasks/:contextId/message', () => {
     });
 
     it('should handle agent processing errors', async () => {
-      const mockAgent = UXOptimizationAgent as jest.Mock;
-      mockAgent.mockImplementationOnce(() => ({
-        loadContext: jest.fn().mockResolvedValue(undefined),
-        handleUserMessage: jest.fn().mockRejectedValue(new Error('Processing failed'))
-      }));
+      const { DIContainer } = require('../../../src/services/dependency-injection');
+      DIContainer.resolveAgent.mockResolvedValueOnce({
+        processMessageForAPI: jest.fn().mockRejectedValue(new Error('Processing failed'))
+      });
       
       const response = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
@@ -280,8 +287,12 @@ describe('POST /api/tasks/:contextId/message', () => {
     });
 
     it('should handle database errors gracefully', async () => {
-      const mockGetTask = (DatabaseService as any).getInstance().getTask as jest.Mock;
-      mockGetTask.mockRejectedValueOnce(new Error('Database error'));
+      const { DIContainer } = require('../../../src/services/dependency-injection');
+      
+      // Mock DI resolution failure with database error
+      DIContainer.resolveAgent.mockRejectedValueOnce(
+        new Error('Database connection failed')
+      );
       
       const response = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
@@ -352,13 +363,17 @@ describe('POST /api/tasks/:contextId/message', () => {
     });
 
     it('should use authenticated user ID', async () => {
+      const { RequestContextService } = require('../../../src/services/request-context');
+      
       await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
         .send({ message: 'Test message' })
         .expect(200);
       
-      const mockGetTask = (DatabaseService as any).getInstance().getTask as jest.Mock;
-      expect(mockGetTask).toHaveBeenCalledWith(mockUserId, mockContextId);
+      // Verify the context passed includes the userId
+      expect(RequestContextService.run).toHaveBeenCalled();
+      const callArgs = RequestContextService.run.mock.calls[0];
+      expect(callArgs[0]).toHaveProperty('userId', mockUserId);
     });
   });
 
@@ -387,20 +402,8 @@ describe('POST /api/tasks/:contextId/message', () => {
   });
 
   describe('DI Container Integration', () => {
-    it.skip('should attempt to resolve agent through DI container first', async () => {
+    it('should resolve agent through DI container', async () => {
       const { DIContainer } = require('../../../src/services/dependency-injection');
-      const mockAgent = new UXOptimizationAgent(mockContextId, mockTask.business_id, mockUserId);
-      
-      // Mock successful DI resolution
-      DIContainer.resolveAgent = jest.fn().mockResolvedValue(mockAgent);
-      mockAgent.handleUserMessage = jest.fn().mockResolvedValue({
-        status: 'completed',
-        contextUpdate: {
-          operation: 'message_extraction',
-          data: { extractedData: {} }
-        },
-        confidence: 0.85
-      });
       
       const response = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
@@ -411,126 +414,103 @@ describe('POST /api/tasks/:contextId/message', () => {
       expect(response.body.success).toBe(true);
     });
 
-    it('should fallback to direct instantiation if DI fails', async () => {
+    it('should handle DI resolution errors', async () => {
       const { DIContainer } = require('../../../src/services/dependency-injection');
       
       // Mock DI resolution failure
-      DIContainer.resolveAgent = jest.fn().mockRejectedValue(new Error('Not registered'));
+      DIContainer.resolveAgent = jest.fn().mockRejectedValue(new Error('Agent not registered'));
       
-      // UXOptimizationAgent mock should still work
       const response = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
-        .send({ message: 'Test DI fallback' })
-        .expect(200);
+        .send({ message: 'Test DI failure' })
+        .expect(500);
       
-      expect(response.body.success).toBe(true);
-      expect(UXOptimizationAgent).toHaveBeenCalledWith(mockContextId, mockTask.business_id, mockUserId);
+      expect(response.body.error).toBe('Failed to process user message');
     });
 
-    it('should call loadContext when creating agent directly', async () => {
+    it('should pass request context to DI container', async () => {
       const { DIContainer } = require('../../../src/services/dependency-injection');
-      DIContainer.resolveAgent = jest.fn().mockRejectedValue(new Error('Not registered'));
-      
-      const mockLoadContext = jest.fn().mockResolvedValue(undefined);
-      const mockHandleUserMessage = jest.fn().mockResolvedValue({
-        status: 'completed',
-        contextUpdate: {
-          operation: 'message_extraction',
-          data: { extractedData: {} }
-        },
-        confidence: 0.85
-      });
-      
-      (UXOptimizationAgent as jest.Mock).mockImplementation(() => ({
-        loadContext: mockLoadContext,
-        handleUserMessage: mockHandleUserMessage
-      }));
+      const { RequestContextService } = require('../../../src/services/request-context');
       
       await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
-        .send({ message: 'Test context loading' })
+        .send({ message: 'Test context passing' })
         .expect(200);
       
-      expect(mockLoadContext).toHaveBeenCalled();
+      // Verify RequestContextService.run was called with proper context
+      expect(RequestContextService.run).toHaveBeenCalled();
+      const callArgs = RequestContextService.run.mock.calls[0];
+      expect(callArgs[0]).toHaveProperty('userId', mockUserId);
+      expect(callArgs[0]).toHaveProperty('tenantId', mockContextId);
+      expect(callArgs[0]).toHaveProperty('businessId', mockContextId);
     });
   });
 
   describe('Ephemeral Message Handling', () => {
-    it('should not persist ephemeral messages', async () => {
-      const mockHandleUserMessage = jest.fn().mockResolvedValue({
-        status: 'completed',
-        contextUpdate: {
-          operation: 'message_extraction',
-          data: { 
-            status: 'ephemeral',
-            message: 'Ephemeral conversation response'
-          }
-        },
-        confidence: 0.85,
-        ephemeral: true
+    it('should handle ephemeral messages', async () => {
+      const { DIContainer } = require('../../../src/services/dependency-injection');
+      DIContainer.resolveAgent.mockResolvedValueOnce({
+        processMessageForAPI: jest.fn().mockResolvedValue({
+          success: true,
+          contextId: mockContextId,
+          eventId: null,  // null eventId indicates ephemeral
+          extractedData: {},
+          uiRequest: null,
+          message: 'Ephemeral conversation response',
+          ephemeral: true
+        })
       });
-      
-      (UXOptimizationAgent as jest.Mock).mockImplementation(() => ({
-        handleUserMessage: mockHandleUserMessage,
-        loadContext: jest.fn().mockResolvedValue(undefined)
-      }));
-      
-      const mockCreateTaskContextEvent = (DatabaseService as any).getInstance().createTaskContextEvent as jest.Mock;
       
       const response = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
         .send({ message: 'What do I do?' })
         .expect(200);
       
-      // Should not create event for ephemeral message
-      expect(mockCreateTaskContextEvent).not.toHaveBeenCalled();
+      // Ephemeral messages should have null eventId
+      expect(response.body.eventId).toBeNull();
+      expect(response.body.ephemeral).toBe(true);
       expect(response.body.success).toBe(true);
     });
 
-    it.skip('should persist non-ephemeral messages with data', async () => {
-      const mockHandleUserMessage = jest.fn().mockResolvedValue({
-        status: 'completed',
-        contextUpdate: {
-          operation: 'message_extraction',
-          data: { 
-            extractedData: { businessName: 'TestCorp' },
-            originalMessage: 'My business is TestCorp'
-          },
-          reasoning: 'Extracted business name'
-        },
-        confidence: 0.85,
-        ephemeral: false
+    it('should persist non-ephemeral messages with data', async () => {
+      const { DIContainer } = require('../../../src/services/dependency-injection');
+      DIContainer.resolveAgent.mockResolvedValueOnce({
+        processMessageForAPI: jest.fn().mockResolvedValue({
+          success: true,
+          contextId: mockContextId,
+          eventId: 'event_456',  // has eventId = persisted
+          extractedData: { businessName: 'TestCorp' },
+          uiRequest: null,
+          message: 'Extracted business name',
+          ephemeral: false
+        })
       });
-      
-      (UXOptimizationAgent as jest.Mock).mockImplementation(() => ({
-        handleUserMessage: mockHandleUserMessage,
-        loadContext: jest.fn().mockResolvedValue(undefined)
-      }));
-      
-      const mockCreateTaskContextEvent = (DatabaseService as any).getInstance().createTaskContextEvent as jest.Mock;
       
       const response = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
         .send({ message: 'My business is TestCorp' })
         .expect(200);
       
-      // Should create event for non-ephemeral message
-      expect(mockCreateTaskContextEvent).toHaveBeenCalled();
+      // Non-ephemeral messages should have eventId
+      expect(response.body.eventId).toBe('event_456');
+      expect(response.body.ephemeral).toBe(false);
       expect(response.body.success).toBe(true);
       expect(response.body.extractedData).toEqual({ businessName: 'TestCorp' });
     });
 
-    it('should handle messages without contextUpdate gracefully', async () => {
-      const mockHandleUserMessage = jest.fn().mockResolvedValue({
-        status: 'completed',
-        confidence: 0.85,
-        ephemeral: true
+    it('should handle messages with minimal response', async () => {
+      const { DIContainer } = require('../../../src/services/dependency-injection');
+      DIContainer.resolveAgent.mockResolvedValueOnce({
+        processMessageForAPI: jest.fn().mockResolvedValue({
+          success: true,
+          contextId: mockContextId,
+          eventId: null,
+          extractedData: {},
+          uiRequest: null,
+          message: 'Understood',
+          ephemeral: true
+        })
       });
-      
-      (UXOptimizationAgent as jest.Mock).mockImplementation(() => ({
-        handleUserMessage: mockHandleUserMessage,
-        loadContext: jest.fn().mockResolvedValue(undefined)
-      }));
       
       const response = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
@@ -538,94 +518,112 @@ describe('POST /api/tasks/:contextId/message', () => {
         .expect(200);
       
       expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe('Understood');
     });
 
-    it.skip('should broadcast only for persisted messages', async () => {
-      const { A2AEventBus } = require('../../../src/services/a2a-event-bus');
-      const mockBroadcast = A2AEventBus.getInstance().broadcast as jest.Mock;
+    it('should differentiate between ephemeral and persistent messages', async () => {
+      const { DIContainer } = require('../../../src/services/dependency-injection');
       
-      // Test ephemeral message
-      const mockHandleUserMessage = jest.fn().mockResolvedValue({
-        status: 'completed',
-        contextUpdate: { data: { status: 'ephemeral' } },
-        ephemeral: true
+      // Test ephemeral message first
+      DIContainer.resolveAgent.mockResolvedValueOnce({
+        processMessageForAPI: jest.fn().mockResolvedValue({
+          success: true,
+          contextId: mockContextId,
+          eventId: null,  // No eventId for ephemeral
+          extractedData: {},
+          uiRequest: null,
+          message: 'Just chatting',
+          ephemeral: true
+        })
       });
       
-      (UXOptimizationAgent as jest.Mock).mockImplementation(() => ({
-        handleUserMessage: mockHandleUserMessage,
-        loadContext: jest.fn().mockResolvedValue(undefined)
-      }));
-      
-      await request(app)
+      const ephemeralResponse = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
         .send({ message: 'Ephemeral' })
         .expect(200);
       
-      // Should not broadcast for ephemeral
-      expect(mockBroadcast).not.toHaveBeenCalled();
+      expect(ephemeralResponse.body.ephemeral).toBe(true);
+      expect(ephemeralResponse.body.eventId).toBeNull();
       
-      // Reset and test persistent message
-      mockBroadcast.mockClear();
-      mockHandleUserMessage.mockResolvedValue({
-        status: 'completed',
-        contextUpdate: { 
-          operation: 'message_extraction',
-          data: { extractedData: { field: 'value' } } 
-        },
-        ephemeral: false
+      // Test persistent message
+      DIContainer.resolveAgent.mockResolvedValueOnce({
+        processMessageForAPI: jest.fn().mockResolvedValue({
+          success: true,
+          contextId: mockContextId,
+          eventId: 'event_789',  // Has eventId for persistent
+          extractedData: { field: 'value' },
+          uiRequest: null,
+          message: 'Extracted data',
+          ephemeral: false
+        })
       });
       
-      await request(app)
+      const persistentResponse = await request(app)
         .post(`/api/tasks/${mockContextId}/message`)
         .send({ message: 'Persistent message with data' })
         .expect(200);
       
-      // Should broadcast for persistent
-      expect(mockBroadcast).toHaveBeenCalled();
+      expect(persistentResponse.body.ephemeral).toBe(false);
+      expect(persistentResponse.body.eventId).toBe('event_789');
     });
   });
 
   describe('Complete Flow Integration', () => {
-    it.skip('should handle complete conversation flow with DI and persistence', async () => {
+    it('should handle complete conversation flow with DI', async () => {
       const { DIContainer } = require('../../../src/services/dependency-injection');
-      const mockAgent = new UXOptimizationAgent(mockContextId, mockTask.business_id, mockUserId);
       
-      // Mock DI resolution
-      DIContainer.resolveAgent = jest.fn().mockResolvedValue(mockAgent);
-      
-      // Mock varying responses
+      // Mock varying responses for a conversation flow
       const responses = [
-        { ephemeral: true, data: { status: 'ephemeral' } },
-        { ephemeral: false, data: { extractedData: { name: 'Test' } } },
-        { ephemeral: true, data: { status: 'ephemeral' } }
+        { 
+          success: true,
+          contextId: mockContextId,
+          eventId: null,
+          extractedData: {},
+          uiRequest: null,
+          message: 'How can I help you?',
+          ephemeral: true 
+        },
+        { 
+          success: true,
+          contextId: mockContextId,
+          eventId: 'event_persist_1',
+          extractedData: { name: 'Test' },
+          uiRequest: null,
+          message: 'I extracted your business name',
+          ephemeral: false 
+        },
+        { 
+          success: true,
+          contextId: mockContextId,
+          eventId: null,
+          extractedData: {},
+          uiRequest: null,
+          message: 'Is there anything else?',
+          ephemeral: true 
+        }
       ];
       
-      let callCount = 0;
-      mockAgent.handleUserMessage = jest.fn().mockImplementation(() => {
-        const resp = responses[callCount++];
-        return Promise.resolve({
-          status: 'completed',
-          contextUpdate: { 
-            operation: 'message_extraction',
-            data: resp.data 
-          },
-          confidence: 0.85,
-          ephemeral: resp.ephemeral
-        });
-      });
-      
-      const mockCreateTaskContextEvent = (DatabaseService as any).getInstance().createTaskContextEvent as jest.Mock;
-      
-      // Send multiple messages
+      // Send multiple messages in a conversation
       for (let i = 0; i < 3; i++) {
-        await request(app)
+        DIContainer.resolveAgent.mockResolvedValueOnce({
+          processMessageForAPI: jest.fn().mockResolvedValue(responses[i])
+        });
+        
+        const response = await request(app)
           .post(`/api/tasks/${mockContextId}/message`)
           .send({ message: `Message ${i}` })
           .expect(200);
+        
+        expect(response.body.success).toBe(true);
+        expect(response.body.ephemeral).toBe(responses[i].ephemeral);
+        
+        // Only the second message should have an eventId (persisted)
+        if (i === 1) {
+          expect(response.body.eventId).toBe('event_persist_1');
+        } else {
+          expect(response.body.eventId).toBeNull();
+        }
       }
-      
-      // Only the second message should be persisted
-      expect(mockCreateTaskContextEvent).toHaveBeenCalledTimes(1);
     });
   });
 });

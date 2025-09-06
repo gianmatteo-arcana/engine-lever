@@ -402,76 +402,47 @@ router.get('/:taskId/context-history', requireAuth, async (req: AuthenticatedReq
  * POST /api/tasks/:contextId/message
  * 
  * Handle unstructured user messages (FluidUI)
- * Routes to UXOptimizationAgent for processing
+ * Thin delegation layer to UXOptimizationAgent via DI container
  */
 router.post('/:contextId/message', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { contextId } = req.params;
+  const { message } = req.body;
+  
+  if (!message || typeof message !== 'string') {
+    return res.status(400).json({ error: 'Message is required and must be a string' });
+  }
+  
+  // Run with request context for DI resolution
+  const { RequestContextService } = await import('../services/request-context');
+  const { DIContainer } = await import('../services/dependency-injection');
+  
+  const context = {
+    requestId: `req_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+    userId: req.userId!,
+    tenantId: contextId,
+    businessId: contextId,
+    userToken: req.userToken,
+    startTime: Date.now()
+  };
+  
   try {
-    const { contextId } = req.params;
-    const userId = req.userId!;
-    const { message } = req.body;
-    
-    if (!message || typeof message !== 'string') {
-      return res.status(400).json({ error: 'Message is required and must be a string' });
-    }
-    
-    logger.info('Processing user message', {
-      contextId,
-      messageLength: message.length,
-      userId
+    // Run with context so DI can access user information
+    const response = await RequestContextService.run(context, async () => {
+      const agent = await DIContainer.resolveAgent('ux_optimization_agent', contextId);
+      return agent.processMessageForAPI(message);
     });
     
-    // Get agent through DI container
-    const { DIContainer } = await import('../services/dependency-injection');
-    
-    let uxAgent;
-    try {
-      // Try to resolve from DI container first
-      uxAgent = await DIContainer.resolveAgent('ux_optimization_agent', contextId);
-    } catch (error) {
-      // Fallback if DI not initialized (e.g., in tests)
-      logger.warn('DI resolution failed, creating agent directly', { error });
-      const dbService = DatabaseService.getInstance();
-      const task = await dbService.getTask(userId, contextId);
-      
-      if (!task) {
-        return res.status(404).json({
-          error: 'Task not found'
-        });
-      }
-      
-      const { UXOptimizationAgent } = await import('../agents/UXOptimizationAgent');
-      uxAgent = new UXOptimizationAgent(contextId, task.business_id, userId);
-      await uxAgent.loadContext();
-    }
-    
-    // Process the message - agent handles persistence internally
-    const response = await uxAgent.handleUserMessage(message, {
-      contextId,
-      taskId: contextId,
-      userId
-    });
-    
-    // Extract response data (persistence is handled by the agent)
-    const isEphemeral = (response as any).ephemeral === true;
-    const extractedData = response.contextUpdate?.data?.extractedData || {};
-    const eventId = response.contextUpdate?.entryId || null;
-    
-    // Return response with any UIRequest for clarification
-    res.json({
-      success: true,
-      contextId,
-      eventId,
-      extractedData,
-      uiRequest: response.uiRequests?.[0] || null,
-      message: response.contextUpdate?.data?.message || 'Message processed successfully',
-      ephemeral: isEphemeral
-    });
+    res.json(response);
     
   } catch (error) {
     logger.error('Failed to process user message', error);
-    res.status(500).json({
-      error: 'Failed to process user message'
-    });
+    
+    // Check for specific error types
+    if (error instanceof Error && error.message.includes('Task') && error.message.includes('not found')) {
+      res.status(404).json({ error: 'Task not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to process user message' });
+    }
   }
 });
 

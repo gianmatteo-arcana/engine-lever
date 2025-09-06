@@ -345,9 +345,14 @@ export async function initializeAgents(): Promise<void> {
       const { UXOptimizationAgent } = await import('../agents/UXOptimizationAgent');
       const dbService = DatabaseService.getInstance();
       
-      // Get task to fetch required context
+      // Get request context - this should be set by the API middleware
       const context = RequestContextService.getContext();
-      const userId = context?.userId || 'system';
+      const userId = context?.userId;
+      
+      if (!userId) {
+        throw new Error('User context required for UXOptimizationAgent');
+      }
+      
       const task = await dbService.getTask(userId, taskId);
       
       if (!task) {
