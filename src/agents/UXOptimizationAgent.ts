@@ -638,6 +638,36 @@ Return as JSON with fields organized into logical sections.`;
   async handleUserMessage(message: string, taskContext?: any): Promise<BaseAgentResponse> {
     const taskLogger = createTaskLogger(taskContext?.contextId || 'unknown');
     
+    // Validate input
+    if (message === null || message === undefined || typeof message !== 'string') {
+      return {
+        status: 'error',
+        contextUpdate: {
+          entryId: `ux_msg_error_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          timestamp: new Date().toISOString(),
+          sequenceNumber: 0,
+          actor: {
+            type: 'agent',
+            id: this.specializedTemplate.agent.id,
+            version: this.specializedTemplate.agent.version
+          },
+          operation: 'message_error',
+          data: {
+            error: 'Invalid message input',
+            originalMessage: String(message)
+          },
+          reasoning: 'Failed to process invalid message input',
+          confidence: 0.1,
+          trigger: {
+            type: 'user_request',
+            source: 'user',
+            details: { error: 'Invalid input' }
+          }
+        },
+        confidence: 0.1
+      };
+    }
+    
     taskLogger.info('💬 Processing user message', {
       messageLength: message.length,
       taskId: taskContext?.contextId
@@ -664,7 +694,7 @@ Return as JSON with fields organized into logical sections.`;
         return {
           status: 'needs_input',
           contextUpdate: {
-            entryId: `ux_msg_${Date.now()}`,
+            entryId: `ux_msg_${Date.now()}_${Math.random().toString(36).substring(7)}`,
             timestamp: new Date().toISOString(),
             sequenceNumber: 0,
             actor: {
@@ -696,7 +726,7 @@ Return as JSON with fields organized into logical sections.`;
       return {
         status: 'completed',
         contextUpdate: {
-          entryId: `ux_msg_${Date.now()}`,
+          entryId: `ux_msg_${Date.now()}_${Math.random().toString(36).substring(7)}`,
           timestamp: new Date().toISOString(),
           sequenceNumber: 0,
           actor: {
@@ -728,7 +758,7 @@ Return as JSON with fields organized into logical sections.`;
       return {
         status: 'error',
         contextUpdate: {
-          entryId: `ux_msg_error_${Date.now()}`,
+          entryId: `ux_msg_error_${Date.now()}_${Math.random().toString(36).substring(7)}`,
           timestamp: new Date().toISOString(),
           sequenceNumber: 0,
           actor: {
