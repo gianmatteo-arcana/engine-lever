@@ -1006,31 +1006,62 @@ Return as JSON object with field names as keys.`;
     const taskLogger = createTaskLogger(taskContext?.contextId || 'conversation');
     
     try {
-      // Build context summary from loaded data
-      const contextSummary = this.taskHistory?.length > 0 
-        ? `Recent activity: ${this.taskHistory.slice(-3).map((h: any) => h.operation).join(', ')}`
-        : 'No previous activity';
+      // Use TaskIntrospectionTool for deep understanding
+      let introspection = null;
+      if (this.userId && this.taskId) {
+        try {
+          const { TaskIntrospectionTool } = await import('../tools/task-introspection');
+          const introspectionTool = new TaskIntrospectionTool();
+          introspection = await introspectionTool.introspect({
+            taskId: this.taskId,
+            userId: this.userId,
+            aspectToInspect: 'all'
+          });
+        } catch (introError) {
+          taskLogger.warn('Failed to introspect task', introError);
+        }
+      }
+
+      // Build rich context from introspection
+      let contextSummary = 'No previous activity';
+      let currentFocus = 'Getting started';
+      let dataStatus = 'No data collected yet';
+      let recommendations = '';
+
+      if (introspection) {
+        if (introspection.progress) {
+          contextSummary = `Task is ${introspection.progress.completeness}% complete (${introspection.progress.lastActivity})`;
+          currentFocus = introspection.progress.currentStep;
+        }
+        
+        if (introspection.collectedData) {
+          const fieldCount = Object.keys(introspection.collectedData.fields).length;
+          const missingCount = introspection.collectedData.missingRequired.length;
+          dataStatus = `${fieldCount} fields collected${missingCount > 0 ? `, ${missingCount} required fields missing` : ''}`;
+        }
+
+        if (introspection.insights?.recommendations && introspection.insights.recommendations.length > 0) {
+          recommendations = introspection.insights.recommendations[0];
+        }
+      }
       
-      const currentData = taskContext?.currentState?.data || {};
-      const hasBusinessName = currentData.businessName || currentData.business_name;
-      const hasAddress = currentData.businessAddress || currentData.business_address;
-      const hasEIN = currentData.ein || currentData.EIN;
-      
-      const prompt = `You are a helpful business registration assistant. The user is working on registering their business.
+      const prompt = `You are a helpful business registration assistant. The user is working on a task.
       
 Current task context:
-- Task ID: ${this.taskId || 'unknown'}
-- Task type: ${this.taskMetadata?.title || 'business registration'}
+- Task: ${introspection?.template?.name || this.taskMetadata?.title || 'business registration'}
 - ${contextSummary}
-- Data collected: ${hasBusinessName ? 'business name' : ''} ${hasAddress ? ', address' : ''} ${hasEIN ? ', EIN' : ''}
+- Current focus: ${currentFocus}
+- ${dataStatus}
+${introspection?.objectives?.primaryGoal ? `- Goal: ${introspection.objectives.primaryGoal}` : ''}
+${recommendations ? `- Next step: ${recommendations}` : ''}
 
 User message: "${message}"
 
 ${message.toLowerCase().includes('what') && message.toLowerCase().includes('task') 
-  ? 'The user is asking about the current task. Explain that this is a business registration task and what information has been collected so far.'
-  : 'Provide a helpful, concise response.'}
+  ? 'The user is asking about the current task. Explain what the task is about, the current progress, and what information has been collected so far. Be specific using the context above.'
+  : 'Provide a helpful, concise response based on the task context.'}
 
-If they're asking what they can do, suggest relevant business information they haven't provided yet.
+If they're asking what they can do, suggest specific next actions based on the task progress.
 
 Keep the response conversational and under 2-3 sentences.`;
 
