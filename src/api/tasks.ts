@@ -432,8 +432,13 @@ router.post('/:contextId/message', requireAuth, async (req: AuthenticatedRequest
     }
     
     // Get or create UXOptimizationAgent instance
+    // For now, create directly to avoid dynamic import issues in tests
+    // TODO: Integrate with DI container when available globally
     const UXOptimizationAgent = (await import('../agents/UXOptimizationAgent')).UXOptimizationAgent;
     const uxAgent = new UXOptimizationAgent(contextId, task.business_id, userId);
+    
+    // Load context for the awakened agent
+    await uxAgent.loadContext();
     
     // Process the message
     const response = await uxAgent.handleUserMessage(message, {
@@ -443,58 +448,69 @@ router.post('/:contextId/message', requireAuth, async (req: AuthenticatedRequest
       userId
     });
     
-    // Extract data from response
+    // Check if response should be persisted
+    const isEphemeral = (response as any).ephemeral === true;
     const extractedData = response.contextUpdate?.data?.extractedData || {};
     
-    // Create context event for the extracted data
-    const eventData = {
-      contextId,
-      actorType: 'agent',
-      actorId: 'ux_optimization_agent',
-      operation: 'USER_MESSAGE_PROCESSED',
-      data: {
-        originalMessage: message,
-        extractedData,
-        timestamp: new Date().toISOString()
-      },
-      reasoning: response.contextUpdate?.reasoning || 'Processed user message',
-      trigger: {
-        type: 'user_message',
-        source: 'conversation',
-        message
-      }
-    };
+    let persistedEvent = null;
     
-    // Persist the event
-    const persistedEvent = await dbService.createTaskContextEvent(
-      userId,
-      contextId,
-      eventData
-    );
-    
-    logger.info('User message processed and persisted', {
-      eventId: persistedEvent.id,
-      taskId: contextId,
-      extractedFields: Object.keys(extractedData)
-    });
-    
-    // Broadcast for real-time updates
-    await a2aEventBus.broadcast({
-      type: 'TASK_CONTEXT_UPDATE',
-      taskId: contextId,
-      agentId: 'ux_optimization_agent',
-      operation: 'USER_MESSAGE_PROCESSED',
-      data: {
-        ...eventData.data,
-        eventId: persistedEvent.id
-      },
-      reasoning: eventData.reasoning,
-      timestamp: new Date().toISOString(),
-      metadata: {
+    if (!isEphemeral && response.contextUpdate) {
+      // Only persist if agent determined it's substantial
+      const eventData = {
+        contextId,
+        actorType: 'agent',
+        actorId: 'ux_optimization_agent',
+        operation: 'USER_MESSAGE_PROCESSED',
+        data: {
+          originalMessage: message,
+          extractedData,
+          timestamp: new Date().toISOString()
+        },
+        reasoning: response.contextUpdate?.reasoning || 'Processed user message',
+        trigger: {
+          type: 'user_message',
+          source: 'conversation',
+          message
+        }
+      };
+      
+      // Persist the event
+      persistedEvent = await dbService.createTaskContextEvent(
         userId,
-        userEmail
-      }
-    });
+        contextId,
+        eventData
+      );
+      
+      logger.info('User message processed and persisted', {
+        eventId: persistedEvent.id,
+        taskId: contextId,
+        extractedFields: Object.keys(extractedData)
+      });
+      
+      // Broadcast for real-time updates
+      await a2aEventBus.broadcast({
+        type: 'TASK_CONTEXT_UPDATE',
+        taskId: contextId,
+        agentId: 'ux_optimization_agent',
+        operation: 'USER_MESSAGE_PROCESSED',
+        data: {
+          ...eventData.data,
+          eventId: persistedEvent.id
+        },
+        reasoning: eventData.reasoning,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          userId,
+          userEmail
+        }
+      });
+    } else {
+      logger.info('User message processed (ephemeral)', {
+        taskId: contextId,
+        messageType: 'ephemeral',
+        hasExtractedData: Object.keys(extractedData).length > 0
+      });
+    }
     
     // Return response with any UIRequest for clarification
     res.json({

@@ -24,13 +24,15 @@ import { BaseAgentRequest, BaseAgentResponse } from '../types/base-agent-types';
 import { createTaskLogger } from '../utils/logger';
 import { ToolChain } from '../services/tool-chain';
 import { BusinessKnowledge } from '../tools/business-memory';
+import { DatabaseService } from '../services/database';
 
 export class UXOptimizationAgent extends BaseAgent {
-  protected toolChain: ToolChain;
+  private taskId: string;
 
   constructor(taskId: string, tenantId?: string, userId?: string) {
     super('ux_optimization_agent.yaml', tenantId || 'system', userId);
     this.toolChain = new ToolChain();
+    this.taskId = taskId;
   }
 
   /**
@@ -467,11 +469,13 @@ Return as JSON with fields organized into logical sections.`;
    */
   private async queryBusinessMemory(businessId: string): Promise<BusinessKnowledge | null> {
     try {
-      const memory = await this.toolChain.searchBusinessMemory(
+      // Use BusinessMemoryTool directly since ToolChain doesn't expose searchBusinessMemory
+      const { BusinessMemoryTool } = await import('../tools/business-memory');
+      const businessMemoryTool = new BusinessMemoryTool();
+      const memory = await businessMemoryTool.searchMemory({
         businessId,
-        ['identity', 'contact_info', 'structure', 'operations'],
-        0.3 // Get all data, we'll decide based on confidence
-      );
+        minConfidence: 0.3 // Get all data, we'll decide based on confidence
+      });
       return memory;
     } catch (error) {
       const taskLogger = createTaskLogger('ux-optimization');
@@ -722,35 +726,57 @@ Return as JSON with fields organized into logical sections.`;
         };
       }
       
-      // Return extracted data as completed response
-      return {
-        status: 'completed',
-        contextUpdate: {
-          entryId: `ux_msg_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-          timestamp: new Date().toISOString(),
-          sequenceNumber: 0,
-          actor: {
-            type: 'agent',
-            id: this.specializedTemplate.agent.id,
-            version: this.specializedTemplate.agent.version
-          },
-          operation: 'message_extraction',
-          data: {
-            originalMessage: message,
-            extractedData: validatedData,
-            status: 'success',
-            message: 'Successfully extracted data from user message'
-          },
-          reasoning: `Extracted ${Object.keys(validatedData).length} data fields from user message`,
-          confidence: 0.85,
-          trigger: {
-            type: 'user_request',
-            source: 'user',
-            details: { message }
-          }
+      // Determine if this interaction should be persisted
+      const shouldPersist = this.shouldPersistInteraction(message, validatedData, !!clarificationNeeded);
+      
+      // Build response with proper structure
+      const contextUpdate = {
+        entryId: `ux_msg_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        timestamp: new Date().toISOString(),
+        sequenceNumber: 0,
+        actor: {
+          type: 'agent' as const,
+          id: this.specializedTemplate.agent.id,
+          version: this.specializedTemplate.agent.version
         },
+        operation: 'message_extraction',
+        data: shouldPersist ? {
+          originalMessage: message,
+          extractedData: validatedData,
+          status: 'success',
+          message: 'Successfully extracted data from user message'
+        } : {
+          status: 'ephemeral',
+          message: 'Ephemeral conversation response'
+        },
+        reasoning: shouldPersist ? 
+          `Extracted ${Object.keys(validatedData).length} data fields from user message` :
+          'Ephemeral response - no substantial data to persist',
+        confidence: 0.85,
+        trigger: {
+          type: 'user_request' as const,
+          source: 'user',
+          details: { message }
+        }
+      };
+      
+      const response: BaseAgentResponse = {
+        status: 'completed',
+        contextUpdate,
         confidence: 0.85
       };
+      
+      // Mark as ephemeral if not persisting
+      if (!shouldPersist) {
+        (response as any).ephemeral = true;
+      }
+      
+      // Add UIRequest if clarification needed
+      if (clarificationNeeded) {
+        response.uiRequests = [clarificationNeeded];
+      }
+      
+      return response;
       
     } catch (error) {
       taskLogger.error('Failed to process user message', { error });
@@ -865,5 +891,93 @@ Return as JSON object with field names as keys.`;
     }
     
     return null;
+  }
+
+  /**
+   * Initialize agent for a specific task (called by DI container)
+   * Loads full context history to enable intelligent conversation
+   */
+  async initializeForTask(taskId: string): Promise<void> {
+    const taskLogger = createTaskLogger(taskId);
+    taskLogger.info('🔄 Initializing UXOptimizationAgent for task', { taskId });
+    
+    // Load full task context
+    await this.loadContext();
+    
+    // Subscribe to task events for real-time updates
+    await this.subscribeToTaskEvents(taskId, async (event) => {
+      taskLogger.debug('UXOptimizationAgent received task event', { 
+        taskId, 
+        eventType: event.type 
+      });
+    });
+  }
+
+  /**
+   * Load full task context and history
+   * Called when agent is "awakened" for conversation
+   */
+  async loadContext(): Promise<void> {
+    const taskLogger = createTaskLogger(this.taskId || 'unknown');
+    
+    try {
+      taskLogger.info('📚 Loading full task context for conversation', {
+        taskId: this.taskId,
+        businessId: this.businessId
+      });
+      
+      // Get database service
+      const dbService = DatabaseService.getInstance();
+      
+      // Load task context history
+      const taskHistory = await dbService.getContextHistory(this.userId || 'system', this.taskId, 100);
+      
+      // Load business memory using BusinessMemoryTool
+      const { BusinessMemoryTool } = await import('../tools/business-memory');
+      const businessMemoryTool = new BusinessMemoryTool();
+      const businessMemory = await businessMemoryTool.searchMemory({
+        businessId: this.businessId
+      });
+      
+      // Load task metadata
+      const task = await dbService.getTask(this.userId || 'system', this.taskId);
+      
+      // Store in agent instance for reference during conversation
+      this.taskContext = {
+        history: taskHistory,
+        businessMemory,
+        taskMetadata: task,
+        lastUpdated: new Date().toISOString()
+      };
+      
+      taskLogger.info('✅ Context loaded successfully', {
+        historyCount: taskHistory?.length || 0,
+        businessFactCount: businessMemory?.metadata?.factCount || 0,
+        taskStatus: task?.status
+      });
+      
+    } catch (error) {
+      taskLogger.error('Failed to load context', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Continue anyway - agent can still function with limited context
+    }
+  }
+
+  /**
+   * Determine if an interaction should be persisted as TaskContextUpdate
+   */
+  private shouldPersistInteraction(message: string, extractedData: any, hasUIRequest: boolean): boolean {
+    // Persist if:
+    // 1. New data was extracted
+    const hasExtractedData = extractedData && Object.keys(extractedData).length > 0;
+    
+    // 2. User is providing substantial information (not just asking questions)
+    const isSubstantialInput = message.length > 50 && 
+      !message.toLowerCase().match(/^(what|when|where|why|how|is|are|can|could|should)/);
+    
+    // 3. Response includes a UIRequest (form to fill)
+    
+    return hasExtractedData || isSubstantialInput || hasUIRequest;
   }
 }
