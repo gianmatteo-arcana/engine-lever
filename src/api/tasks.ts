@@ -408,7 +408,6 @@ router.post('/:contextId/message', requireAuth, async (req: AuthenticatedRequest
   try {
     const { contextId } = req.params;
     const userId = req.userId!;
-    const userEmail = req.userEmail!;
     const { message } = req.body;
     
     if (!message || typeof message !== 'string') {
@@ -421,102 +420,47 @@ router.post('/:contextId/message', requireAuth, async (req: AuthenticatedRequest
       userId
     });
     
-    // Get services
-    const dbService = DatabaseService.getInstance();
-    const a2aEventBus = A2AEventBus.getInstance();
+    // Get agent through DI container
+    const { DIContainer } = await import('../services/dependency-injection');
     
-    // Verify user owns this task
-    const task = await dbService.getTask(userId, contextId);
-    if (!task) {
-      return res.status(404).json({ error: 'Task not found or unauthorized' });
+    let uxAgent;
+    try {
+      // Try to resolve from DI container first
+      uxAgent = await DIContainer.resolveAgent('ux_optimization_agent', contextId);
+    } catch (error) {
+      // Fallback if DI not initialized (e.g., in tests)
+      logger.warn('DI resolution failed, creating agent directly', { error });
+      const dbService = DatabaseService.getInstance();
+      const task = await dbService.getTask(userId, contextId);
+      
+      if (!task) {
+        return res.status(404).json({
+          error: 'Task not found'
+        });
+      }
+      
+      const { UXOptimizationAgent } = await import('../agents/UXOptimizationAgent');
+      uxAgent = new UXOptimizationAgent(contextId, task.business_id, userId);
+      await uxAgent.loadContext();
     }
     
-    // Get or create UXOptimizationAgent instance
-    // For now, create directly to avoid dynamic import issues in tests
-    // TODO: Integrate with DI container when available globally
-    const UXOptimizationAgent = (await import('../agents/UXOptimizationAgent')).UXOptimizationAgent;
-    const uxAgent = new UXOptimizationAgent(contextId, task.business_id, userId);
-    
-    // Load context for the awakened agent
-    await uxAgent.loadContext();
-    
-    // Process the message
+    // Process the message - agent handles persistence internally
     const response = await uxAgent.handleUserMessage(message, {
       contextId,
       taskId: contextId,
-      tenantId: task.business_id,
       userId
     });
     
-    // Check if response should be persisted
+    // Extract response data (persistence is handled by the agent)
     const isEphemeral = (response as any).ephemeral === true;
     const extractedData = response.contextUpdate?.data?.extractedData || {};
-    
-    let persistedEvent = null;
-    
-    if (!isEphemeral && response.contextUpdate) {
-      // Only persist if agent determined it's substantial
-      const eventData = {
-        contextId,
-        actorType: 'agent',
-        actorId: 'ux_optimization_agent',
-        operation: 'USER_MESSAGE_PROCESSED',
-        data: {
-          originalMessage: message,
-          extractedData,
-          timestamp: new Date().toISOString()
-        },
-        reasoning: response.contextUpdate?.reasoning || 'Processed user message',
-        trigger: {
-          type: 'user_message',
-          source: 'conversation',
-          message
-        }
-      };
-      
-      // Persist the event
-      persistedEvent = await dbService.createTaskContextEvent(
-        userId,
-        contextId,
-        eventData
-      );
-      
-      logger.info('User message processed and persisted', {
-        eventId: persistedEvent.id,
-        taskId: contextId,
-        extractedFields: Object.keys(extractedData)
-      });
-      
-      // Broadcast for real-time updates
-      await a2aEventBus.broadcast({
-        type: 'TASK_CONTEXT_UPDATE',
-        taskId: contextId,
-        agentId: 'ux_optimization_agent',
-        operation: 'USER_MESSAGE_PROCESSED',
-        data: {
-          ...eventData.data,
-          eventId: persistedEvent.id
-        },
-        reasoning: eventData.reasoning,
-        timestamp: new Date().toISOString(),
-        metadata: {
-          userId,
-          userEmail
-        }
-      });
-    } else {
-      logger.info('User message processed (ephemeral)', {
-        taskId: contextId,
-        messageType: 'ephemeral',
-        hasExtractedData: Object.keys(extractedData).length > 0
-      });
-    }
+    const eventId = response.contextUpdate?.entryId || null;
     
     // Return response with any UIRequest for clarification
     res.json({
       success: true,
       contextId,
-      eventId: persistedEvent?.id || null,
+      eventId,
       extractedData,
       uiRequest: response.uiRequests?.[0] || null,
       message: response.contextUpdate?.data?.message || 'Message processed successfully',

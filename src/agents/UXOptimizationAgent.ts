@@ -634,6 +634,7 @@ Return as JSON with fields organized into logical sections.`;
   /**
    * Handle unstructured user messages (FluidUI)
    * Extracts data from natural language and maps to pending UIRequest fields
+   * Handles persistence and broadcasting internally
    * 
    * @param message - The user's unstructured message
    * @param taskContext - Current task context
@@ -765,6 +766,83 @@ Return as JSON with fields organized into logical sections.`;
           details: { message }
         }
       };
+      
+      // Handle persistence and broadcasting
+      let persistedEvent = null;
+      
+      if (shouldPersist && this.userId) {
+        try {
+          // Get services
+          const dbService = DatabaseService.getInstance();
+          const { A2AEventBus } = await import('../services/a2a-event-bus');
+          const a2aEventBus = A2AEventBus.getInstance();
+          
+          // Prepare event data
+          const eventData = {
+            contextId: this.taskId,
+            actorType: 'agent' as const,
+            actorId: 'ux_optimization_agent',
+            operation: 'USER_MESSAGE_PROCESSED',
+            data: {
+              originalMessage: message,
+              extractedData: validatedData,
+              timestamp: new Date().toISOString(),
+              message: conversationalResponse || contextUpdate.data.message
+            },
+            reasoning: contextUpdate.reasoning,
+            trigger: {
+              type: 'user_message' as const,
+              source: 'conversation',
+              message
+            }
+          };
+          
+          // Persist the event
+          persistedEvent = await dbService.createTaskContextEvent(
+            this.userId,
+            this.taskId,
+            eventData
+          );
+          
+          taskLogger.info('User message processed and persisted', {
+            eventId: persistedEvent.id,
+            taskId: this.taskId,
+            extractedFields: Object.keys(validatedData)
+          });
+          
+          // Broadcast for real-time updates
+          await a2aEventBus.broadcast({
+            type: 'TASK_CONTEXT_UPDATE',
+            taskId: this.taskId,
+            agentId: 'ux_optimization_agent',
+            operation: 'USER_MESSAGE_PROCESSED',
+            data: {
+              ...eventData.data,
+              eventId: persistedEvent.id
+            },
+            reasoning: eventData.reasoning,
+            timestamp: new Date().toISOString(),
+            metadata: {
+              userId: this.userId,
+              businessId: this.businessId
+            }
+          });
+        } catch (error) {
+          taskLogger.error('Failed to persist message event', error);
+          // Continue without persistence
+        }
+      } else {
+        taskLogger.info('User message processed (ephemeral)', {
+          taskId: this.taskId,
+          messageType: 'ephemeral',
+          hasExtractedData: Object.keys(validatedData).length > 0
+        });
+      }
+      
+      // Add event ID to context update if persisted
+      if (persistedEvent) {
+        contextUpdate.entryId = persistedEvent.id;
+      }
       
       const response: BaseAgentResponse = {
         status: 'completed',

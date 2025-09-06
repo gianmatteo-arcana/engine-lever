@@ -340,6 +340,31 @@ export async function initializeAgents(): Promise<void> {
       ServiceLifecycle.SINGLETON
     );
     
+    // Register UXOptimizationAgent for conversation handling
+    const uxOptimizationFactory: AgentFactory = async (taskId: string) => {
+      const { UXOptimizationAgent } = await import('../agents/UXOptimizationAgent');
+      const dbService = DatabaseService.getInstance();
+      
+      // Get task to fetch required context
+      const context = RequestContextService.getContext();
+      const userId = context?.userId || 'system';
+      const task = await dbService.getTask(userId, taskId);
+      
+      if (!task) {
+        throw new Error(`Task ${taskId} not found`);
+      }
+      
+      // Create agent instance with proper context
+      const agent = new UXOptimizationAgent(taskId, task.business_id, userId);
+      
+      // Load full context for conversation
+      await agent.loadContext();
+      
+      return agent;
+    };
+    
+    DIContainer.registerAgent('ux_optimization_agent', uxOptimizationFactory);
+    
     logger.info(`✅ Agent registrations initialized`, {
       registeredAgents: capabilities.size,
       agents: Array.from(capabilities.keys())
