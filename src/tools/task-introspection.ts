@@ -169,29 +169,12 @@ export class TaskIntrospectionTool {
     const taskLogger = createTaskLogger(task.id);
 
     try {
-      // Special handling for completed tasks
-      if (task.status === 'completed') {
-        const createdAt = new Date(task.created_at);
-        const completedAt = task.completed_at ? new Date(task.completed_at) : new Date();
-        const timeElapsed = this.formatTimeElapsed(completedAt.getTime() - createdAt.getTime());
-        const completedSteps = this.countCompletedSteps(history);
-        
-        return {
-          status: 'completed',
-          completeness: 100, // Completed tasks are always 100%
-          stepsCompleted: completedSteps,
-          totalSteps: Math.max(completedSteps, this.countTotalSteps(history)),
-          currentStep: 'Task completed',
-          blockers: [],
-          lastActivity: 'Task marked as completed',
-          timeElapsed
-        };
-      }
-
-      // Calculate progress metrics for active tasks
+      // Get completeness from task record (persisted by OrchestratorAgent)
+      const completeness = task.completeness || 0;
+      
+      // Calculate progress metrics
       const totalSteps = this.countTotalSteps(history);
       const completedSteps = this.countCompletedSteps(history);
-      const completeness = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
 
       // Find current step and blockers
       const currentStep = this.findCurrentStep(history);
@@ -209,7 +192,7 @@ export class TaskIntrospectionTool {
 
       return {
         status: task.status,
-        completeness: Math.round(completeness),
+        completeness: Math.round(completeness), // Now from DB, not calculated
         stepsCompleted: completedSteps,
         totalSteps,
         currentStep,
@@ -407,24 +390,13 @@ export class TaskIntrospectionTool {
   }
 
   private countCompletedSteps(history: any[]): number {
+    // Simple count of unique operations (for display purposes only)
+    // Actual completeness comes from DB, persisted by OrchestratorAgent
     const completedOperations = new Set<string>();
     
     for (const entry of history) {
-      // Count operations that have been completed (various patterns)
-      if (entry.operation) {
-        // Check various success patterns
-        const isCompleted = 
-          entry.data?.status === 'success' ||
-          entry.data?.status === 'completed' ||
-          entry.data?.uiResponse || // UI response means step completed
-          entry.data?.extractedData || // Data extracted means progress
-          entry.data?.formData || // Form submitted means progress
-          (entry.operation === 'task_completed') ||
-          (entry.operation === 'phase_transition' && entry.data?.phase);
-        
-        if (isCompleted) {
-          completedOperations.add(entry.operation);
-        }
+      if (entry.operation && entry.data?.status !== 'error') {
+        completedOperations.add(entry.operation);
       }
     }
     

@@ -1278,10 +1278,15 @@ export class OrchestratorAgent extends BaseAgent {
         
         const phaseResult = await this.executePhase(context, phase);
         
-        // 4. Phase completion is tracked through subtask delegations
+        // 4. Calculate and persist task completeness
+        // OrchestratorAgent is the SINGLE SOURCE OF TRUTH for progress
+        const completeness = Math.round((phaseIndex / phases.length) * 100);
+        await this.updateTaskCompleteness(context.contextId, completeness);
+        
+        // 5. Phase completion is tracked through subtask delegations
         // No need for separate phase_completed event to avoid duplicates
         
-        // 5. Handle UI requests with progressive disclosure
+        // 6. Handle UI requests with progressive disclosure
         if (phaseResult.uiRequests && phaseResult.uiRequests.length > 0) {
           await this.handleProgressiveDisclosure(context, phaseResult.uiRequests);
         }
@@ -2734,6 +2739,33 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
    * Update task status in database
    * Used to track task state transitions like waiting_for_input
    */
+  /**
+   * Update task completeness percentage
+   * OrchestratorAgent is the SINGLE SOURCE OF TRUTH for task progress
+   */
+  private async updateTaskCompleteness(taskId: string, completeness: number): Promise<void> {
+    logger.info(`📊 Updating task completeness to ${completeness}%`, {
+      taskId,
+      completeness
+    });
+    
+    try {
+      const taskService = TaskService.getInstance();
+      await taskService.updateTaskCompleteness(taskId, completeness);
+      
+      logger.info(`✅ Task completeness updated to ${completeness}%`, {
+        taskId
+      });
+    } catch (error) {
+      logger.error('Failed to update task completeness', {
+        taskId,
+        completeness,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't throw - continue execution even if completeness update fails
+    }
+  }
+
   private async updateTaskStatus(context: TaskContext, status: TaskStatus): Promise<void> {
     logger.info(`📝 Updating task status to ${status.toUpperCase()}`, {
       contextId: context.contextId
@@ -2780,18 +2812,22 @@ Respond ONLY with valid JSON. No explanatory text, no markdown, just the JSON ob
    */
   private async completeTaskContext(context: TaskContext): Promise<void> {
     // Log that we're updating task status
-    logger.info('📝 Updating task status to COMPLETED', {
+    logger.info('📝 Completing task', {
       contextId: context.contextId
     });
     
     // Status is updated in the database by TaskService
     // We don't update in-memory state - TaskService is the single source of truth
     
-    // Update task status in database via TaskService
+    // Update task completeness to 100% and status in database via TaskService
     try {
       const taskService = new TaskService(DatabaseService.getInstance());
       const completedAt = new Date().toISOString();
       
+      // Set completeness to 100% when task completes
+      await this.updateTaskCompleteness(context.contextId, 100);
+      
+      // Update task status
       await taskService.updateTaskStatus(context.contextId, TASK_STATUS.COMPLETED, completedAt);
       
       logger.info('✅ Task status updated to COMPLETED in database', {
