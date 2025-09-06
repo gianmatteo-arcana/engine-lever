@@ -41,8 +41,8 @@ describe('UnifiedEventBus', () => {
 
     (DatabaseService.getInstance as jest.Mock).mockReturnValue(mockDbService);
     
-    // Create new event bus instance with userToken
-    eventBus = new UnifiedEventBus(contextId, taskId, 'mock-user-token');
+    // Create new event bus instance with agentId and userToken
+    eventBus = new UnifiedEventBus(contextId, taskId, 'TestAgent', 'mock-user-token');
   });
 
   afterEach(() => {
@@ -100,7 +100,7 @@ describe('UnifiedEventBus', () => {
         expect.objectContaining({
           context_id: contextId,
           actor_type: 'agent',
-          actor_id: 'agent-executor',
+          actor_id: 'TestAgent',
           operation: 'task_execution',
           data: {
             taskId: 'task-789',
@@ -125,7 +125,7 @@ describe('UnifiedEventBus', () => {
         expect.objectContaining({
           context_id: contextId,
           actor_type: 'agent',
-          actor_id: 'agent-executor',
+          actor_id: 'TestAgent',
           operation: 'status_update',
           data: {
             taskId: 'task-123',
@@ -151,7 +151,7 @@ describe('UnifiedEventBus', () => {
         expect.objectContaining({
           context_id: contextId,
           actor_type: 'agent',
-          actor_id: 'agent-executor',
+          actor_id: 'TestAgent',
           operation: 'artifact_update',
           data: {
             taskId: 'task-456',
