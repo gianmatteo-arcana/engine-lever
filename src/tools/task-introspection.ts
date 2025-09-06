@@ -11,7 +11,6 @@
  * - Understand task objectives and requirements
  */
 
-import { BaseTool } from './base-tool';
 import { DatabaseService } from '../services/database';
 import { createTaskLogger } from '../utils/logger';
 
@@ -63,20 +62,11 @@ export interface TaskIntrospectionResult {
   };
 }
 
-export class TaskIntrospectionTool extends BaseTool {
+export class TaskIntrospectionTool {
   private db: DatabaseService;
 
   constructor() {
-    super();
     this.db = DatabaseService.getInstance();
-  }
-
-  get name(): string {
-    return 'TaskIntrospection';
-  }
-
-  get description(): string {
-    return 'Introspective analysis of current task internals: processing state, requirements, and progress. SCOPE: Task-specific internal analysis only - NOT for general data access or cross-task queries.';
   }
 
   /**
