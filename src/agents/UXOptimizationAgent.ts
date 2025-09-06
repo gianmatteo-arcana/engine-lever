@@ -729,6 +729,12 @@ Return as JSON with fields organized into logical sections.`;
       // Determine if this interaction should be persisted
       const shouldPersist = this.shouldPersistInteraction(message, validatedData, !!clarificationNeeded);
       
+      // Generate conversational response if no data was extracted
+      let conversationalResponse = '';
+      if (Object.keys(validatedData).length === 0 && !clarificationNeeded) {
+        conversationalResponse = await this.generateConversationalResponse(message, taskContext);
+      }
+      
       // Build response with proper structure
       const contextUpdate = {
         entryId: `ux_msg_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -744,10 +750,10 @@ Return as JSON with fields organized into logical sections.`;
           originalMessage: message,
           extractedData: validatedData,
           status: 'success',
-          message: 'Successfully extracted data from user message'
+          message: conversationalResponse || 'Successfully extracted data from user message'
         } : {
           status: 'ephemeral',
-          message: 'Ephemeral conversation response'
+          message: conversationalResponse || 'I can help you with your business registration. What specific information would you like to provide or know about?'
         },
         reasoning: shouldPersist ? 
           `Extracted ${Object.keys(validatedData).length} data fields from user message` :
@@ -843,11 +849,30 @@ Return as JSON object with field names as keys.`;
    * Extract data from message using LLM
    */
   private async extractDataFromMessage(prompt: string): Promise<any> {
-    // TODO: Implement actual LLM call
-    // For now, return mock data
     const taskLogger = createTaskLogger('message_extraction');
-    taskLogger.debug('Would process prompt with LLM:', { prompt });
-    return {};
+    
+    try {
+      // Use the LLM provider to extract data
+      const response = await this.llmProvider.complete({
+        prompt,
+        model: 'claude-3-sonnet',
+        temperature: 0.3,
+        maxTokens: 500
+      });
+      
+      // Parse the JSON response
+      try {
+        const parsed = JSON.parse(response.content);
+        taskLogger.debug('Extracted data from message', { extractedFields: Object.keys(parsed) });
+        return parsed;
+      } catch (parseError) {
+        taskLogger.debug('LLM response was not valid JSON, returning empty object');
+        return {};
+      }
+    } catch (error) {
+      taskLogger.error('Failed to extract data from message', error);
+      return {};
+    }
   }
 
   /**
@@ -891,6 +916,45 @@ Return as JSON object with field names as keys.`;
     }
     
     return null;
+  }
+
+  /**
+   * Generate a conversational response for user questions
+   */
+  private async generateConversationalResponse(message: string, taskContext?: any): Promise<string> {
+    const taskLogger = createTaskLogger(taskContext?.contextId || 'conversation');
+    
+    try {
+      const prompt = `You are a helpful business registration assistant. The user is working on registering their business.
+      
+Current task context:
+- Task ID: ${taskContext?.contextId || 'unknown'}
+- Task type: ${taskContext?.taskType || 'business registration'}
+
+User message: "${message}"
+
+Provide a helpful, concise response. If they're asking what they can do, suggest relevant business information they can provide like:
+- Business name
+- Business address
+- EIN (Employer Identification Number)
+- Business type/structure
+- Contact information
+
+Keep the response conversational and under 2-3 sentences.`;
+
+      const response = await this.llmProvider.complete({
+        prompt,
+        model: 'claude-3-sonnet',
+        temperature: 0.7,
+        maxTokens: 200
+      });
+      
+      taskLogger.debug('Generated conversational response');
+      return response.content;
+    } catch (error) {
+      taskLogger.error('Failed to generate conversational response', error);
+      return 'I can help you with your business registration. You can provide information like your business name, address, EIN, or ask me any questions about the registration process.';
+    }
   }
 
   /**

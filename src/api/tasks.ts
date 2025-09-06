@@ -519,7 +519,7 @@ router.post('/:contextId/message', requireAuth, async (req: AuthenticatedRequest
       eventId: persistedEvent?.id || null,
       extractedData,
       uiRequest: response.uiRequests?.[0] || null,
-      message: 'Message processed successfully',
+      message: response.contextUpdate?.data?.message || 'Message processed successfully',
       ephemeral: isEphemeral
     });
     
