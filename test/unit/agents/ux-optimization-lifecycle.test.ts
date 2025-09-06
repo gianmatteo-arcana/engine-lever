@@ -12,6 +12,37 @@ import { DIContainer } from '../../../src/services/dependency-injection';
 jest.mock('../../../src/services/database');
 jest.mock('../../../src/tools/business-memory');
 jest.mock('../../../src/services/dependency-injection');
+jest.mock('../../../src/services/llm-provider', () => ({
+  LLMProvider: {
+    getInstance: jest.fn(() => ({
+      complete: jest.fn().mockResolvedValue('{"extracted": {}, "hasData": false}'),
+      isConfigured: jest.fn().mockReturnValue(true)
+    }))
+  }
+}));
+jest.mock('../../../src/services/tool-chain', () => ({
+  ToolChain: jest.fn(() => ({
+    executeTool: jest.fn().mockResolvedValue({
+      success: true,
+      data: {
+        taskId: 'task-123',
+        template: { name: 'Test Template' },
+        progress: { completeness: 50 },
+        collectedData: { fields: {}, missingRequired: [] },
+        objectives: { primaryGoal: 'Complete task' },
+        insights: { summary: 'Task in progress' }
+      }
+    }),
+    getAvailableToolsDescription: jest.fn().mockReturnValue('Mock tools'),
+    searchBusinessMemory: jest.fn().mockResolvedValue({
+      facts: {},
+      preferences: {},
+      patterns: {},
+      relationships: {},
+      metadata: { factCount: 0, averageConfidence: 0, lastUpdated: new Date().toISOString() }
+    })
+  }))
+}));
 jest.mock('../../../src/utils/logger', () => ({
   createTaskLogger: jest.fn(() => ({
     info: jest.fn(),
