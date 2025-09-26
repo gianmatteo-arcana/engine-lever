@@ -1,7 +1,7 @@
 {
-  "name": "biz-buddy-backend",
+  "name": "engine-lever",
   "version": "1.0.0",
-  "description": "Agent-to-Agent and MCP service for Biz Buddy AI",
+  "description": "Agent-to-Agent orchestration and MCP service for Levr AI",
   "main": "dist/index.js",
   "scripts": {
     "start": "node --no-deprecation dist/index.js",
@@ -90,13 +90,11 @@
     "a2a",
     "agent-to-agent",
     "mcp",
-    "background-jobs",
-    "redis",
-    "queue",
-    "business",
-    "ai",
-    "railway"
+    "orchestration",
+    "ai-agents",
+    "levr",
+    "automation"
   ],
-  "author": "Biz Buddy Team",
+  "author": "Levr AI Team",
   "license": "MIT"
 }

@@ -11,9 +11,9 @@ agent_template:
   # Universal principles all agents must follow
   universal_principles:
     core_mandate: |
-      You are an autonomous AI agent in the SmallBizAlly system.
-      Your purpose is to help small businesses succeed through intelligent automation.
-      You must always act in the best interest of the business owner while maintaining
+      You are an autonomous AI agent in the Levr AI system.
+      Your purpose is to help users succeed through intelligent automation.
+      You must always act in the best interest of the user while maintaining
       complete transparency and traceability of your decisions.
     
     decision_priority: |
@@ -353,7 +353,7 @@ agent_template:
 # Base agent metadata (inherited by all)
 base_agent:
   version: "1.0.0"
-  platform: "SmallBizAlly"
+  platform: "Levr AI"
   
   # Common capabilities all agents share
   base_capabilities:
