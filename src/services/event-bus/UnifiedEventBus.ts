@@ -35,12 +35,14 @@ export class UnifiedEventBus extends EventEmitter implements ExecutionEventBus {
   private dbService: DatabaseService;
   private contextId: string;
   private taskId: string;
+  private agentId: string;
   private userToken?: string; // For database operations
   
-  constructor(contextId: string, taskId: string, userToken?: string) {
+  constructor(contextId: string, taskId: string, agentId: string, userToken?: string) {
     super();
     this.contextId = contextId;
     this.taskId = taskId;
+    this.agentId = agentId;
     this.userToken = userToken;
     this.dbService = DatabaseService.getInstance();
   }
@@ -155,7 +157,7 @@ export class UnifiedEventBus extends EventEmitter implements ExecutionEventBus {
       return {
         operation: 'task_execution',
         actorType: 'agent',
-        actorId: 'agent-executor',
+        actorId: this.agentId,
         data: {
           taskId: event.id,
           status: event.status,
@@ -169,7 +171,7 @@ export class UnifiedEventBus extends EventEmitter implements ExecutionEventBus {
       return {
         operation: 'status_update',
         actorType: 'agent',
-        actorId: 'agent-executor',
+        actorId: this.agentId,
         data: {
           taskId: event.taskId,
           status: event.status,
@@ -183,7 +185,7 @@ export class UnifiedEventBus extends EventEmitter implements ExecutionEventBus {
       return {
         operation: 'artifact_update',
         actorType: 'agent',
-        actorId: 'agent-executor',
+        actorId: this.agentId,
         data: {
           taskId: event.taskId,
           artifacts: event.artifacts,
@@ -329,8 +331,9 @@ export class UnifiedEventBus extends EventEmitter implements ExecutionEventBus {
  * 
  * @param contextId - The context ID for the event bus
  * @param taskId - The task ID for the event bus
+ * @param agentId - The agent ID for event attribution
  * @param userToken - Optional user token for database operations and SSE integration
  */
-export function createUnifiedEventBus(contextId: string, taskId: string, userToken?: string): UnifiedEventBus {
-  return new UnifiedEventBus(contextId, taskId, userToken);
+export function createUnifiedEventBus(contextId: string, taskId: string, agentId: string, userToken?: string): UnifiedEventBus {
+  return new UnifiedEventBus(contextId, taskId, agentId, userToken);
 }

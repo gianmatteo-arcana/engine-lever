@@ -24,13 +24,18 @@ import { BaseAgentRequest, BaseAgentResponse } from '../types/base-agent-types';
 import { createTaskLogger } from '../utils/logger';
 import { ToolChain } from '../services/tool-chain';
 import { BusinessKnowledge } from '../tools/business-memory';
+import { DatabaseService } from '../services/database';
 
 export class UXOptimizationAgent extends BaseAgent {
-  protected toolChain: ToolChain;
+  private taskId: string;
+  private taskHistory: any[] = [];
+  private taskMetadata: any = null;
+  private businessMemory: any = null;
 
   constructor(taskId: string, tenantId?: string, userId?: string) {
     super('ux_optimization_agent.yaml', tenantId || 'system', userId);
     this.toolChain = new ToolChain();
+    this.taskId = taskId;
   }
 
   /**
@@ -223,7 +228,7 @@ export class UXOptimizationAgent extends BaseAgent {
       // Use BaseAgent's llmProvider instead of custom callLLM
       const optimizationPlan = await this.llmProvider.complete({
         prompt,
-        model: 'claude-3-sonnet',
+        model: 'claude-3-5-sonnet-20241022',
         temperature: 0.7,
         maxTokens: 2000
       });
@@ -467,11 +472,13 @@ Return as JSON with fields organized into logical sections.`;
    */
   private async queryBusinessMemory(businessId: string): Promise<BusinessKnowledge | null> {
     try {
-      const memory = await this.toolChain.searchBusinessMemory(
+      // Use BusinessMemoryTool directly since ToolChain doesn't expose searchBusinessMemory
+      const { BusinessMemoryTool } = await import('../tools/business-memory');
+      const businessMemoryTool = new BusinessMemoryTool();
+      const memory = await businessMemoryTool.searchMemory({
         businessId,
-        ['identity', 'contact_info', 'structure', 'operations'],
-        0.3 // Get all data, we'll decide based on confidence
-      );
+        minConfidence: 0.3 // Get all data, we'll decide based on confidence
+      });
       return memory;
     } catch (error) {
       const taskLogger = createTaskLogger('ux-optimization');
@@ -625,5 +632,605 @@ Return as JSON with fields organized into logical sections.`;
     }
     
     return mergedRequest;
+  }
+
+  /**
+   * Handle unstructured user messages (FluidUI)
+   * Extracts data from natural language and maps to pending UIRequest fields
+   * Handles persistence and broadcasting internally
+   * 
+   * @param message - The user's unstructured message
+   * @param taskContext - Current task context
+   * @returns BaseAgentResponse with extracted data
+   */
+  async handleUserMessage(message: string, taskContext?: any): Promise<BaseAgentResponse> {
+    const taskLogger = createTaskLogger(taskContext?.contextId || 'unknown');
+    
+    // Validate input
+    if (message === null || message === undefined || typeof message !== 'string') {
+      return {
+        status: 'error',
+        contextUpdate: {
+          entryId: `ux_msg_error_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          timestamp: new Date().toISOString(),
+          sequenceNumber: 0,
+          actor: {
+            type: 'agent',
+            id: this.specializedTemplate.agent.id,
+            version: this.specializedTemplate.agent.version
+          },
+          operation: 'message_error',
+          data: {
+            error: 'Invalid message input',
+            originalMessage: String(message)
+          },
+          reasoning: 'Failed to process invalid message input',
+          confidence: 0.1,
+          trigger: {
+            type: 'user_request',
+            source: 'user',
+            details: { error: 'Invalid input' }
+          }
+        },
+        confidence: 0.1
+      };
+    }
+    
+    taskLogger.info('💬 Processing user message', {
+      messageLength: message.length,
+      taskId: taskContext?.contextId
+    });
+
+    try {
+      // Get pending UIRequests to understand what data is needed
+      const pendingUIRequests = await this.getPendingUIRequests(taskContext);
+      
+      // Build extraction prompt
+      const extractionPrompt = this.buildExtractionPrompt(message, pendingUIRequests);
+      
+      // Use LLM to extract data
+      const extractedData = await this.extractDataFromMessage(extractionPrompt);
+      
+      // Validate and clean extracted data
+      const validatedData = this.validateExtractedData(extractedData, pendingUIRequests);
+      
+      // Check if we need clarification
+      const clarificationNeeded = this.checkClarificationNeeded(validatedData, pendingUIRequests);
+      
+      if (clarificationNeeded) {
+        // Return a UIRequest for clarification
+        return {
+          status: 'needs_input',
+          contextUpdate: {
+            entryId: `ux_msg_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+            timestamp: new Date().toISOString(),
+            sequenceNumber: 0,
+            actor: {
+              type: 'agent',
+              id: this.specializedTemplate.agent.id,
+              version: this.specializedTemplate.agent.version
+            },
+            operation: 'message_clarification',
+            data: {
+              originalMessage: message,
+              extractedData: validatedData,
+              uiRequest: clarificationNeeded,
+              status: 'needs_clarification'
+            },
+            reasoning: `Need clarification on: ${clarificationNeeded.semanticData?.instructions}`,
+            confidence: 0.6,
+            trigger: {
+              type: 'user_request',
+              source: 'user',
+              details: { message }
+            }
+          },
+          confidence: 0.6,
+          uiRequests: [clarificationNeeded]
+        };
+      }
+      
+      // Determine if this interaction should be persisted
+      const shouldPersist = this.shouldPersistInteraction(message, validatedData, !!clarificationNeeded);
+      
+      // Generate conversational response if no data was extracted
+      let conversationalResponse = '';
+      if (Object.keys(validatedData).length === 0 && !clarificationNeeded) {
+        conversationalResponse = await this.generateConversationalResponse(message, taskContext);
+      }
+      
+      // Build response with proper structure
+      const contextUpdate = {
+        entryId: `ux_msg_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        timestamp: new Date().toISOString(),
+        sequenceNumber: 0,
+        actor: {
+          type: 'agent' as const,
+          id: this.specializedTemplate.agent.id,
+          version: this.specializedTemplate.agent.version
+        },
+        operation: 'message_extraction',
+        data: shouldPersist ? {
+          originalMessage: message,
+          extractedData: validatedData,
+          status: 'success',
+          message: conversationalResponse || 'Successfully extracted data from user message'
+        } : {
+          status: 'ephemeral',
+          message: conversationalResponse || 'I can help you with your business registration. What specific information would you like to provide or know about?'
+        },
+        reasoning: shouldPersist ? 
+          `Extracted ${Object.keys(validatedData).length} data fields from user message` :
+          'Ephemeral response - no substantial data to persist',
+        confidence: 0.85,
+        trigger: {
+          type: 'user_request' as const,
+          source: 'user',
+          details: { message }
+        }
+      };
+      
+      // Handle persistence and broadcasting
+      let persistedEvent = null;
+      
+      if (shouldPersist && this.userId) {
+        try {
+          // Get services
+          const dbService = DatabaseService.getInstance();
+          const { A2AEventBus } = await import('../services/a2a-event-bus');
+          const a2aEventBus = A2AEventBus.getInstance();
+          
+          // Prepare event data
+          const eventData = {
+            contextId: this.taskId,
+            actorType: 'agent' as const,
+            actorId: 'ux_optimization_agent',
+            operation: 'USER_MESSAGE_PROCESSED',
+            data: {
+              originalMessage: message,
+              extractedData: validatedData,
+              timestamp: new Date().toISOString(),
+              message: conversationalResponse || contextUpdate.data.message
+            },
+            reasoning: contextUpdate.reasoning,
+            trigger: {
+              type: 'user_message' as const,
+              source: 'conversation',
+              message
+            }
+          };
+          
+          // Persist the event
+          persistedEvent = await dbService.createTaskContextEvent(
+            this.userId,
+            this.taskId,
+            eventData
+          );
+          
+          taskLogger.info('User message processed and persisted', {
+            eventId: persistedEvent.id,
+            taskId: this.taskId,
+            extractedFields: Object.keys(validatedData)
+          });
+          
+          // Broadcast for real-time updates
+          await a2aEventBus.broadcast({
+            type: 'TASK_CONTEXT_UPDATE',
+            taskId: this.taskId,
+            agentId: 'ux_optimization_agent',
+            operation: 'USER_MESSAGE_PROCESSED',
+            data: {
+              ...eventData.data,
+              eventId: persistedEvent.id
+            },
+            reasoning: eventData.reasoning,
+            timestamp: new Date().toISOString(),
+            metadata: {
+              userId: this.userId,
+              businessId: this.businessId
+            }
+          });
+        } catch (error) {
+          taskLogger.error('Failed to persist message event', error);
+          // Continue without persistence
+        }
+      } else {
+        taskLogger.info('User message processed (ephemeral)', {
+          taskId: this.taskId,
+          messageType: 'ephemeral',
+          hasExtractedData: Object.keys(validatedData).length > 0
+        });
+      }
+      
+      // Add event ID to context update if persisted
+      if (persistedEvent) {
+        contextUpdate.entryId = persistedEvent.id;
+      }
+      
+      const response: BaseAgentResponse = {
+        status: 'completed',
+        contextUpdate,
+        confidence: 0.85
+      };
+      
+      // Mark as ephemeral if not persisting
+      if (!shouldPersist) {
+        (response as any).ephemeral = true;
+      }
+      
+      // Add UIRequest if clarification needed
+      if (clarificationNeeded) {
+        response.uiRequests = [clarificationNeeded];
+      }
+      
+      return response;
+      
+    } catch (error) {
+      taskLogger.error('Failed to process user message', { error });
+      
+      return {
+        status: 'error',
+        contextUpdate: {
+          entryId: `ux_msg_error_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          timestamp: new Date().toISOString(),
+          sequenceNumber: 0,
+          actor: {
+            type: 'agent',
+            id: this.specializedTemplate.agent.id,
+            version: this.specializedTemplate.agent.version
+          },
+          operation: 'message_error',
+          data: {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            originalMessage: message
+          },
+          reasoning: 'Failed to process user message',
+          confidence: 0.1,
+          trigger: {
+            type: 'user_request',
+            source: 'user',
+            details: { message, error: String(error) }
+          }
+        },
+        confidence: 0.1
+      };
+    }
+  }
+
+  /**
+   * Get pending UIRequests from the current task context
+   */
+  private async getPendingUIRequests(_taskContext?: any): Promise<UIRequest[]> {
+    // TODO: Query A2A event bus or task context for pending UIRequests
+    // For now, return empty array
+    return [];
+  }
+
+  /**
+   * Build prompt for LLM to extract data from user message
+   */
+  private buildExtractionPrompt(message: string, pendingRequests: UIRequest[]): string {
+    const fields = pendingRequests.flatMap(r => 
+      r.semanticData?.fields || []
+    );
+    
+    return `Extract data from this user message that matches these needed fields:
+    
+Fields needed:
+${fields.map(f => `- ${f.name} (${f.type}): ${f.label || f.name}`).join('\n')}
+
+User message: "${message}"
+
+Extract any matching data. Use exact field names as keys.
+If a value seems to match but is slightly wrong format (like missing dashes in EIN), correct it.
+Return as JSON object with field names as keys.`;
+  }
+
+  /**
+   * Extract data from message using LLM
+   */
+  private async extractDataFromMessage(prompt: string): Promise<any> {
+    const taskLogger = createTaskLogger('message_extraction');
+    
+    try {
+      // Use the LLM provider to extract data
+      const response = await this.llmProvider.complete({
+        prompt,
+        model: 'claude-3-5-sonnet-20241022',
+        temperature: 0.3,
+        maxTokens: 500
+      });
+      
+      // Parse the JSON response
+      try {
+        const parsed = JSON.parse(response.content);
+        taskLogger.debug('Extracted data from message', { extractedFields: Object.keys(parsed) });
+        return parsed;
+      } catch (parseError) {
+        taskLogger.debug('LLM response was not valid JSON, returning empty object');
+        return {};
+      }
+    } catch (error) {
+      taskLogger.error('Failed to extract data from message', error);
+      return {};
+    }
+  }
+
+  /**
+   * Validate extracted data against UIRequest requirements
+   */
+  private validateExtractedData(data: any, pendingRequests: UIRequest[]): any {
+    const validated: any = {};
+    const fields = pendingRequests.flatMap(r => r.semanticData?.fields || []);
+    
+    for (const field of fields) {
+      if (data[field.name]) {
+        // Basic validation - can be enhanced
+        validated[field.name] = data[field.name];
+      }
+    }
+    
+    return validated;
+  }
+
+  /**
+   * Check if clarification is needed
+   */
+  private checkClarificationNeeded(validatedData: any, pendingRequests: UIRequest[]): UIRequest | null {
+    const requiredFields = pendingRequests.flatMap(r => 
+      (r.semanticData?.fields || []).filter((f: any) => f.required)
+    );
+    
+    const missingRequired = requiredFields.filter((f: any) => !validatedData[f.name]);
+    
+    if (missingRequired.length > 0) {
+      // Create a clarification UIRequest
+      return {
+        requestId: `clarify_${Date.now()}`,
+        templateType: 'form' as UITemplateType,
+        semanticData: {
+          title: "Just need a bit more information",
+          instructions: "I understood most of what you said, but need clarification on a few things:",
+          fields: missingRequired
+        }
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * Generate a conversational response for user questions
+   */
+  private async generateConversationalResponse(message: string, taskContext?: any): Promise<string> {
+    const taskLogger = createTaskLogger(taskContext?.contextId || 'conversation');
+    
+    try {
+      // Use TaskIntrospectionTool via toolchain for deep understanding
+      let introspection = null;
+      if (this.userId && this.taskId && this.toolChain) {
+        try {
+          const toolResult = await this.toolChain.executeTool('taskIntrospection', {
+            taskId: this.taskId,
+            userId: this.userId,
+            aspectToInspect: 'all'
+          });
+          
+          if (toolResult.success) {
+            introspection = toolResult.data;
+          }
+        } catch (introError) {
+          taskLogger.warn('Failed to introspect task', introError);
+        }
+      }
+
+      // Build rich context from introspection
+      let contextSummary = 'No previous activity';
+      let currentFocus = 'Getting started';
+      let dataStatus = 'No data collected yet';
+      let recommendations = '';
+
+      if (introspection) {
+        if (introspection.progress) {
+          contextSummary = `Task is ${introspection.progress.completeness}% complete (${introspection.progress.lastActivity})`;
+          currentFocus = introspection.progress.currentStep;
+        }
+        
+        if (introspection.collectedData) {
+          const fieldCount = Object.keys(introspection.collectedData.fields).length;
+          const missingCount = introspection.collectedData.missingRequired.length;
+          dataStatus = `${fieldCount} fields collected${missingCount > 0 ? `, ${missingCount} required fields missing` : ''}`;
+        }
+
+        if (introspection.insights?.recommendations && introspection.insights.recommendations.length > 0) {
+          recommendations = introspection.insights.recommendations[0];
+        }
+      }
+      
+      const prompt = `You are a helpful business registration assistant. The user is working on a task.
+      
+Current task context:
+- Task: ${introspection?.template?.name || this.taskMetadata?.title || 'business registration'}
+- ${contextSummary}
+- Current focus: ${currentFocus}
+- ${dataStatus}
+${introspection?.objectives?.primaryGoal ? `- Goal: ${introspection.objectives.primaryGoal}` : ''}
+${recommendations ? `- Next step: ${recommendations}` : ''}
+
+User message: "${message}"
+
+${message.toLowerCase().includes('what') && message.toLowerCase().includes('task') 
+  ? 'The user is asking about the current task. Explain what the task is about, the current progress, and what information has been collected so far. Be specific using the context above.'
+  : 'Provide a helpful, concise response based on the task context.'}
+
+If they're asking what they can do, suggest specific next actions based on the task progress.
+
+Keep the response conversational and under 2-3 sentences.`;
+
+      const response = await this.llmProvider.complete({
+        prompt,
+        model: 'claude-3-5-sonnet-20241022',
+        temperature: 0.7,
+        maxTokens: 200
+      });
+      
+      taskLogger.debug('Generated conversational response');
+      return response.content;
+    } catch (error) {
+      taskLogger.error('Failed to generate conversational response', error);
+      return 'I can help you with your business registration. You can provide information like your business name, address, EIN, or ask me any questions about the registration process.';
+    }
+  }
+
+  /**
+   * Process a message and return API-ready response
+   * Encapsulates all processing, persistence, and response formatting
+   * 
+   * @param message - User's message
+   * @returns API-ready response object
+   */
+  async processMessageForAPI(message: string): Promise<{
+    success: boolean;
+    contextId: string;
+    eventId: string | null;
+    extractedData: any;
+    uiRequest: any;
+    message: string;
+    ephemeral: boolean;
+  }> {
+    try {
+      // Process the message with full context
+      const response = await this.handleUserMessage(message, {
+        contextId: this.taskId,
+        taskId: this.taskId,
+        userId: this.userId
+      });
+      
+      // Extract response data
+      const isEphemeral = (response as any).ephemeral === true;
+      const extractedData = response.contextUpdate?.data?.extractedData || {};
+      const eventId = response.contextUpdate?.entryId || null;
+      const responseMessage = response.contextUpdate?.data?.message || 'Message processed successfully';
+      
+      return {
+        success: true,
+        contextId: this.taskId,
+        eventId,
+        extractedData,
+        uiRequest: response.uiRequests?.[0] || null,
+        message: responseMessage,
+        ephemeral: isEphemeral
+      };
+    } catch (error) {
+      const taskLogger = createTaskLogger(this.taskId);
+      taskLogger.error('Failed to process message for API', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Initialize agent for a specific task (called by DI container)
+   * Loads full context history to enable intelligent conversation
+   */
+  async initializeForTask(taskId: string): Promise<void> {
+    const taskLogger = createTaskLogger(taskId);
+    taskLogger.info('🔄 Initializing UXOptimizationAgent for task', { taskId });
+    
+    // Load full task context
+    await this.loadContext();
+    
+    // Subscribe to task events for real-time updates
+    await this.subscribeToTaskEvents(taskId, async (event) => {
+      taskLogger.debug('UXOptimizationAgent received task event', { 
+        taskId, 
+        eventType: event.type 
+      });
+    });
+  }
+
+  /**
+   * Load full task context and history
+   * Called when agent is "awakened" for conversation
+   */
+  async loadContext(): Promise<void> {
+    const taskLogger = createTaskLogger(this.taskId || 'unknown');
+    
+    try {
+      taskLogger.info('📚 Loading full task context for conversation', {
+        taskId: this.taskId,
+        businessId: this.businessId
+      });
+      
+      // Get database service
+      const dbService = DatabaseService.getInstance();
+      
+      // Load task context history
+      // Don't use 'system' as a UUID - it's not valid
+      const taskHistory = this.userId 
+        ? await dbService.getContextHistory(this.userId, this.taskId, 100)
+        : [];
+      
+      // Load business memory using BusinessMemoryTool (only if we have a valid business ID)
+      let businessMemory = null;
+      if (this.businessId && this.businessId !== 'system') {
+        try {
+          const { BusinessMemoryTool } = await import('../tools/business-memory');
+          const businessMemoryTool = new BusinessMemoryTool();
+          businessMemory = await businessMemoryTool.searchMemory({
+            businessId: this.businessId
+          });
+        } catch (memoryError) {
+          taskLogger.warn('Failed to load business memory', { 
+            error: memoryError instanceof Error ? memoryError.message : String(memoryError),
+            businessId: this.businessId 
+          });
+        }
+      }
+      
+      // Load task metadata
+      const task = this.userId 
+        ? await dbService.getTask(this.userId, this.taskId)
+        : null;
+      
+      // Store in agent instance for reference during conversation
+      this.taskHistory = taskHistory;
+      this.businessMemory = businessMemory;
+      this.taskMetadata = task;
+      this.taskContext = {
+        history: taskHistory,
+        businessMemory,
+        taskMetadata: task,
+        lastUpdated: new Date().toISOString()
+      };
+      
+      taskLogger.info('✅ Context loaded successfully', {
+        historyCount: taskHistory?.length || 0,
+        businessFactCount: businessMemory?.metadata?.factCount || 0,
+        taskStatus: task?.status
+      });
+      
+    } catch (error) {
+      taskLogger.error('Failed to load context', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Continue anyway - agent can still function with limited context
+    }
+  }
+
+  /**
+   * Determine if an interaction should be persisted as TaskContextUpdate
+   */
+  private shouldPersistInteraction(message: string, extractedData: any, hasUIRequest: boolean): boolean {
+    // Persist if:
+    // 1. New data was extracted
+    const hasExtractedData = extractedData && Object.keys(extractedData).length > 0;
+    
+    // 2. User is providing substantial information (not just asking questions)
+    const isSubstantialInput = message.length > 50 && 
+      !message.toLowerCase().match(/^(what|when|where|why|how|is|are|can|could|should)/);
+    
+    // 3. Response includes a UIRequest (form to fill)
+    
+    return hasExtractedData || isSubstantialInput || hasUIRequest;
   }
 }

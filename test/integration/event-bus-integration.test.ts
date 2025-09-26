@@ -155,7 +155,7 @@ describe('Event Bus Integration', () => {
 
     // Create agent and event bus
     complianceAgent = new ComplianceAgent(businessId, userId);
-    eventBus = new UnifiedEventBus(contextId, taskId);
+    eventBus = new UnifiedEventBus(contextId, taskId, 'ComplianceAgent');
   });
 
   afterEach(() => {
@@ -243,7 +243,7 @@ describe('Event Bus Integration', () => {
       };
       
       // Create new event bus for second execution (simulating new task)
-      const eventBus2 = new UnifiedEventBus(contextId, 'task-2');
+      const eventBus2 = new UnifiedEventBus(contextId, 'task-2', 'ComplianceAgent');
       await complianceAgent.execute(secondContext, eventBus2);
 
       // Verify sequence numbers were incremented
@@ -439,7 +439,7 @@ describe('Event Bus Integration', () => {
       const dataAgent = new DataCollectionAgent(businessId);
       
       // Both agents share the same event bus
-      const sharedEventBus = new UnifiedEventBus(contextId, taskId);
+      const sharedEventBus = new UnifiedEventBus(contextId, taskId, 'ComplianceAgent');
       
       const allEvents: AgentExecutionEvent[] = [];
       sharedEventBus.on('event', (event) => {
