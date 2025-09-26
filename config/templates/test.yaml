@@ -1,0 +1,118 @@
+# Test Task Template
+# Generic template for testing Levr AI task orchestration
+
+task_template:
+  id: "test_task"
+  version: "1.0.0"
+
+  metadata:
+    name: "Test Task"
+    description: "A simple test task for validating the orchestration system"
+    category: "testing"
+    estimatedDuration: 60  # 1 minute
+    priority: "low"
+
+  goals:
+    primary:
+      - id: "validate_system"
+        description: "Verify the task orchestration system is working"
+        required: true
+
+      - id: "test_agent_communication"
+        description: "Test agent-to-agent communication"
+        required: true
+
+    secondary:
+      - id: "log_results"
+        description: "Log test results for verification"
+        required: false
+
+  states:
+    allowed:
+      - "created"
+      - "processing"
+      - "completed"
+      - "failed"
+
+    initial: "created"
+    terminal: ["completed", "failed"]
+
+    transitions:
+      created: ["processing"]
+      processing: ["completed", "failed"]
+
+  phases:
+    - id: "initialization"
+      description: "Initialize test task"
+      prerequisites: []
+      next: ["execution"]
+      agents: ["orchestrator"]
+
+    - id: "execution"
+      description: "Execute test operations"
+      prerequisites: ["initialization"]
+      next: ["completion"]
+      agents: ["orchestrator"]
+
+    - id: "completion"
+      description: "Finalize and log results"
+      prerequisites: ["execution"]
+      next: []
+      agents: ["orchestrator"]
+
+  data_schema:
+    type: "object"
+    required: ["test_name"]
+    properties:
+      test_name:
+        type: "string"
+        description: "Name of the test being executed"
+
+      test_parameters:
+        type: "object"
+        description: "Optional parameters for the test"
+        properties:
+          timeout:
+            type: "integer"
+            default: 60
+          verbose:
+            type: "boolean"
+            default: false
+
+  success_criteria:
+    required:
+      - "task.status == 'completed'"
+      - "task.error_count == 0"
+
+  constraints:
+    maxDuration: 300  # 5 minutes
+    maxRetries: 2
+    requiredAgents:
+      - "orchestrator"
+
+# Agent coordination for test task
+agent_coordination:
+  agent_roles:
+    orchestrator:
+      responsibilities:
+        - "Initialize test environment"
+        - "Execute test operations"
+        - "Log and report results"
+
+  communication_flows:
+    - from: "orchestrator"
+      to: "system"
+      message: "test_results"
+
+# Error handling
+error_handling:
+  recoverable_errors:
+    timeout:
+      retry: true
+      max_retries: 2
+      fallback: "log_timeout_and_complete"
+
+  non_recoverable_errors:
+    system_unavailable:
+      action: "fail_task"
+      message: "System unavailable for testing"

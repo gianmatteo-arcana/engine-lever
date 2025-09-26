@@ -5,6 +5,9 @@ import { OrchestratorAgent } from '../agents/OrchestratorAgent';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import tasksRoutes from './tasks';
 import metricsRoutes from './metrics';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as yaml from 'yaml';
 
 const router = Router();
 // TemplateExecutor removed - orchestration handled by OrchestratorAgent
@@ -296,6 +299,58 @@ router.get('/queues/status', async (req, res) => {
 });
 
 // Onboarding routes removed - using universal task routes
+
+// Task templates endpoint
+router.get('/templates', async (req, res) => {
+  try {
+    const templatesDir = path.join(process.cwd(), 'config', 'templates');
+
+    // Check if templates directory exists
+    if (!fs.existsSync(templatesDir)) {
+      return res.json({
+        templates: [],
+        count: 0,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Read all YAML files from templates directory
+    const files = fs.readdirSync(templatesDir).filter(file =>
+      file.endsWith('.yaml') || file.endsWith('.yml')
+    );
+
+    const templates = files.map(file => {
+      try {
+        const filePath = path.join(templatesDir, file);
+        const content = fs.readFileSync(filePath, 'utf8');
+        const parsed = yaml.parse(content);
+
+        // Extract metadata from the YAML structure
+        const taskTemplate = parsed.task_template || parsed;
+
+        return {
+          id: taskTemplate.id || file.replace(/\.(yaml|yml)$/, ''),
+          name: taskTemplate.metadata?.name || taskTemplate.name || file.replace(/\.(yaml|yml)$/, ''),
+          description: taskTemplate.metadata?.description || taskTemplate.description || '',
+          category: taskTemplate.metadata?.category || 'general',
+          version: taskTemplate.version || '1.0.0'
+        };
+      } catch (error) {
+        logger.error(`Failed to parse template ${file}:`, error);
+        return null;
+      }
+    }).filter(template => template !== null);
+
+    res.json({
+      templates,
+      count: templates.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Failed to get templates', error);
+    res.status(500).json({ error: 'Failed to get templates' });
+  }
+});
 
 // Generic tasks endpoints (ENGINE PRD compliant)
 router.use('/tasks', tasksRoutes);
