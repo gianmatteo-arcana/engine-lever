@@ -301,7 +301,7 @@ router.get('/queues/status', async (req, res) => {
 // Onboarding routes removed - using universal task routes
 
 // Task templates endpoint
-router.get('/templates', async (req, res) => {
+router.get('/templates', requireAuth, async (req, res) => {
   try {
     const templatesDir = path.join(process.cwd(), 'config', 'templates');
 
